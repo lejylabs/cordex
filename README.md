@@ -3,7 +3,7 @@
 Independent Discord bot API library for Rust (Tokio). No voice. Working name
 `drs`; the final project name is not decided yet.
 
-Status: Phase 0 (workspace skeleton). Plan and specification: [PLAN.md](PLAN.md).
+Status: Phase 1 (models).
 
 ## Crates
 
