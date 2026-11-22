@@ -7,9 +7,6 @@ pub enum ParseError {
     /// Not a valid snowflake (decimal `u64`, not zero).
     #[error("invalid snowflake")]
     Snowflake,
-    /// Not a valid image hash (optional `a_` prefix plus 32 hex digits).
-    #[error("invalid image hash")]
-    ImageHash,
     /// Not a valid ISO 8601 / RFC 3339 timestamp.
     #[error("invalid timestamp")]
     Timestamp,

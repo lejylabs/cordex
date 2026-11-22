@@ -26,3 +26,4 @@ flamegraph*.svg
 
 # Local planning document, not versioned
 /PLAN.md
+/docs/zenybot-inventory.md

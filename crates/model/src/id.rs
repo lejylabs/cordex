@@ -225,6 +225,8 @@ pub mod marker {
         StickerMarker,
         /// Sticker pack.
         StickerPackMarker,
+        /// Forum / media channel tag.
+        TagMarker,
         /// Subscription.
         SubscriptionMarker,
         /// Team.

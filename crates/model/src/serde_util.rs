@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use serde::Deserialize;
 use serde::de::{self, Visitor};
 
 /// Serde for a `bitflags` type: serialized as a decimal string (Discord
@@ -146,6 +147,23 @@ macro_rules! str_enum {
 }
 
 pub(crate) use {bitflags_serde_int, bitflags_serde_string, int_enum, str_enum};
+
+/// Fields Discord documents with type `null` whose *presence* means `true`
+/// (e.g. role tags `premium_subscriber`). Use with
+/// `#[serde(default, deserialize_with = "present", serialize_with = "null_if_true",
+/// skip_serializing_if = "std::ops::Not::not")]`.
+pub(crate) fn present<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    de::IgnoredAny::deserialize(deserializer).map(|_| true)
+}
+
+/// Counterpart of [`present`]: writes `null` (only called when `true`).
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde passes fields by reference
+pub(crate) fn null_if_true<S: serde::Serializer>(
+    _: &bool,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_unit()
+}
 
 /// Deserializes an optional string that borrows from the input when it has
 /// no escape sequences (serde's derive does not borrow `Option<Cow<str>>`).

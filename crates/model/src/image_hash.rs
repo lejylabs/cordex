@@ -1,79 +1,97 @@
 //! CDN image hashes (avatars, icons, banners, …).
 
 use std::fmt;
-use std::str::FromStr;
 
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::error::ParseError;
-
-/// An image hash such as `a_1269e74af4df7417b13759eae50c83dc`, stored in
-/// 17 bytes instead of a heap string.
+/// An image hash such as `a_1269e74af4df7417b13759eae50c83dc`.
 ///
-/// Hashes are 32 hex digits; the `a_` prefix marks an animated image
-/// (reference.mdx, "Image Formatting"). Displays in the original form.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ImageHash {
-    bytes: [u8; 16],
-    animated: bool,
+/// Documented hashes are 32 hex digits with an optional `a_` prefix for
+/// animated images (reference.mdx, "Image Formatting"); they are stored
+/// compactly without a heap allocation. Any other string is kept as is, so
+/// an unexpected hash format never makes a whole object fail to parse
+/// (PLAN.md D14). Displays and serializes in the original form.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ImageHash(Repr);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Repr {
+    Md5 { bytes: [u8; 16], animated: bool },
+    Other(Box<str>),
 }
 
 impl ImageHash {
+    /// Parses a hash; never fails (unknown formats are kept as text).
+    pub fn new(s: &str) -> Self {
+        Self(parse_md5(s).unwrap_or_else(|| Repr::Other(s.into())))
+    }
+
     /// Whether the image is animated (`a_` prefix).
-    pub const fn is_animated(self) -> bool {
-        self.animated
+    pub fn is_animated(&self) -> bool {
+        match &self.0 {
+            Repr::Md5 { animated, .. } => *animated,
+            Repr::Other(s) => s.starts_with("a_"),
+        }
     }
 
-    /// The 16 raw bytes of the hash.
-    pub const fn bytes(self) -> [u8; 16] {
-        self.bytes
+    /// The 16 raw bytes for a documented (hex) hash; `None` for other formats.
+    pub const fn bytes(&self) -> Option<[u8; 16]> {
+        match &self.0 {
+            Repr::Md5 { bytes, .. } => Some(*bytes),
+            Repr::Other(_) => None,
+        }
     }
 }
 
-impl FromStr for ImageHash {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, ParseError> {
-        let (animated, hex) = match s.strip_prefix("a_") {
-            Some(rest) => (true, rest),
-            None => (false, s),
-        };
-        let hex = hex.as_bytes();
-        if hex.len() != 32 {
-            return Err(ParseError::ImageHash);
-        }
-        let mut bytes = [0; 16];
-        let (pairs, _) = hex.as_chunks::<2>();
-        for (byte, &[high, low]) in bytes.iter_mut().zip(pairs) {
-            *byte = (nibble(high)? << 4) | nibble(low)?;
-        }
-        Ok(Self { bytes, animated })
+fn parse_md5(s: &str) -> Option<Repr> {
+    let (animated, hex) = match s.strip_prefix("a_") {
+        Some(rest) => (true, rest),
+        None => (false, s),
+    };
+    let hex = hex.as_bytes();
+    if hex.len() != 32 {
+        return None;
     }
+    let mut bytes = [0; 16];
+    let (pairs, _) = hex.as_chunks::<2>();
+    for (byte, &[high, low]) in bytes.iter_mut().zip(pairs) {
+        *byte = (nibble(high)? << 4) | nibble(low)?;
+    }
+    Some(Repr::Md5 { bytes, animated })
 }
 
-fn nibble(c: u8) -> Result<u8, ParseError> {
+/// Lowercase hex only, so displaying gives back exactly the input.
+fn nibble(c: u8) -> Option<u8> {
     match c {
-        b'0'..=b'9' => Ok(c - b'0'),
-        b'a'..=b'f' => Ok(c - b'a' + 10),
-        // Discord sends lowercase; accept uppercase too, display lowercase.
-        b'A'..=b'F' => Ok(c - b'A' + 10),
-        _ => Err(ParseError::ImageHash),
+        b'0'..=b'9' => Some(c - b'0'),
+        b'a'..=b'f' => Some(c - b'a' + 10),
+        _ => None,
+    }
+}
+
+impl From<&str> for ImageHash {
+    fn from(s: &str) -> Self {
+        Self::new(s)
     }
 }
 
 impl fmt::Display for ImageHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         const HEX: &[u8; 16] = b"0123456789abcdef";
+        let (bytes, animated) = match &self.0 {
+            Repr::Md5 { bytes, animated } => (bytes, *animated),
+            Repr::Other(s) => return f.write_str(s),
+        };
         let mut out = [0u8; 34];
-        let start = if self.animated {
+        let start = if animated {
             out[0] = b'a';
             out[1] = b'_';
             2
         } else {
             0
         };
-        for (i, byte) in self.bytes.iter().enumerate() {
+        for (i, byte) in bytes.iter().enumerate() {
             out[start + i * 2] = HEX[usize::from(byte >> 4)];
             out[start + i * 2 + 1] = HEX[usize::from(byte & 0xF)];
         }
@@ -97,12 +115,11 @@ impl<'de> Deserialize<'de> for ImageHash {
             type Value = ImageHash;
 
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("an image hash")
+                f.write_str("an image hash string")
             }
 
             fn visit_str<E: de::Error>(self, v: &str) -> Result<ImageHash, E> {
-                v.parse()
-                    .map_err(|_| E::invalid_value(de::Unexpected::Str(v), &self))
+                Ok(ImageHash::new(v))
             }
         }
 
@@ -117,11 +134,12 @@ mod tests {
     #[test]
     fn round_trips_docs_example() {
         let s = "a_1269e74af4df7417b13759eae50c83dc";
-        let hash: ImageHash = s.parse().unwrap();
+        let hash = ImageHash::new(s);
         assert!(hash.is_animated());
+        assert!(hash.bytes().is_some());
         assert_eq!(hash.to_string(), s);
 
-        let plain: ImageHash = "1269e74af4df7417b13759eae50c83dc".parse().unwrap();
+        let plain = ImageHash::new("1269e74af4df7417b13759eae50c83dc");
         assert!(!plain.is_animated());
         assert_eq!(plain.bytes(), hash.bytes());
     }
@@ -134,20 +152,25 @@ mod tests {
     }
 
     #[test]
-    fn rejects_bad_hashes() {
-        for bad in [
+    fn unexpected_formats_are_kept_not_rejected() {
+        for other in [
             "",
-            "a_",
             "1269e74af4df7417b13759eae50c83d",
-            "1269e74af4df7417b13759eae50c83dcc",
-            "1269e74af4df7417b13759eae50c83dg",
-            "b_1269e74af4df7417b13759eae50c83dc",
+            "1269E74AF4DF7417B13759EAE50C83DC",
+            "nameplates/nameplates/twilight/",
+            "a_short",
         ] {
-            assert_eq!(
-                bad.parse::<ImageHash>(),
-                Err(ParseError::ImageHash),
-                "{bad}"
-            );
+            let hash = ImageHash::new(other);
+            assert_eq!(hash.bytes(), None, "{other}");
+            assert_eq!(hash.to_string(), other);
+            let json = serde_json::to_string(&hash).unwrap();
+            assert_eq!(serde_json::from_str::<ImageHash>(&json).unwrap(), hash);
         }
+        assert!(ImageHash::new("a_short").is_animated());
+    }
+
+    #[test]
+    fn documented_hash_needs_no_heap() {
+        assert!(size_of::<ImageHash>() <= 24);
     }
 }

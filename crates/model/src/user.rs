@@ -1,0 +1,231 @@
+//! Users (resources/user.mdx, "User Object").
+
+use serde::{Deserialize, Serialize};
+
+use crate::id::Id;
+use crate::id::marker::{GuildMarker, SkuMarker, UserMarker};
+use crate::image_hash::ImageHash;
+use crate::serde_util::{bitflags_serde_int, int_enum};
+
+/// A Discord user.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct User {
+    /// User ID.
+    pub id: Id<UserMarker>,
+    /// Username, not unique across the platform.
+    pub username: Box<str>,
+    /// Discord tag (`"0"` for users on the new username system).
+    pub discriminator: Box<str>,
+    /// Display name, if set.
+    pub global_name: Option<Box<str>>,
+    /// Avatar hash.
+    pub avatar: Option<ImageHash>,
+    /// Whether the user belongs to an `OAuth2` application.
+    #[serde(default)]
+    pub bot: bool,
+    /// Whether the user is an official Discord system user.
+    #[serde(default)]
+    pub system: bool,
+    /// Whether two-factor authentication is enabled (`OAuth2` `identify`).
+    pub mfa_enabled: Option<bool>,
+    /// Banner hash.
+    pub banner: Option<ImageHash>,
+    /// Banner color as an RGB integer.
+    pub accent_color: Option<u32>,
+    /// Chosen language (`OAuth2` `identify`).
+    pub locale: Option<Box<str>>,
+    /// Whether the email is verified (`OAuth2` `email`).
+    pub verified: Option<bool>,
+    /// Email (`OAuth2` `email`).
+    pub email: Option<Box<str>>,
+    /// Account flags.
+    pub flags: Option<UserFlags>,
+    /// Nitro subscription type.
+    pub premium_type: Option<PremiumType>,
+    /// Public account flags.
+    pub public_flags: Option<UserFlags>,
+    /// Avatar decoration.
+    pub avatar_decoration_data: Option<AvatarDecorationData>,
+    /// Collectibles (nameplate).
+    pub collectibles: Option<Collectibles>,
+    /// Primary guild (server tag).
+    pub primary_guild: Option<PrimaryGuild>,
+}
+
+impl User {
+    /// Name to show: display name if set, else username.
+    pub fn display_name(&self) -> &str {
+        self.global_name.as_deref().unwrap_or(&self.username)
+    }
+
+    /// Mention string `<@id>`.
+    pub fn mention(&self) -> String {
+        format!("<@{}>", self.id)
+    }
+}
+
+bitflags::bitflags! {
+    /// User account flags.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    pub struct UserFlags: u64 {
+        /// Discord employee.
+        const STAFF = 1 << 0;
+        /// Partnered server owner.
+        const PARTNER = 1 << 1;
+        /// HypeSquad Events member.
+        const HYPESQUAD = 1 << 2;
+        /// Bug Hunter level 1.
+        const BUG_HUNTER_LEVEL_1 = 1 << 3;
+        /// House Bravery member.
+        const HYPESQUAD_ONLINE_HOUSE_1 = 1 << 6;
+        /// House Brilliance member.
+        const HYPESQUAD_ONLINE_HOUSE_2 = 1 << 7;
+        /// House Balance member.
+        const HYPESQUAD_ONLINE_HOUSE_3 = 1 << 8;
+        /// Early Nitro supporter.
+        const PREMIUM_EARLY_SUPPORTER = 1 << 9;
+        /// User is a team.
+        const TEAM_PSEUDO_USER = 1 << 10;
+        /// Bug Hunter level 2.
+        const BUG_HUNTER_LEVEL_2 = 1 << 14;
+        /// Verified bot.
+        const VERIFIED_BOT = 1 << 16;
+        /// Early verified bot developer.
+        const VERIFIED_DEVELOPER = 1 << 17;
+        /// Moderator Programs alumni.
+        const CERTIFIED_MODERATOR = 1 << 18;
+        /// Bot uses only HTTP interactions and is shown in the online member list.
+        const BOT_HTTP_INTERACTIONS = 1 << 19;
+    }
+}
+
+bitflags_serde_int!(UserFlags, u64);
+
+int_enum! {
+    /// Nitro subscription type.
+    pub enum PremiumType: u8 {
+        /// No Nitro.
+        None = 0,
+        /// Nitro Classic.
+        NitroClassic = 1,
+        /// Nitro.
+        Nitro = 2,
+        /// Nitro Basic.
+        NitroBasic = 3,
+    }
+}
+
+/// Avatar decoration of a user or member.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct AvatarDecorationData {
+    /// Decoration asset hash.
+    pub asset: ImageHash,
+    /// SKU of the decoration.
+    pub sku_id: Id<SkuMarker>,
+}
+
+/// Collectibles of a user or member (excluding avatar decorations).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct Collectibles {
+    /// Nameplate.
+    pub nameplate: Option<Nameplate>,
+}
+
+/// Nameplate collectible.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct Nameplate {
+    /// SKU of the nameplate.
+    pub sku_id: Id<SkuMarker>,
+    /// Path to the nameplate asset.
+    pub asset: Box<str>,
+    /// Label (currently unused).
+    pub label: Box<str>,
+    /// Background color name (`crimson`, `berry`, `sky`, …).
+    pub palette: Box<str>,
+}
+
+/// The user's primary guild (server tag).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct PrimaryGuild {
+    /// Primary guild ID.
+    pub identity_guild_id: Option<Id<GuildMarker>>,
+    /// Whether the server tag is displayed; `None` if the system cleared it.
+    pub identity_enabled: Option<bool>,
+    /// Server tag text (max. 4 characters).
+    pub tag: Option<Box<str>>,
+    /// Server tag badge hash.
+    pub badge: Option<ImageHash>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DOC_EXAMPLE: &str = r#"{
+      "id": "80351110224678912",
+      "username": "Nelly",
+      "global_name": null,
+      "discriminator": "1337",
+      "avatar": "8342729096ea3675442027381ff50dfe",
+      "verified": true,
+      "email": "nelly@discord.com",
+      "flags": 64,
+      "banner": "06c16474723fe537c283b8efa61a30c8",
+      "accent_color": 16711680,
+      "premium_type": 0,
+      "public_flags": 64,
+      "avatar_decoration_data": {
+        "sku_id": "1144058844004233369",
+        "asset": "a_fed43ab12698df65902ba06727e20c0e"
+      },
+      "collectibles": {
+        "nameplate": {
+          "sku_id": "2247558840304243311",
+          "asset": "nameplates/nameplates/twilight/",
+          "label": "",
+          "palette": "cobalt"
+        }
+      },
+      "primary_guild": {
+        "identity_guild_id": "1234647491267808778",
+        "identity_enabled": true,
+        "tag": "DISC",
+        "badge": "7d1734ae5a615e82bc7a4033b98fade8"
+      }
+    }"#;
+
+    #[test]
+    fn docs_example() {
+        let user: User = serde_json::from_str(DOC_EXAMPLE).unwrap();
+        assert_eq!(user.id.get(), 80_351_110_224_678_912);
+        assert_eq!(user.display_name(), "Nelly");
+        assert_eq!(user.mention(), "<@80351110224678912>");
+        assert!(!user.bot);
+        assert_eq!(user.flags, Some(UserFlags::HYPESQUAD_ONLINE_HOUSE_1));
+        assert_eq!(user.premium_type, Some(PremiumType::None));
+        assert!(user.avatar_decoration_data.unwrap().asset.is_animated());
+        assert_eq!(&*user.primary_guild.unwrap().tag.unwrap(), "DISC");
+
+        // Round trip keeps every value.
+        let again: User = serde_json::from_str(
+            &serde_json::to_string(&serde_json::from_str::<User>(DOC_EXAMPLE).unwrap()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(again, serde_json::from_str::<User>(DOC_EXAMPLE).unwrap());
+    }
+
+    #[test]
+    fn minimal_bot_user_and_unknown_fields() {
+        let json = r#"{"id":"1","username":"zeny","discriminator":"0","global_name":"Zeny",
+                       "avatar":null,"bot":true,"some_future_field":{"x":1}}"#;
+        let user: User = serde_json::from_str(json).unwrap();
+        assert!(user.bot);
+        assert_eq!(user.display_name(), "Zeny");
+        assert!(user.flags.is_none());
+    }
+}
