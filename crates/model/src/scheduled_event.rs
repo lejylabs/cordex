@@ -159,6 +159,15 @@ pub struct ScheduledEventEntityMetadata {
     pub location: Option<Box<str>>,
 }
 
+impl ScheduledEventEntityMetadata {
+    /// External location (1–100 characters).
+    pub fn location(location: impl Into<Box<str>>) -> Self {
+        Self {
+            location: Some(location.into()),
+        }
+    }
+}
+
 /// A user subscribed to a scheduled event.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 pub use integration::{
     Integration, IntegrationAccount, IntegrationExpireBehavior, IntegrationType,
 };
-pub use member::{Member, MemberFlags};
+pub use member::{Ban, Member, MemberFlags};
 pub use role::{Role, RoleColors, RoleFlags, RoleTags};
 
 use crate::emoji::Emoji;

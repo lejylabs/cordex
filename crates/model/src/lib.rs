@@ -39,7 +39,7 @@ mod serde_util;
 pub use channel::{Channel, ChannelType};
 pub use emoji::Emoji;
 pub use error::ParseError;
-pub use guild::{Guild, Member, Role, UnavailableGuild};
+pub use guild::{Ban, Guild, Member, Role, UnavailableGuild};
 pub use id::Id;
 pub use image_hash::ImageHash;
 pub use invite::Invite;

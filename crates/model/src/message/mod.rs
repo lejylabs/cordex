@@ -549,6 +549,16 @@ pub struct MessagePin {
     pub message: Message,
 }
 
+/// Page of channel pins.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ChannelPins {
+    /// Pins in this page.
+    pub items: Vec<MessagePin>,
+    /// Whether another page exists.
+    pub has_more: bool,
+}
+
 /// Custom client theme shared in a message.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]

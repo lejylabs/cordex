@@ -10,6 +10,16 @@ use crate::serde_util::bitflags_serde_int;
 use crate::timestamp::Timestamp;
 use crate::user::{AvatarDecorationData, Collectibles, User};
 
+/// A banned user (resources/guild.mdx, "Ban Object").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct Ban {
+    /// Ban reason, if Discord still has one.
+    pub reason: Option<Box<str>>,
+    /// Banned user.
+    pub user: User,
+}
+
 /// A member of a guild.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]

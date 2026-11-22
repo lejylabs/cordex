@@ -559,6 +559,257 @@ async fn load_test_zero_avoidable_429s() {
     );
 }
 
+const MESSAGE_JSON: &str = r#"{
+  "id": "1",
+  "channel_id": "2",
+  "author": {"id": "3", "username": "bot", "discriminator": "0", "avatar": null},
+  "content": "hello",
+  "timestamp": "2017-07-11T17:27:07.299000+00:00",
+  "edited_timestamp": null,
+  "tts": false,
+  "mention_everyone": false,
+  "mentions": [],
+  "mention_roles": [],
+  "attachments": [],
+  "embeds": [],
+  "pinned": false,
+  "type": 0
+}"#;
+
+const USER_JSON: &str = r#"{"id":"1","username":"bot","discriminator":"0","avatar":null}"#;
+
+#[tokio::test]
+async fn create_message_sends_json_and_await() {
+    use drs_model::id::Id;
+    use drs_model::id::marker::ChannelMarker;
+
+    let seen = Arc::new(Mutex::new(None::<(String, String)>));
+    let flag = seen.clone();
+    let client = client_with(move |req| {
+        *flag.lock() = Some((
+            req.uri().path().to_owned(),
+            String::from_utf8(req.body().to_vec()).unwrap(),
+        ));
+        ok_json(MESSAGE_JSON)
+    });
+    let channel = Id::<ChannelMarker>::new(2).unwrap();
+    let msg = client
+        .create_message(channel)
+        .content("hello")
+        .unwrap()
+        .await
+        .unwrap();
+    assert_eq!(&*msg.content, "hello");
+    let (path, body) = seen.lock().clone().unwrap();
+    assert!(path.ends_with("/channels/2/messages"));
+    assert!(body.contains("\"content\":\"hello\""));
+    assert!(!body.contains("files["));
+}
+
+#[tokio::test]
+async fn create_message_multipart_includes_files() {
+    use drs_model::id::Id;
+    use drs_model::id::marker::ChannelMarker;
+
+    let seen = Arc::new(Mutex::new(None::<(String, String)>));
+    let flag = seen.clone();
+    let client = client_with(move |req| {
+        let ct = req
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
+        *flag.lock() = Some((ct, String::from_utf8_lossy(req.body()).into_owned()));
+        ok_json(MESSAGE_JSON)
+    });
+    let channel = Id::<ChannelMarker>::new(2).unwrap();
+    client
+        .create_message(channel)
+        .content("hi")
+        .unwrap()
+        .attach(crate::File::bytes("a.txt", &b"data"[..]))
+        .unwrap()
+        .send()
+        .await
+        .unwrap();
+    let (ct, body) = seen.lock().clone().unwrap();
+    assert!(ct.starts_with("multipart/form-data; boundary="));
+    assert!(body.contains("name=\"payload_json\""));
+    assert!(body.contains("name=\"files[0]\""));
+    assert!(body.contains("filename=\"a.txt\""));
+    assert!(body.contains("data"));
+}
+
+#[test]
+fn create_message_rejects_overlong_content() {
+    use drs_model::id::Id;
+    use drs_model::id::marker::ChannelMarker;
+
+    let client = client_with(|_| ok_json("{}"));
+    let channel = Id::<ChannelMarker>::new(1).unwrap();
+    let result = client.create_message(channel).content("x".repeat(2001));
+    assert!(matches!(result, Err(HttpError::Validation(_))));
+}
+
+#[tokio::test]
+async fn current_user_and_get_channel() {
+    use drs_model::id::Id;
+    use drs_model::id::marker::ChannelMarker;
+
+    let paths = Arc::new(Mutex::new(Vec::new()));
+    let flag = paths.clone();
+    let client = client_with(move |req| {
+        flag.lock().push(req.uri().path().to_owned());
+        if req.uri().path().contains("/users/@me") {
+            ok_json(USER_JSON)
+        } else {
+            ok_json(
+                r#"{"id":"2","type":0,"guild_id":"1","position":0,"permission_overwrites":[],"name":"general"}"#,
+            )
+        }
+    });
+    let user = client.current_user().await.unwrap();
+    assert_eq!(&*user.username, "bot");
+    let channel = client
+        .get_channel(Id::<ChannelMarker>::new(2).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(channel.id.get(), 2);
+    let paths = paths.lock().clone();
+    assert!(paths.iter().any(|p| p.ends_with("/users/@me")));
+    assert!(paths.iter().any(|p| p.ends_with("/channels/2")));
+}
+
+fn no_content() -> RawResponse {
+    let mut resp = ok_json("");
+    resp.status = StatusCode::NO_CONTENT;
+    resp.body = Bytes::new();
+    resp
+}
+
+#[tokio::test]
+async fn delete_messages_rejects_short_list() {
+    use drs_model::id::Id;
+    use drs_model::id::marker::{ChannelMarker, MessageMarker};
+
+    let client = client_with(|_| no_content());
+    let channel = Id::<ChannelMarker>::new(2).unwrap();
+    let err = client
+        .delete_messages(channel, [Id::<MessageMarker>::new(1).unwrap()])
+        .await
+        .unwrap_err();
+    assert!(matches!(err, HttpError::Validation(_)));
+}
+
+#[tokio::test]
+async fn pin_and_bulk_delete_paths() {
+    use drs_model::id::Id;
+    use drs_model::id::marker::{ChannelMarker, MessageMarker};
+
+    let paths = Arc::new(Mutex::new(Vec::new()));
+    let flag = paths.clone();
+    let client = client_with(move |req| {
+        flag.lock().push((
+            req.method().as_str().to_owned(),
+            req.uri().path().to_owned(),
+        ));
+        no_content()
+    });
+    let channel = Id::<ChannelMarker>::new(2).unwrap();
+    let a = Id::<MessageMarker>::new(10).unwrap();
+    let b = Id::<MessageMarker>::new(11).unwrap();
+    client.pin_message(channel, a).await.unwrap();
+    client.delete_messages(channel, [a, b]).await.unwrap();
+    let paths = paths.lock().clone();
+    assert!(
+        paths
+            .iter()
+            .any(|(m, p)| m == "PUT" && p.ends_with("/channels/2/messages/pins/10"))
+    );
+    assert!(
+        paths
+            .iter()
+            .any(|(m, p)| m == "POST" && p.ends_with("/channels/2/messages/bulk-delete"))
+    );
+}
+
+#[tokio::test]
+async fn followup_is_global_exempt_and_uses_raw_token() {
+    use drs_model::id::Id;
+    use drs_model::id::marker::ApplicationMarker;
+    use drs_model::token::InteractionToken;
+
+    let seen = Arc::new(Mutex::new(None::<String>));
+    let flag = seen.clone();
+    let client = client_with(move |req| {
+        *flag.lock() = Some(req.uri().path().to_owned());
+        ok_json(MESSAGE_JSON)
+    });
+    let token = InteractionToken::new("secret-followup-token");
+    client
+        .create_followup_message(Id::<ApplicationMarker>::new(9).unwrap(), &token)
+        .content("hi")
+        .unwrap()
+        .await
+        .unwrap();
+    let path = seen.lock().clone().unwrap();
+    assert!(path.contains("secret-followup-token"));
+    assert!(!path.contains("***"));
+}
+
+#[tokio::test]
+async fn execute_webhook_fills_token_in_path() {
+    use drs_model::id::Id;
+    use drs_model::id::marker::WebhookMarker;
+    use drs_model::token::WebhookToken;
+
+    let seen = Arc::new(Mutex::new(None::<String>));
+    let flag = seen.clone();
+    let client = client_with(move |req| {
+        *flag.lock() = Some(req.uri().to_string());
+        ok_json(MESSAGE_JSON)
+    });
+    let token = WebhookToken::new("wh-secret");
+    client
+        .execute_webhook(Id::<WebhookMarker>::new(8).unwrap(), &token)
+        .content("hi")
+        .unwrap()
+        .await
+        .unwrap();
+    let uri = seen.lock().clone().unwrap();
+    assert!(uri.contains("/webhooks/8/wh-secret"));
+    assert!(uri.contains("wait=true"));
+}
+
+#[tokio::test]
+async fn bulk_overwrite_commands_sends_array() {
+    use drs_model::id::Id;
+    use drs_model::id::marker::ApplicationMarker;
+
+    let seen = Arc::new(Mutex::new(None::<(String, String)>));
+    let flag = seen.clone();
+    let client = client_with(move |req| {
+        *flag.lock() = Some((
+            req.uri().path().to_owned(),
+            String::from_utf8(req.body().to_vec()).unwrap(),
+        ));
+        ok_json("[]")
+    });
+    client
+        .bulk_overwrite_global_commands(
+            Id::<ApplicationMarker>::new(9).unwrap(),
+            [crate::CommandPayload::chat_input("ping", "pong")],
+        )
+        .await
+        .unwrap();
+    let (path, body) = seen.lock().clone().unwrap();
+    assert!(path.ends_with("/applications/9/commands"));
+    assert!(body.contains("\"name\":\"ping\""));
+    assert!(body.contains("\"description\":\"pong\""));
+}
+
 #[test]
 fn builds_real_tls_client() {
     let client = Client::new("not-a-real-token");

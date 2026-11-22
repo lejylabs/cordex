@@ -13,6 +13,7 @@ use serde::de::DeserializeOwned;
 use crate::client::Client;
 use crate::error::{HttpError, discord_from_body};
 use crate::limiter::{InvalidRequestGuard, PermitGuard, RateLimitScope, parse_secs};
+use crate::multipart::Multipart;
 use crate::route::Route;
 use crate::transport::RawResponse;
 
@@ -26,6 +27,7 @@ pub struct RequestBuilder {
     body: Option<Bytes>,
     content_type: Option<HeaderValue>,
     reason: Option<HeaderValue>,
+    query: String,
 }
 
 impl RequestBuilder {
@@ -36,6 +38,7 @@ impl RequestBuilder {
             body: None,
             content_type: None,
             reason: None,
+            query: String::new(),
         }
     }
 
@@ -56,15 +59,55 @@ impl RequestBuilder {
         self
     }
 
+    /// Discord multipart body (`payload_json` + `files[n]`).
+    pub fn multipart(mut self, form: &Multipart) -> Result<Self, HttpError> {
+        let (content_type, body) = form.encode()?;
+        self.body = Some(body);
+        self.content_type = Some(content_type);
+        Ok(self)
+    }
+
+    /// Appends `key=value` query parameters (percent-encoded).
+    #[must_use]
+    pub fn query(mut self, key: &str, value: impl std::fmt::Display) -> Self {
+        if !self.query.is_empty() {
+            self.query.push('&');
+        }
+        self.query.push_str(key);
+        self.query.push('=');
+        let value = value.to_string();
+        self.query
+            .extend(utf8_percent_encode(&value, NON_ALPHANUMERIC));
+        self
+    }
+
     /// `X-Audit-Log-Reason`, percent-encoded, max 512 characters.
     pub fn reason(mut self, reason: impl AsRef<str>) -> Result<Self, HttpError> {
         self.reason = Some(encode_audit_log_reason(reason.as_ref())?);
         Ok(self)
     }
 
+    pub(crate) fn maybe_reason(self, reason: Option<&str>) -> Result<Self, HttpError> {
+        match reason {
+            Some(reason) => self.reason(reason),
+            None => Ok(self),
+        }
+    }
+
     /// Send the request: rate limit, retries, invalid-request guard.
     pub async fn send(self) -> Result<Response, HttpError> {
         execute(self).await
+    }
+
+    /// Send and deserialize a JSON body.
+    pub async fn send_json<T: DeserializeOwned>(self) -> Result<T, HttpError> {
+        self.send().await?.json()
+    }
+
+    /// Send and ignore the body (DELETE / 204).
+    pub async fn send_empty(self) -> Result<(), HttpError> {
+        let _ = self.send().await?;
+        Ok(())
     }
 }
 
@@ -185,11 +228,15 @@ fn parse_429(raw: &RawResponse) -> RetryAfter {
     }
 }
 
-fn join_url(base: &Uri, path: &str) -> Result<Uri, HttpError> {
+fn join_url(base: &Uri, path: &str, query: &str) -> Result<Uri, HttpError> {
     let mut parts = base.clone().into_parts();
     let base_path = base.path().trim_end_matches('/');
     let path = path.trim_start_matches('/');
-    let joined = format!("{base_path}/{path}");
+    let joined = if query.is_empty() {
+        format!("{base_path}/{path}")
+    } else {
+        format!("{base_path}/{path}?{query}")
+    };
     parts.path_and_query = Some(
         joined
             .parse()
@@ -204,8 +251,9 @@ fn build_http_request(
     body: Option<Bytes>,
     content_type: Option<HeaderValue>,
     reason: Option<HeaderValue>,
+    query: &str,
 ) -> Result<Request<Bytes>, HttpError> {
-    let uri = join_url(&client.inner.base_url, route.path())?;
+    let uri = join_url(&client.inner.base_url, route.path(), query)?;
     let mut builder = Request::builder()
         .method(route.method.clone())
         .uri(uri)
@@ -229,6 +277,7 @@ async fn execute(builder: RequestBuilder) -> Result<Response, HttpError> {
         body,
         content_type,
         reason,
+        query,
     } = builder;
     let inner = &client.inner;
 
@@ -253,6 +302,7 @@ async fn execute(builder: RequestBuilder) -> Result<Response, HttpError> {
             body.clone(),
             content_type.clone(),
             reason.clone(),
+            &query,
         )?;
 
         let timed =
