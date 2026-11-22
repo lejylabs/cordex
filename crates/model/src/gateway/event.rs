@@ -8,12 +8,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
 use crate::application::Application;
-use crate::channel::Channel;
-use crate::guild::{Guild, UnavailableGuild};
+use crate::channel::{Channel, ThreadMember};
+use crate::command::GuildCommandPermissions;
+use crate::emoji::Emoji;
+use crate::entitlement::Entitlement;
+use crate::guild::{Guild, Member, Role, UnavailableGuild};
 use crate::id::Id;
-use crate::id::marker::{ChannelMarker, GuildMarker, MessageMarker};
-use crate::message::Message;
+use crate::id::marker::{ChannelMarker, GuildMarker, MessageMarker, RoleMarker, UserMarker};
+use crate::interaction::Interaction;
+use crate::message::{Message, ReactionType};
+use crate::sticker::Sticker;
+use crate::timestamp::Timestamp;
 use crate::user::User;
+use crate::voice::VoiceState;
 
 /// A dispatched gateway event.
 ///
@@ -26,17 +33,57 @@ pub enum Event {
     Ready(Box<Ready>),
     /// `RESUMED`: a resume finished; missed events were replayed before it.
     Resumed,
+    /// `GUILD_CREATE`: available guild with extra fields, or an unavailable stub.
+    GuildCreate(GuildCreate),
     /// `GUILD_UPDATE`.
     GuildUpdate(Box<Guild>),
     /// `GUILD_DELETE`: guild unavailable (`unavailable: true`) or the bot
     /// was removed (`unavailable: false`).
     GuildDelete(UnavailableGuild),
+    /// `GUILD_BAN_ADD`.
+    GuildBanAdd(Box<GuildBanAdd>),
+    /// `GUILD_BAN_REMOVE`.
+    GuildBanRemove(Box<GuildBanAdd>),
+    /// `GUILD_EMOJIS_UPDATE`.
+    GuildEmojisUpdate(Box<GuildEmojisUpdate>),
+    /// `GUILD_STICKERS_UPDATE`.
+    GuildStickersUpdate(Box<GuildStickersUpdate>),
+    /// `GUILD_INTEGRATIONS_UPDATE`.
+    GuildIntegrationsUpdate(GuildIntegrationsUpdate),
+    /// `GUILD_MEMBER_ADD`.
+    GuildMemberAdd(Box<Member>),
+    /// `GUILD_MEMBER_REMOVE`.
+    GuildMemberRemove(Box<GuildMemberRemove>),
+    /// `GUILD_MEMBER_UPDATE`.
+    GuildMemberUpdate(Box<GuildMemberUpdate>),
+    /// `GUILD_MEMBERS_CHUNK`.
+    GuildMembersChunk(Box<GuildMembersChunk>),
+    /// `GUILD_ROLE_CREATE`.
+    GuildRoleCreate(Box<GuildRoleCreate>),
+    /// `GUILD_ROLE_UPDATE`.
+    GuildRoleUpdate(Box<GuildRoleCreate>),
+    /// `GUILD_ROLE_DELETE`.
+    GuildRoleDelete(GuildRoleDelete),
     /// `CHANNEL_CREATE`.
     ChannelCreate(Box<Channel>),
     /// `CHANNEL_UPDATE`.
     ChannelUpdate(Box<Channel>),
     /// `CHANNEL_DELETE`.
     ChannelDelete(Box<Channel>),
+    /// `CHANNEL_PINS_UPDATE`.
+    ChannelPinsUpdate(ChannelPinsUpdate),
+    /// `THREAD_CREATE` (channel; may include `newly_created` and `member`).
+    ThreadCreate(Box<Channel>),
+    /// `THREAD_UPDATE`.
+    ThreadUpdate(Box<Channel>),
+    /// `THREAD_DELETE` (partial channel: `id`, `guild_id`, `parent_id`, `type`).
+    ThreadDelete(Box<Channel>),
+    /// `THREAD_LIST_SYNC`.
+    ThreadListSync(Box<ThreadListSync>),
+    /// `THREAD_MEMBER_UPDATE`.
+    ThreadMemberUpdate(Box<ThreadMember>),
+    /// `THREAD_MEMBERS_UPDATE`.
+    ThreadMembersUpdate(Box<ThreadMembersUpdate>),
     /// `MESSAGE_CREATE` (with `guild_id` and `member` in guilds).
     MessageCreate(Box<Message>),
     /// `MESSAGE_UPDATE` (full message; `tts` is always false).
@@ -45,6 +92,32 @@ pub enum Event {
     MessageDelete(MessageDelete),
     /// `MESSAGE_DELETE_BULK`.
     MessageDeleteBulk(MessageDeleteBulk),
+    /// `MESSAGE_REACTION_ADD`.
+    MessageReactionAdd(Box<MessageReactionAdd>),
+    /// `MESSAGE_REACTION_REMOVE`.
+    MessageReactionRemove(Box<MessageReactionRemove>),
+    /// `MESSAGE_REACTION_REMOVE_ALL`.
+    MessageReactionRemoveAll(MessageReactionRemoveAll),
+    /// `MESSAGE_REACTION_REMOVE_EMOJI`.
+    MessageReactionRemoveEmoji(Box<MessageReactionRemoveEmoji>),
+    /// `INTERACTION_CREATE`.
+    InteractionCreate(Box<Interaction>),
+    /// `APPLICATION_COMMAND_PERMISSIONS_UPDATE`.
+    ApplicationCommandPermissionsUpdate(Box<GuildCommandPermissions>),
+    /// `VOICE_STATE_UPDATE`.
+    VoiceStateUpdate(Box<VoiceState>),
+    /// `VOICE_SERVER_UPDATE`.
+    VoiceServerUpdate(VoiceServerUpdate),
+    /// `ENTITLEMENT_CREATE`.
+    EntitlementCreate(Box<Entitlement>),
+    /// `ENTITLEMENT_UPDATE`.
+    EntitlementUpdate(Box<Entitlement>),
+    /// `ENTITLEMENT_DELETE`.
+    EntitlementDelete(Box<Entitlement>),
+    /// `USER_UPDATE`.
+    UserUpdate(Box<User>),
+    /// `WEBHOOKS_UPDATE`.
+    WebhooksUpdate(WebhooksUpdate),
     /// An event without a typed variant (yet).
     Unknown(UnknownEvent),
 }
@@ -93,6 +166,333 @@ pub struct MessageDeleteBulk {
     pub guild_id: Option<Id<GuildMarker>>,
 }
 
+/// `GUILD_CREATE` payload: an available guild with extra fields, or an
+/// unavailable stub (outage while connecting).
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum GuildCreate {
+    /// Guild is available; includes members, channels and voice states.
+    Available(Box<AvailableGuild>),
+    /// Guild is unavailable; wait for a later `GUILD_CREATE`.
+    Unavailable(UnavailableGuild),
+}
+
+/// Available `GUILD_CREATE` payload: a guild plus the extra gateway fields.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct AvailableGuild {
+    /// Guild object.
+    #[serde(flatten)]
+    pub guild: Guild,
+    /// When the bot joined.
+    pub joined_at: Timestamp,
+    /// Whether this is considered a large guild.
+    #[serde(default)]
+    pub large: bool,
+    /// Whether the guild is unavailable due to an outage.
+    #[serde(default)]
+    pub unavailable: bool,
+    /// Member count.
+    #[serde(default)]
+    pub member_count: u32,
+    /// Voice states (no `guild_id` on each).
+    #[serde(default)]
+    pub voice_states: Vec<VoiceState>,
+    /// Members (limited without `GUILD_PRESENCES` / in very large guilds).
+    #[serde(default)]
+    pub members: Vec<Member>,
+    /// Channels.
+    #[serde(default)]
+    pub channels: Vec<Channel>,
+    /// Active threads the bot can see.
+    #[serde(default)]
+    pub threads: Vec<Channel>,
+}
+
+/// `GUILD_BAN_ADD` / `GUILD_BAN_REMOVE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct GuildBanAdd {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// User who was banned or unbanned.
+    pub user: User,
+}
+
+/// `GUILD_EMOJIS_UPDATE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct GuildEmojisUpdate {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Emojis.
+    #[serde(default)]
+    pub emojis: Vec<Emoji>,
+}
+
+/// `GUILD_STICKERS_UPDATE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct GuildStickersUpdate {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Stickers.
+    #[serde(default)]
+    pub stickers: Vec<Sticker>,
+}
+
+/// `GUILD_INTEGRATIONS_UPDATE` payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct GuildIntegrationsUpdate {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+}
+
+/// `GUILD_MEMBER_REMOVE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct GuildMemberRemove {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// User who left or was removed.
+    pub user: User,
+}
+
+/// `GUILD_MEMBER_UPDATE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct GuildMemberUpdate {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Role IDs.
+    #[serde(default)]
+    pub roles: Vec<Id<RoleMarker>>,
+    /// User.
+    pub user: User,
+    /// Nickname.
+    pub nick: Option<Box<str>>,
+    /// Guild avatar hash.
+    pub avatar: Option<crate::image_hash::ImageHash>,
+    /// Guild banner hash.
+    pub banner: Option<crate::image_hash::ImageHash>,
+    /// When the user joined; `None` for guests.
+    pub joined_at: Option<Timestamp>,
+    /// When the user started boosting.
+    pub premium_since: Option<Timestamp>,
+    /// Server-deafened.
+    pub deaf: Option<bool>,
+    /// Server-muted.
+    pub mute: Option<bool>,
+    /// Membership screening pending.
+    pub pending: Option<bool>,
+    /// Timeout end.
+    pub communication_disabled_until: Option<Timestamp>,
+    /// Guild avatar decoration.
+    pub avatar_decoration_data: Option<crate::user::AvatarDecorationData>,
+    /// Guild collectibles.
+    pub collectibles: Option<crate::user::Collectibles>,
+    /// Member flags.
+    #[serde(default)]
+    pub flags: crate::guild::MemberFlags,
+}
+
+/// `GUILD_MEMBERS_CHUNK` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct GuildMembersChunk {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Members in this chunk.
+    #[serde(default)]
+    pub members: Vec<Member>,
+    /// Chunk index (`0 <= chunk_index < chunk_count`).
+    pub chunk_index: u32,
+    /// Total chunks for this request.
+    pub chunk_count: u32,
+    /// Invalid user IDs from `REQUEST_GUILD_MEMBERS`.
+    #[serde(default)]
+    pub not_found: Vec<Id<UserMarker>>,
+    /// Nonce from the request.
+    pub nonce: Option<Box<str>>,
+}
+
+/// `GUILD_ROLE_CREATE` / `GUILD_ROLE_UPDATE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct GuildRoleCreate {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Role.
+    pub role: Role,
+}
+
+/// `GUILD_ROLE_DELETE` payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct GuildRoleDelete {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Role.
+    pub role_id: Id<RoleMarker>,
+}
+
+/// `CHANNEL_PINS_UPDATE` payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ChannelPinsUpdate {
+    /// Guild.
+    pub guild_id: Option<Id<GuildMarker>>,
+    /// Channel.
+    pub channel_id: Id<ChannelMarker>,
+    /// When the most recent pin was pinned.
+    pub last_pin_timestamp: Option<Timestamp>,
+}
+
+/// `THREAD_LIST_SYNC` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ThreadListSync {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Parent channels whose threads are being synced; omitted = whole guild.
+    #[serde(default)]
+    pub channel_ids: Vec<Id<ChannelMarker>>,
+    /// Active threads the bot can access.
+    #[serde(default)]
+    pub threads: Vec<Channel>,
+    /// Thread members for the current user.
+    #[serde(default)]
+    pub members: Vec<ThreadMember>,
+}
+
+/// `THREAD_MEMBERS_UPDATE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ThreadMembersUpdate {
+    /// Thread.
+    pub id: Id<ChannelMarker>,
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Approximate member count (capped at 50).
+    pub member_count: u32,
+    /// Users added to the thread.
+    #[serde(default)]
+    pub added_members: Vec<ThreadMember>,
+    /// Users removed from the thread.
+    #[serde(default)]
+    pub removed_member_ids: Vec<Id<UserMarker>>,
+}
+
+/// `MESSAGE_REACTION_ADD` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct MessageReactionAdd {
+    /// User who reacted.
+    pub user_id: Id<UserMarker>,
+    /// Channel.
+    pub channel_id: Id<ChannelMarker>,
+    /// Message.
+    pub message_id: Id<MessageMarker>,
+    /// Guild.
+    pub guild_id: Option<Id<GuildMarker>>,
+    /// Member who reacted (guilds).
+    pub member: Option<Box<Member>>,
+    /// Emoji.
+    pub emoji: Emoji,
+    /// Author of the message that was reacted to.
+    pub message_author_id: Option<Id<UserMarker>>,
+    /// Whether this is a super-reaction.
+    #[serde(default)]
+    pub burst: bool,
+    /// Super-reaction colors (`#rrggbb`).
+    #[serde(default)]
+    pub burst_colors: Vec<Box<str>>,
+    /// Reaction type.
+    #[serde(rename = "type", default = "ReactionType::default_normal")]
+    pub kind: ReactionType,
+}
+
+/// `MESSAGE_REACTION_REMOVE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct MessageReactionRemove {
+    /// User who removed the reaction.
+    pub user_id: Id<UserMarker>,
+    /// Channel.
+    pub channel_id: Id<ChannelMarker>,
+    /// Message.
+    pub message_id: Id<MessageMarker>,
+    /// Guild.
+    pub guild_id: Option<Id<GuildMarker>>,
+    /// Emoji.
+    pub emoji: Emoji,
+    /// Whether this was a super-reaction.
+    #[serde(default)]
+    pub burst: bool,
+    /// Reaction type.
+    #[serde(rename = "type", default = "ReactionType::default_normal")]
+    pub kind: ReactionType,
+}
+
+/// `MESSAGE_REACTION_REMOVE_ALL` payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct MessageReactionRemoveAll {
+    /// Channel.
+    pub channel_id: Id<ChannelMarker>,
+    /// Message.
+    pub message_id: Id<MessageMarker>,
+    /// Guild.
+    pub guild_id: Option<Id<GuildMarker>>,
+}
+
+/// `MESSAGE_REACTION_REMOVE_EMOJI` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct MessageReactionRemoveEmoji {
+    /// Channel.
+    pub channel_id: Id<ChannelMarker>,
+    /// Guild.
+    pub guild_id: Option<Id<GuildMarker>>,
+    /// Message.
+    pub message_id: Id<MessageMarker>,
+    /// Emoji that was removed.
+    pub emoji: Emoji,
+}
+
+/// `VOICE_SERVER_UPDATE` payload. `Debug` redacts the voice token.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct VoiceServerUpdate {
+    /// Voice connection token.
+    pub token: Box<str>,
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Voice server host; `None` while Discord reallocates.
+    pub endpoint: Option<Box<str>>,
+}
+
+impl std::fmt::Debug for VoiceServerUpdate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VoiceServerUpdate")
+            .field("token", &"***")
+            .field("guild_id", &self.guild_id)
+            .field("endpoint", &self.endpoint)
+            .finish()
+    }
+}
+
+/// `WEBHOOKS_UPDATE` payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct WebhooksUpdate {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Channel whose webhooks changed.
+    pub channel_id: Id<ChannelMarker>,
+}
+
 /// Raw form of an event without a typed variant.
 #[derive(Debug, Clone)]
 pub struct UnknownEvent {
@@ -128,15 +528,65 @@ impl Event {
         let event = match name {
             "READY" => parse(data).map(Self::Ready),
             "RESUMED" => Ok(Self::Resumed),
+            "GUILD_CREATE" => {
+                #[derive(Deserialize)]
+                struct Peek {
+                    joined_at: Option<Timestamp>,
+                }
+                let json = data.map_or("null", RawValue::get);
+                match serde_json::from_str::<Peek>(json) {
+                    Ok(peek) if peek.joined_at.is_some() => parse(data)
+                        .map(GuildCreate::Available)
+                        .map(Self::GuildCreate),
+                    Ok(_) => parse(data)
+                        .map(GuildCreate::Unavailable)
+                        .map(Self::GuildCreate),
+                    Err(err) => Err(err),
+                }
+            }
             "GUILD_UPDATE" => parse(data).map(Self::GuildUpdate),
             "GUILD_DELETE" => parse(data).map(Self::GuildDelete),
+            "GUILD_BAN_ADD" => parse(data).map(Self::GuildBanAdd),
+            "GUILD_BAN_REMOVE" => parse(data).map(Self::GuildBanRemove),
+            "GUILD_EMOJIS_UPDATE" => parse(data).map(Self::GuildEmojisUpdate),
+            "GUILD_STICKERS_UPDATE" => parse(data).map(Self::GuildStickersUpdate),
+            "GUILD_INTEGRATIONS_UPDATE" => parse(data).map(Self::GuildIntegrationsUpdate),
+            "GUILD_MEMBER_ADD" => parse(data).map(Self::GuildMemberAdd),
+            "GUILD_MEMBER_REMOVE" => parse(data).map(Self::GuildMemberRemove),
+            "GUILD_MEMBER_UPDATE" => parse(data).map(Self::GuildMemberUpdate),
+            "GUILD_MEMBERS_CHUNK" => parse(data).map(Self::GuildMembersChunk),
+            "GUILD_ROLE_CREATE" => parse(data).map(Self::GuildRoleCreate),
+            "GUILD_ROLE_UPDATE" => parse(data).map(Self::GuildRoleUpdate),
+            "GUILD_ROLE_DELETE" => parse(data).map(Self::GuildRoleDelete),
             "CHANNEL_CREATE" => parse(data).map(Self::ChannelCreate),
             "CHANNEL_UPDATE" => parse(data).map(Self::ChannelUpdate),
             "CHANNEL_DELETE" => parse(data).map(Self::ChannelDelete),
+            "CHANNEL_PINS_UPDATE" => parse(data).map(Self::ChannelPinsUpdate),
+            "THREAD_CREATE" => parse(data).map(Self::ThreadCreate),
+            "THREAD_UPDATE" => parse(data).map(Self::ThreadUpdate),
+            "THREAD_DELETE" => parse(data).map(Self::ThreadDelete),
+            "THREAD_LIST_SYNC" => parse(data).map(Self::ThreadListSync),
+            "THREAD_MEMBER_UPDATE" => parse(data).map(Self::ThreadMemberUpdate),
+            "THREAD_MEMBERS_UPDATE" => parse(data).map(Self::ThreadMembersUpdate),
             "MESSAGE_CREATE" => parse(data).map(Self::MessageCreate),
             "MESSAGE_UPDATE" => parse(data).map(Self::MessageUpdate),
             "MESSAGE_DELETE" => parse(data).map(Self::MessageDelete),
             "MESSAGE_DELETE_BULK" => parse(data).map(Self::MessageDeleteBulk),
+            "MESSAGE_REACTION_ADD" => parse(data).map(Self::MessageReactionAdd),
+            "MESSAGE_REACTION_REMOVE" => parse(data).map(Self::MessageReactionRemove),
+            "MESSAGE_REACTION_REMOVE_ALL" => parse(data).map(Self::MessageReactionRemoveAll),
+            "MESSAGE_REACTION_REMOVE_EMOJI" => parse(data).map(Self::MessageReactionRemoveEmoji),
+            "INTERACTION_CREATE" => parse(data).map(Self::InteractionCreate),
+            "APPLICATION_COMMAND_PERMISSIONS_UPDATE" => {
+                parse(data).map(Self::ApplicationCommandPermissionsUpdate)
+            }
+            "VOICE_STATE_UPDATE" => parse(data).map(Self::VoiceStateUpdate),
+            "VOICE_SERVER_UPDATE" => parse(data).map(Self::VoiceServerUpdate),
+            "ENTITLEMENT_CREATE" => parse(data).map(Self::EntitlementCreate),
+            "ENTITLEMENT_UPDATE" => parse(data).map(Self::EntitlementUpdate),
+            "ENTITLEMENT_DELETE" => parse(data).map(Self::EntitlementDelete),
+            "USER_UPDATE" => parse(data).map(Self::UserUpdate),
+            "WEBHOOKS_UPDATE" => parse(data).map(Self::WebhooksUpdate),
             _ => return None,
         };
         Some(event)
@@ -147,15 +597,50 @@ impl Event {
         match self {
             Self::Ready(_) => "READY",
             Self::Resumed => "RESUMED",
+            Self::GuildCreate(_) => "GUILD_CREATE",
             Self::GuildUpdate(_) => "GUILD_UPDATE",
             Self::GuildDelete(_) => "GUILD_DELETE",
+            Self::GuildBanAdd(_) => "GUILD_BAN_ADD",
+            Self::GuildBanRemove(_) => "GUILD_BAN_REMOVE",
+            Self::GuildEmojisUpdate(_) => "GUILD_EMOJIS_UPDATE",
+            Self::GuildStickersUpdate(_) => "GUILD_STICKERS_UPDATE",
+            Self::GuildIntegrationsUpdate(_) => "GUILD_INTEGRATIONS_UPDATE",
+            Self::GuildMemberAdd(_) => "GUILD_MEMBER_ADD",
+            Self::GuildMemberRemove(_) => "GUILD_MEMBER_REMOVE",
+            Self::GuildMemberUpdate(_) => "GUILD_MEMBER_UPDATE",
+            Self::GuildMembersChunk(_) => "GUILD_MEMBERS_CHUNK",
+            Self::GuildRoleCreate(_) => "GUILD_ROLE_CREATE",
+            Self::GuildRoleUpdate(_) => "GUILD_ROLE_UPDATE",
+            Self::GuildRoleDelete(_) => "GUILD_ROLE_DELETE",
             Self::ChannelCreate(_) => "CHANNEL_CREATE",
             Self::ChannelUpdate(_) => "CHANNEL_UPDATE",
             Self::ChannelDelete(_) => "CHANNEL_DELETE",
+            Self::ChannelPinsUpdate(_) => "CHANNEL_PINS_UPDATE",
+            Self::ThreadCreate(_) => "THREAD_CREATE",
+            Self::ThreadUpdate(_) => "THREAD_UPDATE",
+            Self::ThreadDelete(_) => "THREAD_DELETE",
+            Self::ThreadListSync(_) => "THREAD_LIST_SYNC",
+            Self::ThreadMemberUpdate(_) => "THREAD_MEMBER_UPDATE",
+            Self::ThreadMembersUpdate(_) => "THREAD_MEMBERS_UPDATE",
             Self::MessageCreate(_) => "MESSAGE_CREATE",
             Self::MessageUpdate(_) => "MESSAGE_UPDATE",
             Self::MessageDelete(_) => "MESSAGE_DELETE",
             Self::MessageDeleteBulk(_) => "MESSAGE_DELETE_BULK",
+            Self::MessageReactionAdd(_) => "MESSAGE_REACTION_ADD",
+            Self::MessageReactionRemove(_) => "MESSAGE_REACTION_REMOVE",
+            Self::MessageReactionRemoveAll(_) => "MESSAGE_REACTION_REMOVE_ALL",
+            Self::MessageReactionRemoveEmoji(_) => "MESSAGE_REACTION_REMOVE_EMOJI",
+            Self::InteractionCreate(_) => "INTERACTION_CREATE",
+            Self::ApplicationCommandPermissionsUpdate(_) => {
+                "APPLICATION_COMMAND_PERMISSIONS_UPDATE"
+            }
+            Self::VoiceStateUpdate(_) => "VOICE_STATE_UPDATE",
+            Self::VoiceServerUpdate(_) => "VOICE_SERVER_UPDATE",
+            Self::EntitlementCreate(_) => "ENTITLEMENT_CREATE",
+            Self::EntitlementUpdate(_) => "ENTITLEMENT_UPDATE",
+            Self::EntitlementDelete(_) => "ENTITLEMENT_DELETE",
+            Self::UserUpdate(_) => "USER_UPDATE",
+            Self::WebhooksUpdate(_) => "WEBHOOKS_UPDATE",
             Self::Unknown(event) => &event.name,
         }
     }
@@ -243,6 +728,83 @@ mod tests {
     #[test]
     fn event_enum_stays_small() {
         assert!(size_of::<Event>() <= 48, "{}", size_of::<Event>());
+    }
+
+    #[test]
+    fn guild_create_unavailable_stub() {
+        let event = Event::from_dispatch(
+            "GUILD_CREATE",
+            Some(&RawValue::from_string(r#"{"id":"1","unavailable":true}"#.into()).unwrap()),
+        )
+        .unwrap();
+        assert!(matches!(
+            event,
+            Event::GuildCreate(GuildCreate::Unavailable(g)) if g.unavailable
+        ));
+    }
+
+    #[test]
+    fn interaction_create_slash() {
+        let json = r#"{
+            "type": 2,
+            "token": "A_UNIQUE_TOKEN",
+            "application_id": "1",
+            "id": "786008729715212338",
+            "guild_id": "290926798626357999",
+            "app_permissions": "442368",
+            "data": {
+                "options": [{"type": 3, "name": "cardname", "value": "The Gitrog Monster"}],
+                "type": 1,
+                "name": "cardsearch",
+                "id": "771825006014889984"
+            },
+            "channel_id": "645027906669510667",
+            "member": {
+                "user": {
+                    "id": "53908232506183680",
+                    "username": "Mason",
+                    "avatar": "a_d5efa99b3eeaa7dd43acca82f5692432",
+                    "discriminator": "1337",
+                    "public_flags": 131141
+                },
+                "roles": ["539082325061836999"],
+                "permissions": "2147483647",
+                "pending": false,
+                "nick": null,
+                "mute": false,
+                "joined_at": "2017-03-13T19:19:14.040000+00:00",
+                "deaf": false
+            }
+        }"#;
+        let event = Event::from_dispatch(
+            "INTERACTION_CREATE",
+            Some(&RawValue::from_string(json.into()).unwrap()),
+        )
+        .unwrap();
+        let Event::InteractionCreate(interaction) = event else {
+            panic!("expected INTERACTION_CREATE");
+        };
+        assert_eq!(
+            interaction.kind,
+            crate::interaction::InteractionType::ApplicationCommand
+        );
+        assert_eq!(interaction.author().unwrap().username.as_ref(), "Mason");
+        assert!(!format!("{interaction:?}").contains("A_UNIQUE_TOKEN"));
+    }
+
+    #[test]
+    fn voice_server_update_redacts_token() {
+        let event = Event::from_dispatch(
+            "VOICE_SERVER_UPDATE",
+            Some(&RawValue::from_string(
+                r#"{"token":"my_token","guild_id":"1","endpoint":"sweetwater-12345.discord.media:2048"}"#
+                    .into(),
+            )
+            .unwrap()),
+        )
+        .unwrap();
+        assert!(!format!("{event:?}").contains("my_token"));
+        assert_eq!(event.name(), "VOICE_SERVER_UPDATE");
     }
 
     #[test]

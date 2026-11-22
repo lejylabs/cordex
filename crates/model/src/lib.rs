@@ -8,8 +8,10 @@
 
 pub mod application;
 pub mod channel;
+pub mod command;
 pub mod component;
 pub mod emoji;
+pub mod entitlement;
 pub mod error;
 pub mod gateway;
 pub mod guild;
@@ -23,6 +25,7 @@ pub mod sticker;
 pub mod timestamp;
 pub mod token;
 pub mod user;
+pub mod voice;
 
 mod serde_util;
 
@@ -36,7 +39,7 @@ pub use message::Message;
 pub use permissions::Permissions;
 pub use sticker::Sticker;
 pub use timestamp::Timestamp;
-pub use token::Token;
+pub use token::{InteractionToken, Token};
 pub use user::User;
 
 /// Discord API version this crate models.

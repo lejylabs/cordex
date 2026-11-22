@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::id::Id;
-use crate::id::marker::RoleMarker;
+use crate::id::marker::{GuildMarker, RoleMarker};
 use crate::image_hash::ImageHash;
 use crate::permissions::Permissions;
 use crate::serde_util::bitflags_serde_int;
@@ -14,6 +14,8 @@ use crate::user::{AvatarDecorationData, Collectibles, User};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Member {
+    /// Guild ID (`GUILD_MEMBER_ADD` and similar gateway payloads).
+    pub guild_id: Option<Id<GuildMarker>>,
     /// The user; missing in `MESSAGE_CREATE`/`MESSAGE_UPDATE` member objects.
     pub user: Option<User>,
     /// Guild nickname.

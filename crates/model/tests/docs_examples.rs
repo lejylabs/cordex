@@ -1,6 +1,7 @@
 //! Every model against the JSON examples of the official docs
 //! (`tests/fixtures/*.json`, extracted from discord/discord-api-docs
-//! commit 9b737ec). Each example must parse, and serialize → parse must
+//! commit 9b737ec, plus filled `application_id` on the slash interaction
+//! example). Each example must parse, and serialize → parse must
 //! give the same value back.
 //!
 //! Fixes applied to the docs examples (docs bugs, not model bugs):
@@ -211,6 +212,79 @@ fn application() {
     let app: Application = round_trip(include_str!("fixtures/application.json"));
     assert!(!app.name.is_empty());
     assert!(!app.verify_key.is_empty());
+}
+
+#[test]
+fn application_command() {
+    use drs_model::command::{ApplicationCommand, CommandOptionType, CommandType};
+
+    let cmd: ApplicationCommand = round_trip(include_str!("fixtures/application_command.json"));
+    assert_eq!(cmd.kind, CommandType::ChatInput);
+    assert_eq!(cmd.name.as_ref(), "blep");
+    assert_eq!(cmd.options.len(), 2);
+    assert_eq!(cmd.options[0].kind, CommandOptionType::String);
+    assert_eq!(cmd.options[0].choices.len(), 3);
+    assert!(cmd.options[0].required);
+    assert_eq!(cmd.options[1].kind, CommandOptionType::Boolean);
+}
+
+#[test]
+fn interactions() {
+    use drs_model::command::CommandType;
+    use drs_model::interaction::{Interaction, InteractionData, InteractionType};
+
+    // Docs slash example omits `application_id`; filled like guild_member's `"user": {}`.
+    let slash_json = include_str!("fixtures/interaction_slash.json").replace(
+        r#""id": "786008729715212338""#,
+        r#""application_id": "1", "id": "786008729715212338""#,
+    );
+    let slash: Interaction = round_trip(&slash_json);
+    assert_eq!(slash.kind, InteractionType::ApplicationCommand);
+    let InteractionData::Command(data) = slash.data.as_ref().unwrap() else {
+        panic!("expected command data");
+    };
+    assert_eq!(&*data.name, "cardsearch");
+    assert_eq!(
+        data.option("cardname").unwrap().value.as_ref().unwrap(),
+        &drs_model::interaction::CommandOptionValue::String("The Gitrog Monster".into())
+    );
+    assert_eq!(slash.author().unwrap().username.as_ref(), "Mason");
+    assert!(!format!("{slash:?}").contains("A_UNIQUE_TOKEN"));
+
+    let user: Interaction = round_trip(include_str!("fixtures/interaction_user.json"));
+    let InteractionData::Command(data) = user.data.as_ref().unwrap() else {
+        panic!("expected command data");
+    };
+    assert_eq!(data.kind, CommandType::User);
+    assert!(data.target_id.is_some());
+    assert_eq!(data.resolved.as_ref().unwrap().users.len(), 1);
+
+    let message: Interaction = round_trip(include_str!("fixtures/interaction_message.json"));
+    let InteractionData::Command(data) = message.data.as_ref().unwrap() else {
+        panic!("expected command data");
+    };
+    assert_eq!(data.kind, CommandType::Message);
+    assert_eq!(data.resolved.as_ref().unwrap().messages.len(), 1);
+}
+
+#[test]
+fn entitlement() {
+    use drs_model::entitlement::{Entitlement, EntitlementType};
+
+    let ent: Entitlement = round_trip(include_str!("fixtures/entitlement.json"));
+    assert_eq!(ent.kind, EntitlementType::ApplicationSubscription);
+    assert!(!ent.deleted);
+    assert_eq!(ent.consumed, Some(false));
+}
+
+#[test]
+fn voice_state() {
+    use drs_model::voice::VoiceState;
+
+    let state: VoiceState = round_trip(include_str!("fixtures/voice_state.json"));
+    assert!(state.is_connected());
+    assert!(state.self_mute);
+    assert!(!state.deaf);
 }
 
 #[test]

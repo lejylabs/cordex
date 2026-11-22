@@ -77,6 +77,10 @@ pub struct Channel {
     pub default_auto_archive_duration: Option<AutoArchiveDuration>,
     /// Invoking user's permissions (interaction payloads).
     pub permissions: Option<Permissions>,
+    /// App permissions in this channel (resolved data of interactions).
+    pub app_permissions: Option<Permissions>,
+    /// Whether a thread was just created (`THREAD_CREATE`).
+    pub newly_created: Option<bool>,
     /// Channel flags.
     #[serde(default)]
     pub flags: ChannelFlags,
@@ -268,6 +272,8 @@ pub struct ThreadMember {
     pub id: Option<Id<ChannelMarker>>,
     /// User ID (omitted in some payloads).
     pub user_id: Option<Id<UserMarker>>,
+    /// Guild ID (`THREAD_MEMBER_UPDATE`).
+    pub guild_id: Option<Id<GuildMarker>>,
     /// When the user last joined.
     pub join_timestamp: Timestamp,
     /// User-thread settings (notifications).

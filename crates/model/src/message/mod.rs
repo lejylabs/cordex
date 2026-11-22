@@ -1,10 +1,12 @@
 //! Messages (resources/message.mdx, "Message Object").
 
+pub mod allowed_mentions;
 pub mod attachment;
 pub mod embed;
 
 use serde::{Deserialize, Serialize};
 
+pub use allowed_mentions::{AllowedMentionType, AllowedMentions};
 pub use attachment::{Attachment, AttachmentFlags};
 pub use embed::{
     Embed, EmbedAuthor, EmbedField, EmbedFlags, EmbedFooter, EmbedMedia, EmbedMediaFlags,
@@ -459,6 +461,22 @@ pub struct SnapshotMessage {
     /// Components.
     #[serde(default)]
     pub components: Vec<Component>,
+}
+
+int_enum! {
+    /// Reaction type (`MESSAGE_REACTION_*` events, Get Reactions).
+    pub enum ReactionType: u8 {
+        /// Normal reaction.
+        Normal = 0,
+        /// Super reaction (burst).
+        Burst = 1,
+    }
+}
+
+impl ReactionType {
+    pub(crate) const fn default_normal() -> Self {
+        Self::Normal
+    }
 }
 
 /// A reaction on a message.
