@@ -26,3 +26,4 @@ cache = ["dep:cordex-cache"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }
+tracing-subscriber.workspace = true

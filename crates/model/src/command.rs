@@ -182,6 +182,7 @@ pub struct CommandOptionChoice {
     /// Shown name (1–100 characters).
     pub name: Box<str>,
     /// Localized names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name_localizations: Option<HashMap<Box<str>, Box<str>>>,
     /// Value (string, integer or number matching the option type).
     pub value: CommandOptionChoiceValue,

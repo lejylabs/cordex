@@ -149,8 +149,8 @@ pub struct Interaction {
     /// that send no `data`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<InteractionData>,
-    /// Partial guild.
-    pub guild: Option<Box<crate::guild::Guild>>,
+    /// Partial guild (`id`, `locale`, `features`); not a full guild object.
+    pub guild: Option<InteractionGuild>,
     /// Guild ID.
     pub guild_id: Option<Id<GuildMarker>>,
     /// Partial channel.
@@ -204,6 +204,19 @@ impl Interaction {
             InteractionData::Command(_) | InteractionData::Unknown(_) => None,
         }
     }
+}
+
+/// Partial guild sent with an interaction (`id`, `locale`, `features`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct InteractionGuild {
+    /// Guild ID.
+    pub id: Id<GuildMarker>,
+    /// Preferred locale of the guild.
+    pub locale: Option<Box<str>>,
+    /// Enabled guild features.
+    #[serde(default)]
+    pub features: Vec<crate::guild::GuildFeature>,
 }
 
 /// Type-specific `data` of an interaction.
@@ -377,7 +390,7 @@ impl<'de> Deserialize<'de> for Interaction {
             #[serde(rename = "type")]
             kind: InteractionType,
             data: Option<Box<RawValue>>,
-            guild: Option<Box<crate::guild::Guild>>,
+            guild: Option<InteractionGuild>,
             guild_id: Option<Id<GuildMarker>>,
             channel: Option<Box<Channel>>,
             channel_id: Option<Id<ChannelMarker>>,
@@ -498,6 +511,11 @@ pub struct InteractionResponse {
 }
 
 impl InteractionResponse {
+    /// Response of any callback type with optional data.
+    pub const fn new(kind: InteractionCallbackType, data: Option<InteractionCallbackData>) -> Self {
+        Self { kind, data }
+    }
+
     /// `PONG` (type 1).
     pub const fn pong() -> Self {
         Self {
@@ -564,7 +582,7 @@ impl InteractionResponse {
 /// Callback data for a message, autocomplete result or modal.
 ///
 /// Fields of the variants that are not in use stay empty/`None`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct InteractionCallbackData {
     /// TTS message.
@@ -604,19 +622,7 @@ pub struct InteractionCallbackData {
 
 impl InteractionCallbackData {
     fn empty() -> Self {
-        Self {
-            tts: None,
-            content: None,
-            embeds: Vec::new(),
-            allowed_mentions: None,
-            flags: MessageFlags::empty(),
-            components: Vec::new(),
-            attachments: Vec::new(),
-            poll: None,
-            choices: Vec::new(),
-            custom_id: None,
-            title: None,
-        }
+        Self::default()
     }
 }
 
@@ -722,5 +728,50 @@ mod tests {
         let owners: AuthorizingIntegrationOwners = serde_json::from_str(json).unwrap();
         assert!(owners.guild.is_none());
         assert_eq!(owners.user.unwrap().get(), 5);
+    }
+
+    /// Shape of a real gateway `INTERACTION_CREATE` (2026-11): partial
+    /// guild without `name`, partial channel, member with `permissions`.
+    #[test]
+    fn live_gateway_slash_interaction() {
+        let json = r#"{
+            "version": 1, "type": 2, "token": "secret-token",
+            "member": {
+                "user": {"username": "lejy", "public_flags": 0, "primary_guild": null,
+                    "id": "111", "global_name": "Lejy", "display_name_styles": null,
+                    "discriminator": "0", "collectibles": null, "clan": null,
+                    "avatar_decoration_data": null, "avatar": "a1b2"},
+                "unusual_dm_activity_until": null, "roles": [], "premium_since": null,
+                "permissions": "2251799813685247", "pending": false, "nick": null,
+                "mute": false, "joined_at": "2024-05-01T10:00:00.000000+00:00",
+                "flags": 0, "deaf": false, "communication_disabled_until": null,
+                "banner": null, "avatar": null, "collectibles": null
+            },
+            "locale": "de", "id": "222", "guild_locale": "en-US", "guild_id": "333",
+            "guild": {"locale": "en-US", "id": "333", "features": ["COMMUNITY", "NEW_THING"]},
+            "entitlements": [], "entitlement_sku_ids": [],
+            "data": {"type": 1, "name": "ping", "id": "444", "guild_id": "333"},
+            "context": 0, "channel_id": "555",
+            "channel": {"type": 0, "topic": null, "theme_color": null,
+                "rate_limit_per_user": 0, "position": 0, "permissions": "2251799813685247",
+                "parent_id": "666", "nsfw": false, "name": "general",
+                "last_message_id": "777", "id": "555", "icon_emoji": null,
+                "guild_id": "333", "flags": 0},
+            "authorizing_integration_owners": {"0": "333"},
+            "attachment_size_limit": 10485760,
+            "application_id": "888", "app_permissions": "2251799813685247"
+        }"#;
+        let i: Interaction = serde_json::from_str(json).unwrap();
+        assert_eq!(i.guild.as_ref().unwrap().id.get(), 333);
+        assert_eq!(i.guild.as_ref().unwrap().locale.as_deref(), Some("en-US"));
+        assert_eq!(
+            &*i.channel.as_ref().unwrap().name.clone().unwrap(),
+            "general"
+        );
+        assert_eq!(i.author().unwrap().id.get(), 111);
+        let Some(InteractionData::Command(data)) = &i.data else {
+            panic!("command data expected");
+        };
+        assert_eq!(&*data.name, "ping");
     }
 }

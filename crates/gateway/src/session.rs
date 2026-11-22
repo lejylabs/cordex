@@ -628,7 +628,7 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
                 }
                 Ok(other) => self.deliver(other),
                 Err(err) => {
-                    tracing::debug!(%err, "ready deserialize failed");
+                    tracing::warn!(%err, "ready deserialize failed");
                 }
             }
             return None;
@@ -651,7 +651,7 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
                     }
                 }
                 Ok(other) => self.deliver(other),
-                Err(err) => tracing::debug!(%err, "chunk deserialize failed"),
+                Err(err) => tracing::warn!(%err, "chunk deserialize failed; event dropped"),
             }
             return None;
         }
@@ -660,7 +660,12 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
         }
         match Event::from_dispatch(name, envelope.d) {
             Ok(event) => self.deliver(event),
-            Err(err) => tracing::debug!(event = name, %err, "dispatch deserialize failed"),
+            Err(err) => tracing::warn!(
+                shard = self.shared.shard.number(),
+                event = name,
+                %err,
+                "dispatch deserialize failed; event dropped"
+            ),
         }
         None
     }

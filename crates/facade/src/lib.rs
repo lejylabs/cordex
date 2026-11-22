@@ -28,6 +28,9 @@ pub enum Error {
     /// A gateway shard or the shard manager failed.
     #[cfg(feature = "gateway")]
     Gateway(cordex_gateway::GatewayError),
+    /// Building a command or answering an interaction failed.
+    #[cfg(feature = "interactions")]
+    Interaction(cordex_interactions::InteractionError),
 }
 
 /// `Result` with the facade [`Error`].
@@ -41,6 +44,8 @@ impl fmt::Display for Error {
             Self::Http(err) => fmt::Display::fmt(err, f),
             #[cfg(feature = "gateway")]
             Self::Gateway(err) => fmt::Display::fmt(err, f),
+            #[cfg(feature = "interactions")]
+            Self::Interaction(err) => fmt::Display::fmt(err, f),
         }
     }
 }
@@ -53,6 +58,8 @@ impl StdError for Error {
             Self::Http(err) => Some(err),
             #[cfg(feature = "gateway")]
             Self::Gateway(err) => Some(err),
+            #[cfg(feature = "interactions")]
+            Self::Interaction(err) => Some(err),
         }
     }
 }
@@ -77,6 +84,13 @@ impl From<cordex_gateway::GatewayError> for Error {
     }
 }
 
+#[cfg(feature = "interactions")]
+impl From<cordex_interactions::InteractionError> for Error {
+    fn from(err: cordex_interactions::InteractionError) -> Self {
+        Self::Interaction(err)
+    }
+}
+
 /// The types most bots need: `use cordex::prelude::*;`.
 ///
 /// The simple layer from PLAN.md §4.4 (`Bot`, `Command`, contexts) is added
@@ -92,6 +106,10 @@ pub mod prelude {
     pub use cordex_gateway::{CloseMode, EventTypeFlags, Shard, ShardId, ShardManager};
     #[cfg(feature = "http")]
     pub use cordex_http::Client;
+    #[cfg(feature = "interactions")]
+    pub use cordex_interactions::{
+        Choice, Command, CommandOption, CommandOptions, InteractionHandle, Reply,
+    };
 }
 
 #[cfg(test)]

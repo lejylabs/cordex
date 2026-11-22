@@ -225,6 +225,29 @@ pub struct Choice {
 }
 
 impl Choice {
+    /// String choice (for autocomplete results).
+    pub fn string(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        Self::with_value(name.as_ref(), ChoiceValue::String(value.as_ref().into()))
+    }
+
+    /// Integer choice (for autocomplete results).
+    pub fn int(name: impl AsRef<str>, value: i64) -> Self {
+        Self::with_value(name.as_ref(), ChoiceValue::Integer(value))
+    }
+
+    /// Number choice (for autocomplete results).
+    pub fn number(name: impl AsRef<str>, value: f64) -> Self {
+        Self::with_value(name.as_ref(), ChoiceValue::Number(value))
+    }
+
+    fn with_value(name: &str, value: ChoiceValue) -> Self {
+        Self {
+            name: name.into(),
+            name_localizations: Localizations::new(),
+            value,
+        }
+    }
+
     /// Localized choice name.
     #[must_use]
     pub fn localization(mut self, locale: impl AsRef<str>, name: impl AsRef<str>) -> Self {

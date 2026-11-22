@@ -240,8 +240,7 @@ impl ClientBuilder {
         self
     }
 
-    /// Inject a transport (unit tests). Skips TLS setup.
-    #[cfg(test)]
+    /// Inject a transport (tests and [`crate::mock`]). Skips TLS setup.
     #[must_use]
     pub(crate) fn transport(mut self, transport: Arc<dyn Transport>) -> Self {
         self.transport = Some(transport);

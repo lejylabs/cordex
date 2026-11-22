@@ -4,6 +4,7 @@
 pub mod endpoint;
 pub mod error;
 pub mod limiter;
+pub mod mock;
 pub mod route;
 
 mod client;

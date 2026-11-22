@@ -99,19 +99,16 @@ async fn collect_limited(body: Incoming, limit: usize) -> Result<Bytes, HttpErro
 }
 
 /// Scriptable transport for mock REST tests (PLAN.md §17.3).
-#[cfg(test)]
 pub(crate) struct FnTransport<F> {
     f: F,
 }
 
-#[cfg(test)]
 impl<F> FnTransport<F> {
     pub(crate) fn new(f: F) -> Self {
         Self { f }
     }
 }
 
-#[cfg(test)]
 impl<F, Fut> Transport for FnTransport<F>
 where
     F: Fn(Request<Bytes>) -> Fut + Send + Sync + 'static,

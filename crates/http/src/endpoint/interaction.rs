@@ -3,9 +3,10 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
+use cordex_model::component::Component;
 use cordex_model::id::Id;
 use cordex_model::id::marker::{ApplicationMarker, InteractionMarker};
-use cordex_model::interaction::InteractionResponse;
+use cordex_model::interaction::{InteractionCallbackResponse, InteractionResponse};
 use cordex_model::message::{AllowedMentions, Embed, Message, MessageFlags};
 use cordex_model::token::InteractionToken;
 use serde::Serialize;
@@ -37,6 +38,30 @@ impl Client {
                 ))
                 .json(&response)?
                 .send_empty()
+                .await
+        }
+    }
+
+    /// Like [`Self::create_interaction_response`] with `?with_response=true`;
+    /// returns the callback object (e.g. the created message).
+    pub fn create_interaction_response_with_response(
+        &self,
+        interaction_id: Id<InteractionMarker>,
+        token: &InteractionToken,
+        response: &InteractionResponse,
+    ) -> impl Future<Output = Result<InteractionCallbackResponse, HttpError>> + Send + 'static {
+        let client = self.clone();
+        let token = token.expose().to_owned();
+        let response = response.clone();
+        async move {
+            client
+                .post(Route::raw(
+                    "/interactions/{interaction_id}/{interaction_token}/callback",
+                    (interaction_id, token),
+                ))
+                .query("with_response", "true")
+                .json(&response)?
+                .send_json()
                 .await
         }
     }
@@ -104,6 +129,8 @@ struct FollowupBody {
     allowed_mentions: Option<AllowedMentions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     flags: Option<MessageFlags>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    components: Option<Vec<Component>>,
 }
 
 /// Edit the original interaction response.
@@ -153,6 +180,13 @@ macro_rules! followup_setters {
             #[must_use]
             pub fn flags(mut self, flags: MessageFlags) -> Self {
                 self.body.flags = Some(flags);
+                self
+            }
+
+            /// Message components (an empty list removes them on edit).
+            #[must_use]
+            pub fn components(mut self, components: Vec<Component>) -> Self {
+                self.body.components = Some(components);
                 self
             }
 

@@ -1,32 +1,58 @@
 //! Minimal live test bot (PLAN.md §17.5).
 //!
-//! Reads `DISCORD_TOKEN` (and optionally `SHARDS` = number, unset/`auto` = automatic, `PREFIX`) from the
-//! environment or from a `.env` file in the current directory, connects to
-//! the gateway and answers a few text commands:
+//! Reads `DISCORD_TOKEN` (and optionally `SHARDS` = number, unset/`auto` =
+//! automatic, `PREFIX`) from the environment or from a `.env` file in the
+//! current directory and connects to the gateway.
+//!
+//! Text commands (need the privileged `MESSAGE_CONTENT` intent):
 //!
 //! - `!ping`: replies with the shard's heartbeat latency.
 //! - `!status`: state, latency, guilds and reconnects of every shard.
 //! - `!reconnect`: restarts the shard that received the message.
 //!
-//! Needs the privileged `MESSAGE_CONTENT` intent enabled in the developer
-//! portal. Run with `cargo run -p cordex --example testbot`.
+//! Slash commands, registered per guild on READY (show up instantly):
+//!
+//! - `/ping`: latency, as an interaction response.
+//! - `/echo text [private]`: repeats the text, optionally ephemeral.
+//! - `/slow`: auto-defer after 2.5 s, answers after 5 s (defer → edit).
+//! - `/color query`: autocomplete suggestions.
+//! - `/whois user`: user option + follow-up message.
+//! - `User Info`: user context-menu command.
+//!
+//! Run with `cargo run -p cordex --example testbot`.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
+use std::time::Duration;
 
 use cordex::gateway::{ManagerEvent, ShardManager, ShardManagerBuilder};
 use cordex::http::Client;
+use cordex::interactions::handle::DEFAULT_AUTO_DEFER;
+use cordex::model::gateway::event::Ready;
+use cordex::model::interaction::{Interaction, InteractionData, InteractionType};
 use cordex::prelude::*;
 
+type AnyResult<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+const COLORS: [&str; 8] = [
+    "red", "orange", "yellow", "green", "blue", "indigo", "violet", "black",
+];
+
 #[tokio::main]
-async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+async fn main() -> AnyResult {
+    // Library logs (warnings by default); override with RUST_LOG, e.g.
+    // `RUST_LOG=cordex_gateway=debug`.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+        )
+        .init();
     let config = Config::load(".env");
     let token = config
         .var("DISCORD_TOKEN")
         .ok_or("DISCORD_TOKEN is not set (put it into .env)")?;
-    // Unset or `auto`: the count from `GET /gateway/bot`; a number runs
-    // shards `0..n` of `n`.
     let shards = config.var("SHARDS").unwrap_or_else(|| "auto".to_owned());
     let prefix = config.var("PREFIX").unwrap_or_else(|| "!".to_owned());
 
@@ -37,8 +63,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         | Intents::MESSAGE_CONTENT;
 
     let builder = ShardManager::builder(&token, intents).http(http.clone());
-    let builder = apply_shards(builder, &shards)?;
-    let mut manager = builder.build().await?;
+    let mut manager = apply_shards(builder, &shards)?.build().await?;
     let mut events = manager.events();
     let manager = Arc::new(manager);
     manager.start().await?;
@@ -51,54 +76,29 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     while let Some(item) = events.recv().await {
         match item {
             ManagerEvent::Dispatch { shard, event } => match event {
-                Event::Ready(ready) => println!(
-                    "[shard {}] READY as {} ({} guilds)",
-                    shard.number(),
-                    ready.user.username,
-                    ready.guilds.len()
-                ),
+                Event::Ready(ready) => {
+                    println!(
+                        "[shard {}] READY as {} ({} guilds)",
+                        shard.number(),
+                        ready.user.username,
+                        ready.guilds.len()
+                    );
+                    tokio::spawn(register_commands(http.clone(), ready));
+                }
                 Event::Resumed => println!("[shard {}] RESUMED", shard.number()),
+                Event::InteractionCreate(interaction) => {
+                    let (http, manager) = (http.clone(), Arc::clone(&manager));
+                    let number = shard.number();
+                    tokio::spawn(async move {
+                        if let Err(e) = on_interaction(&http, &manager, number, &interaction).await
+                        {
+                            eprintln!("[shard {number}] interaction failed: {e}");
+                        }
+                    });
+                }
                 Event::MessageCreate(msg) if !msg.author.bot => {
-                    let Some(cmd) = msg.content.strip_prefix(prefix.as_str()) else {
-                        continue;
-                    };
-                    let reply = match cmd.trim() {
-                        "ping" => {
-                            let latency = manager
-                                .shard(shard.number())
-                                .and_then(|s| s.latency().latest);
-                            Some(format!(
-                                "pong (shard {}, latency {})",
-                                shard.number(),
-                                fmt_latency(latency)
-                            ))
-                        }
-                        "status" => Some(status_text(&manager)),
-                        "reconnect" => {
-                            let manager = Arc::clone(&manager);
-                            let number = shard.number();
-                            tokio::spawn(async move {
-                                match manager.restart_shard(number).await {
-                                    Ok(()) => println!("[shard {number}] restarted"),
-                                    Err(e) => eprintln!("[shard {number}] restart failed: {e}"),
-                                }
-                            });
-                            Some(format!("restarting shard {}", shard.number()))
-                        }
-                        _ => None,
-                    };
-                    if let Some(text) = reply {
-                        let http = http.clone();
-                        let (channel, id) = (msg.channel_id, msg.id);
-                        tokio::spawn(async move {
-                            let sent = match http.create_message(channel).content(text) {
-                                Ok(req) => req.reply(id).send().await.map(|_| ()),
-                                Err(e) => Err(e),
-                            };
-                            if let Err(e) = sent {
-                                eprintln!("reply failed: {e}");
-                            }
-                        });
+                    if let Some(cmd) = msg.content.strip_prefix(prefix.as_str()) {
+                        on_text_command(&http, &manager, shard.number(), &msg, cmd.trim());
                     }
                 }
                 _ => {}
@@ -109,21 +109,177 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             ManagerEvent::Error { shard, error } => {
                 eprintln!("[shard {}] fatal: {error}", shard.number());
             }
-            ManagerEvent::RecommendedShardCount {
-                running,
-                recommended,
-            } => {
-                println!("note: running {running} shard(s), Discord recommends {recommended}");
-            }
             other => println!("{other:?}"),
         }
     }
     Ok(())
 }
 
+fn commands() -> Vec<Command> {
+    vec![
+        Command::slash("ping", "Heartbeat latency of this shard"),
+        Command::slash("echo", "Repeat a text")
+            .option(
+                CommandOption::string("text", "What to repeat")
+                    .required()
+                    .max_length(500),
+            )
+            .option(CommandOption::boolean("private", "Only you see the answer")),
+        Command::slash("slow", "Answers after 5 seconds (tests auto-defer)"),
+        Command::slash("color", "Pick a color").option(
+            CommandOption::string("query", "Start typing")
+                .required()
+                .autocomplete(),
+        ),
+        Command::slash("whois", "Show a user").option(
+            CommandOption::user("user", "Who")
+                .required()
+                .name_localization("de", "nutzer"),
+        ),
+        Command::user("User Info"),
+    ]
+}
+
+/// Guild commands update instantly (global ones can take a while).
+async fn register_commands(http: Client, ready: Box<Ready>) {
+    let app = ready.application.id;
+    for guild in &ready.guilds {
+        match http
+            .bulk_overwrite_guild_commands(app, guild.id, commands())
+            .await
+        {
+            Ok(list) => println!("registered {} commands in guild {}", list.len(), guild.id),
+            Err(e) => eprintln!("registering commands in guild {} failed: {e}", guild.id),
+        }
+    }
+}
+
+async fn on_interaction(
+    http: &Client,
+    manager: &ShardManager,
+    shard: u32,
+    interaction: &Interaction,
+) -> AnyResult {
+    let handle = InteractionHandle::new(http.clone(), interaction);
+    let Some(InteractionData::Command(data)) = &interaction.data else {
+        return Ok(());
+    };
+    let opts = CommandOptions::new(data);
+    let who = interaction.author().map_or("?", |u| &*u.username);
+    println!("[shard {shard}] /{} by {who}", opts.command());
+
+    if interaction.kind == InteractionType::ApplicationCommandAutocomplete {
+        let typed = opts.focused().and_then(|o| match &o.value {
+            Some(cordex::model::interaction::CommandOptionValue::String(s)) => {
+                Some(s.to_lowercase())
+            }
+            _ => None,
+        });
+        let typed = typed.unwrap_or_default();
+        let hits = COLORS
+            .iter()
+            .filter(|c| c.starts_with(&typed))
+            .map(|c| Choice::string(*c, *c));
+        handle.autocomplete(hits).await?;
+        return Ok(());
+    }
+
+    match opts.command() {
+        "ping" => {
+            let latency = manager.shard(shard).and_then(|s| s.latency().latest);
+            handle
+                .respond(format!(
+                    "pong (shard {shard}, latency {}, {} ms since the event arrived)",
+                    fmt_latency(latency),
+                    handle.elapsed().as_millis()
+                ))
+                .await?;
+        }
+        "echo" => {
+            let text = opts.string("text")?;
+            let reply = Reply::new(text);
+            let reply = if opts.boolean_opt("private")?.unwrap_or(false) {
+                reply.ephemeral()
+            } else {
+                reply
+            };
+            handle.respond(reply).await?;
+        }
+        "slow" => {
+            handle.auto_defer(DEFAULT_AUTO_DEFER, false);
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            handle
+                .respond("done after 5 s (deferred automatically, then edited)")
+                .await?;
+        }
+        "color" => {
+            handle
+                .respond(format!("you picked {}", opts.string("query")?))
+                .await?;
+        }
+        "whois" | "User Info" => {
+            let user = if opts.command() == "whois" {
+                opts.user("user")?
+            } else {
+                opts.target_user()?
+            };
+            let nick = user.member.and_then(|m| m.nick.as_deref()).unwrap_or("-");
+            handle
+                .respond(Reply::new(format!(
+                    "{} (id {}, bot: {}, nick: {nick})",
+                    user.user.username, user.user.id, user.user.bot
+                )))
+                .await?;
+            handle
+                .followup(Reply::new("this is a follow-up message").ephemeral())
+                .await?;
+        }
+        other => handle.respond(format!("unknown command {other}")).await?,
+    }
+    Ok(())
+}
+
+fn on_text_command(
+    http: &Client,
+    manager: &Arc<ShardManager>,
+    shard: u32,
+    msg: &Message,
+    cmd: &str,
+) {
+    let text = match cmd {
+        "ping" => {
+            let latency = manager.shard(shard).and_then(|s| s.latency().latest);
+            format!("pong (shard {shard}, latency {})", fmt_latency(latency))
+        }
+        "status" => status_text(manager),
+        "reconnect" => {
+            let manager = Arc::clone(manager);
+            tokio::spawn(async move {
+                match manager.restart_shard(shard).await {
+                    Ok(()) => println!("[shard {shard}] restarted"),
+                    Err(e) => eprintln!("[shard {shard}] restart failed: {e}"),
+                }
+            });
+            format!("restarting shard {shard}")
+        }
+        _ => return,
+    };
+    let http = http.clone();
+    let (channel, id) = (msg.channel_id, msg.id);
+    tokio::spawn(async move {
+        let sent = match http.create_message(channel).content(text) {
+            Ok(req) => req.reply(id).send().await.map(|_| ()),
+            Err(e) => Err(e),
+        };
+        if let Err(e) = sent {
+            eprintln!("reply failed: {e}");
+        }
+    });
+}
+
 /// Discord sends the first heartbeat after a random part of the interval
 /// (up to ~41 s), so right after READY there is no sample yet.
-fn fmt_latency(latency: Option<std::time::Duration>) -> String {
+fn fmt_latency(latency: Option<Duration>) -> String {
     latency.map_or_else(
         || "n/a (no heartbeat ACK yet)".to_owned(),
         |d| format!("{} ms", d.as_millis()),
