@@ -11,3 +11,22 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+drs-model.workspace = true
+drs-http.workspace = true
+bitflags.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tokio-websockets.workspace = true
+flate2.workspace = true
+bytes.workspace = true
+http.workspace = true
+fastrand.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+serde_json.workspace = true
+futures-core.workspace = true
+futures-sink.workspace = true
+rustls.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "time", "test-util"] }

@@ -3,7 +3,8 @@
 Independent Discord bot API library for Rust (Tokio). No voice. Working name
 `drs`; the final project name is not decided yet.
 
-Status: Phase 1 (models).
+Status: Phase 4 (models + REST + gateway + sharding). Cache and the interactions
+server are not implemented yet. Live Discord connect tests are still open.
 
 ## Crates
 

@@ -3,6 +3,7 @@
 use std::future::Future;
 
 use drs_model::channel::Channel;
+use drs_model::gateway::GatewayBot;
 use drs_model::id::Id;
 use drs_model::id::marker::{GuildMarker, UserMarker};
 use drs_model::user::User;
@@ -18,6 +19,14 @@ struct CreateDmBody {
 }
 
 impl Client {
+    /// `GET /gateway/bot`.
+    pub fn gateway_bot(
+        &self,
+    ) -> impl Future<Output = Result<GatewayBot, HttpError>> + Send + 'static {
+        let client = self.clone();
+        async move { client.get(Route::new("/gateway/bot")).send_json().await }
+    }
+
     /// `GET /users/@me`.
     pub fn current_user(&self) -> impl Future<Output = Result<User, HttpError>> + Send + 'static {
         let client = self.clone();

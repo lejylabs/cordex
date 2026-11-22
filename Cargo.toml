@@ -55,8 +55,10 @@ tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 
 # Gateway (Phase 3); zlib-stream in pure Rust (zlib-rs)
 tokio-websockets = { version = "0.13.3", default-features = false, features = ["client", "fastrand", "sha1_smol", "rustls-platform-verifier", "aws_lc_rs"] }
-tokio-util = { version = "0.7.20", default-features = false }
+tokio-util = { version = "0.7.20", default-features = false, features = ["rt"] }
 flate2 = { version = "1.1.11", default-features = false, features = ["zlib-rs"] }
+futures-core = { version = "0.3.34", default-features = false }
+futures-sink = { version = "0.3.34", default-features = false }
 
 # Interactions (Phase 5); signature verification of HTTP interactions
 ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast"] }
