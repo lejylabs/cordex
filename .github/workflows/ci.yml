@@ -1,5 +1,7 @@
 # Same gate as locally: `cargo xtask check` and `cargo xtask features`.
 # Actions are pinned to commit SHAs (supply chain); bump them on purpose.
+# Keep actions/checkout too: tools that migrate runners may swap it for an
+# unpinned variant.
 name: CI
 
 on:
@@ -22,14 +24,20 @@ env:
 
 jobs:
   check:
-    name: check (${{ matrix.os }})
+    # Stable job names (`check (linux)`, `check (windows)`) so required
+    # status checks survive runner label changes.
+    name: check (${{ matrix.name }})
     strategy:
       fail-fast: false
       matrix:
-        # Debian is the acceptance platform; ubuntu-latest is the closest
-        # hosted runner. Windows is the development platform.
-        os: [blacksmith-4vcpu-ubuntu-2604, blacksmith-4vcpu-windows-2025]
-    runs-on: ${{ matrix.os }}
+        # Debian is the acceptance platform; Ubuntu is the closest runner.
+        # Windows is the development platform. Runners: Blacksmith.
+        include:
+          - name: linux
+            runner: blacksmith-4vcpu-ubuntu-2604
+          - name: windows
+            runner: blacksmith-4vcpu-windows-2025
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,7 +65,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 30
     steps:
-      - uses: useblacksmith/checkout@v1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -76,7 +84,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 30
     steps:
-      - uses: useblacksmith/checkout@v1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
