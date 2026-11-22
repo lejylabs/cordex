@@ -22,7 +22,7 @@ const INTERNAL_DEPS: &[(&str, &[&str])] = &[
     ),
 ];
 
-/// `drs-model` stays free of async and network code.
+/// `cordex-model` stays free of async and network code.
 const MODEL_FORBIDDEN: &[&str] = &[
     "tokio",
     "tokio-util",
@@ -231,9 +231,9 @@ mod tests {
     #[test]
     fn parses_dependency_names() {
         let manifest = "[package]\nname = \"x\"\n\n[dependencies]\n\
-                        drs-model.workspace = true\nserde = { version = \"1\" }\n\
+                        cordex-model.workspace = true\nserde = { version = \"1\" }\n\
                         # comment\n\n[features]\ncache = []\n";
-        assert_eq!(dependency_names(manifest), vec!["drs-model", "serde"]);
+        assert_eq!(dependency_names(manifest), vec!["cordex-model", "serde"]);
         assert_eq!(package_name(manifest).as_deref(), Some("x"));
     }
 }

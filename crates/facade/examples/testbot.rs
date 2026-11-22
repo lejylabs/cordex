@@ -9,15 +9,15 @@
 //! - `!reconnect`: restarts the shard that received the message.
 //!
 //! Needs the privileged `MESSAGE_CONTENT` intent enabled in the developer
-//! portal. Run with `cargo run -p drs --example testbot`.
+//! portal. Run with `cargo run -p cordex --example testbot`.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use drs::gateway::{ManagerEvent, ShardManager, ShardManagerBuilder};
-use drs::http::Client;
-use drs::prelude::*;
+use cordex::gateway::{ManagerEvent, ShardManager, ShardManagerBuilder};
+use cordex::http::Client;
+use cordex::prelude::*;
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {

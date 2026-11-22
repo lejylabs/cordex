@@ -1,5 +1,5 @@
 [package]
-name = "drs-gateway"
+name = "cordex-gateway"
 description = "Discord gateway shards and shard manager."
 version.workspace = true
 edition.workspace = true
@@ -11,8 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-drs-model.workspace = true
-drs-http.workspace = true
+cordex-model.workspace = true
+cordex-http.workspace = true
 bitflags.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

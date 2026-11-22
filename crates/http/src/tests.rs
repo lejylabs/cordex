@@ -66,7 +66,7 @@ async fn sends_bot_authorization_and_user_agent() {
     let (auth, ua) = seen.lock().clone().unwrap();
     assert_eq!(auth, "Bot test.token.secret");
     assert_eq!(ua, USER_AGENT);
-    assert!(ua.starts_with("DiscordBot (https://github.com/lejylabs/discord-rs, "));
+    assert!(ua.starts_with("DiscordBot (https://github.com/lejylabs/cordex, "));
     assert!(ua.contains("0.1.0"));
 }
 
@@ -580,8 +580,8 @@ const USER_JSON: &str = r#"{"id":"1","username":"bot","discriminator":"0","avata
 
 #[tokio::test]
 async fn create_message_sends_json_and_await() {
-    use drs_model::id::Id;
-    use drs_model::id::marker::ChannelMarker;
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::ChannelMarker;
 
     let seen = Arc::new(Mutex::new(None::<(String, String)>));
     let flag = seen.clone();
@@ -608,8 +608,8 @@ async fn create_message_sends_json_and_await() {
 
 #[tokio::test]
 async fn create_message_multipart_includes_files() {
-    use drs_model::id::Id;
-    use drs_model::id::marker::ChannelMarker;
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::ChannelMarker;
 
     let seen = Arc::new(Mutex::new(None::<(String, String)>));
     let flag = seen.clone();
@@ -644,8 +644,8 @@ async fn create_message_multipart_includes_files() {
 
 #[test]
 fn create_message_rejects_overlong_content() {
-    use drs_model::id::Id;
-    use drs_model::id::marker::ChannelMarker;
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::ChannelMarker;
 
     let client = client_with(|_| ok_json("{}"));
     let channel = Id::<ChannelMarker>::new(1).unwrap();
@@ -655,8 +655,8 @@ fn create_message_rejects_overlong_content() {
 
 #[tokio::test]
 async fn current_user_and_get_channel() {
-    use drs_model::id::Id;
-    use drs_model::id::marker::ChannelMarker;
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::ChannelMarker;
 
     let paths = Arc::new(Mutex::new(Vec::new()));
     let flag = paths.clone();
@@ -691,8 +691,8 @@ fn no_content() -> RawResponse {
 
 #[tokio::test]
 async fn delete_messages_rejects_short_list() {
-    use drs_model::id::Id;
-    use drs_model::id::marker::{ChannelMarker, MessageMarker};
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::{ChannelMarker, MessageMarker};
 
     let client = client_with(|_| no_content());
     let channel = Id::<ChannelMarker>::new(2).unwrap();
@@ -705,8 +705,8 @@ async fn delete_messages_rejects_short_list() {
 
 #[tokio::test]
 async fn pin_and_bulk_delete_paths() {
-    use drs_model::id::Id;
-    use drs_model::id::marker::{ChannelMarker, MessageMarker};
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::{ChannelMarker, MessageMarker};
 
     let paths = Arc::new(Mutex::new(Vec::new()));
     let flag = paths.clone();
@@ -737,9 +737,9 @@ async fn pin_and_bulk_delete_paths() {
 
 #[tokio::test]
 async fn followup_is_global_exempt_and_uses_raw_token() {
-    use drs_model::id::Id;
-    use drs_model::id::marker::ApplicationMarker;
-    use drs_model::token::InteractionToken;
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::ApplicationMarker;
+    use cordex_model::token::InteractionToken;
 
     let seen = Arc::new(Mutex::new(None::<String>));
     let flag = seen.clone();
@@ -761,9 +761,9 @@ async fn followup_is_global_exempt_and_uses_raw_token() {
 
 #[tokio::test]
 async fn execute_webhook_fills_token_in_path() {
-    use drs_model::id::Id;
-    use drs_model::id::marker::WebhookMarker;
-    use drs_model::token::WebhookToken;
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::WebhookMarker;
+    use cordex_model::token::WebhookToken;
 
     let seen = Arc::new(Mutex::new(None::<String>));
     let flag = seen.clone();
@@ -785,8 +785,8 @@ async fn execute_webhook_fills_token_in_path() {
 
 #[tokio::test]
 async fn bulk_overwrite_commands_sends_array() {
-    use drs_model::id::Id;
-    use drs_model::id::marker::ApplicationMarker;
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::ApplicationMarker;
 
     let seen = Arc::new(Mutex::new(None::<(String, String)>));
     let flag = seen.clone();

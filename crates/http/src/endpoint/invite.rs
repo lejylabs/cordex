@@ -3,9 +3,9 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::id::Id;
-use drs_model::id::marker::ChannelMarker;
-use drs_model::invite::Invite;
+use cordex_model::id::Id;
+use cordex_model::id::marker::ChannelMarker;
+use cordex_model::invite::Invite;
 use serde::Serialize;
 
 use crate::client::Client;

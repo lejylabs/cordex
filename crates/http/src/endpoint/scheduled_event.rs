@@ -3,13 +3,13 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::id::Id;
-use drs_model::id::marker::{ChannelMarker, GuildMarker, ScheduledEventMarker};
-use drs_model::scheduled_event::{
+use cordex_model::id::Id;
+use cordex_model::id::marker::{ChannelMarker, GuildMarker, ScheduledEventMarker};
+use cordex_model::scheduled_event::{
     ScheduledEvent, ScheduledEventEntityMetadata, ScheduledEventEntityType,
     ScheduledEventPrivacyLevel, ScheduledEventStatus,
 };
-use drs_model::timestamp::Timestamp;
+use cordex_model::timestamp::Timestamp;
 use serde::Serialize;
 
 use crate::client::Client;

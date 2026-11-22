@@ -2,11 +2,11 @@
 
 use std::future::Future;
 
-use drs_model::channel::Channel;
-use drs_model::guild::{Guild, Member, Role};
-use drs_model::id::Id;
-use drs_model::id::marker::{GuildMarker, UserMarker};
-use drs_model::invite::Invite;
+use cordex_model::channel::Channel;
+use cordex_model::guild::{Guild, Member, Role};
+use cordex_model::id::Id;
+use cordex_model::id::marker::{GuildMarker, UserMarker};
+use cordex_model::invite::Invite;
 
 use crate::client::Client;
 use crate::error::HttpError;

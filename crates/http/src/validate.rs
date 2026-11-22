@@ -1,6 +1,6 @@
 //! Local builder limits (PLAN.md §6.2), checked before the request is sent.
 
-use drs_model::message::Embed;
+use cordex_model::message::Embed;
 
 use crate::error::HttpError;
 

@@ -10,9 +10,9 @@ use parking_lot::{Mutex, MutexGuard};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use drs_model::Token;
-use drs_model::gateway::presence::UpdatePresence;
-use drs_model::gateway::{GatewayBot, Intents};
+use cordex_model::Token;
+use cordex_model::gateway::presence::UpdatePresence;
+use cordex_model::gateway::{GatewayBot, Intents};
 use futures_core::Stream;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -39,7 +39,7 @@ pub struct ShardManagerBuilder<C: Connector = WsConnector> {
     intents: Intents,
     spec: ShardSpec,
     connector: C,
-    http: Option<drs_http::Client>,
+    http: Option<cordex_http::Client>,
     bot: Option<GatewayBot>,
     identify_queue: Option<Arc<dyn IdentifyQueue>>,
     event_types: EventTypeFlags,
@@ -155,7 +155,7 @@ impl<C: Connector> ShardManagerBuilder<C> {
 
     /// REST client used for `GET /gateway/bot` when no payload is injected.
     #[must_use]
-    pub fn http(mut self, client: drs_http::Client) -> Self {
+    pub fn http(mut self, client: cordex_http::Client) -> Self {
         self.http = Some(client);
         self
     }
@@ -308,7 +308,7 @@ impl<C: Connector> ShardManagerBuilder<C> {
         if let Some(http) = &self.http {
             return http.gateway_bot().await.map_err(GatewayError::http);
         }
-        let client = drs_http::Client::new(self.token.expose()).map_err(GatewayError::http)?;
+        let client = cordex_http::Client::new(self.token.expose()).map_err(GatewayError::http)?;
         GatewayBotSource::gateway_bot(&client).await
     }
 }

@@ -1,5 +1,5 @@
 [package]
-name = "drs-http"
+name = "cordex-http"
 description = "Discord REST client with rate limiting."
 version.workspace = true
 edition.workspace = true
@@ -11,7 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-drs-model.workspace = true
+cordex-model.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

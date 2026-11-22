@@ -3,9 +3,9 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::guild::Ban;
-use drs_model::id::Id;
-use drs_model::id::marker::{GuildMarker, UserMarker};
+use cordex_model::guild::Ban;
+use cordex_model::id::Id;
+use cordex_model::id::marker::{GuildMarker, UserMarker};
 use serde::Serialize;
 
 use crate::client::Client;

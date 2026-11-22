@@ -3,7 +3,7 @@
 use std::fmt;
 use std::time::Duration;
 
-use drs_model::gateway::CloseCode;
+use cordex_model::gateway::CloseCode;
 
 /// An error from a shard or gateway helper.
 #[derive(Debug, thiserror::Error)]
@@ -53,7 +53,7 @@ pub enum GatewayError {
     },
     /// REST call used by the gateway (`GET /gateway/bot`) failed.
     #[error(transparent)]
-    Http(Box<drs_http::HttpError>),
+    Http(Box<cordex_http::HttpError>),
     /// A local check failed before anything was sent.
     #[error("validation: {0}")]
     Validation(Box<str>),
@@ -94,7 +94,7 @@ impl GatewayError {
         Self::Validation(msg.into())
     }
 
-    pub(crate) fn http(err: drs_http::HttpError) -> Self {
+    pub(crate) fn http(err: cordex_http::HttpError) -> Self {
         Self::Http(Box::new(err))
     }
 

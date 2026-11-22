@@ -4,14 +4,14 @@ use parking_lot::{Mutex, MutexGuard};
 use std::collections::VecDeque;
 use tokio::sync::Notify;
 
-use drs_model::gateway::Event;
+use cordex_model::gateway::Event;
 
 use crate::error::GatewayError;
 use crate::types::Backpressure;
 
 pub(crate) enum Push {
     Ok,
-    Full(drs_model::gateway::Event),
+    Full(cordex_model::gateway::Event),
     Disconnect,
 }
 

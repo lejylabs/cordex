@@ -3,8 +3,8 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::id::Id;
-use drs_model::id::marker::{ChannelMarker, MessageMarker, UserMarker};
+use cordex_model::id::Id;
+use cordex_model::id::marker::{ChannelMarker, MessageMarker, UserMarker};
 
 use crate::client::Client;
 use crate::error::HttpError;

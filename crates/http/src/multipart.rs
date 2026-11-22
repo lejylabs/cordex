@@ -67,7 +67,7 @@ pub struct Multipart {
 impl Multipart {
     /// Builds the body and `Content-Type` header (with boundary).
     pub fn encode(&self) -> Result<(HeaderValue, Bytes), HttpError> {
-        let boundary = format!("----drs{}", fastrand::u64(..));
+        let boundary = format!("----cordex{}", fastrand::u64(..));
         let mut out = BytesMut::new();
         write_part(
             &mut out,

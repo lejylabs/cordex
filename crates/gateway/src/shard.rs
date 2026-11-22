@@ -5,16 +5,16 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use drs_model::Token;
-use drs_model::gateway::Intents;
-use drs_model::gateway::command::{
+use cordex_model::Token;
+use cordex_model::gateway::Intents;
+use cordex_model::gateway::command::{
     Command, RequestChannelInfo, RequestGuildMembers, RequestSoundboardSounds, UpdateVoiceState,
 };
-use drs_model::gateway::event::Event;
-use drs_model::gateway::presence::UpdatePresence;
-use drs_model::guild::Member;
-use drs_model::id::Id;
-use drs_model::id::marker::GuildMarker;
+use cordex_model::gateway::event::Event;
+use cordex_model::gateway::presence::UpdatePresence;
+use cordex_model::guild::Member;
+use cordex_model::id::Id;
+use cordex_model::id::marker::GuildMarker;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
@@ -37,12 +37,12 @@ pub trait GatewayBotSource: Send + Sync {
     /// Fetch recommended URL, shard count and session-start limit.
     fn gateway_bot(
         &self,
-    ) -> impl Future<Output = Result<drs_model::gateway::GatewayBot, GatewayError>> + Send;
+    ) -> impl Future<Output = Result<cordex_model::gateway::GatewayBot, GatewayError>> + Send;
 }
 
-impl GatewayBotSource for drs_http::Client {
-    async fn gateway_bot(&self) -> Result<drs_model::gateway::GatewayBot, GatewayError> {
-        drs_http::Client::gateway_bot(self)
+impl GatewayBotSource for cordex_http::Client {
+    async fn gateway_bot(&self) -> Result<cordex_model::gateway::GatewayBot, GatewayError> {
+        cordex_http::Client::gateway_bot(self)
             .await
             .map_err(GatewayError::http)
     }

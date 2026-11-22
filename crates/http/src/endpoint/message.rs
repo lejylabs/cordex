@@ -3,13 +3,13 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::component::Component;
-use drs_model::id::Id;
-use drs_model::id::marker::{ChannelMarker, MessageMarker, StickerMarker};
-use drs_model::message::{
+use cordex_model::component::Component;
+use cordex_model::id::Id;
+use cordex_model::id::marker::{ChannelMarker, MessageMarker, StickerMarker};
+use cordex_model::message::{
     AllowedMentions, ChannelPins, Embed, Message, MessageFlags, MessageReference,
 };
-use drs_model::timestamp::Timestamp;
+use cordex_model::timestamp::Timestamp;
 use http::Method;
 use serde::Serialize;
 

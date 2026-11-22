@@ -1,5 +1,5 @@
 [package]
-name = "drs-cache"
+name = "cordex-cache"
 description = "Optional in-memory cache fed by gateway events."
 version.workspace = true
 edition.workspace = true

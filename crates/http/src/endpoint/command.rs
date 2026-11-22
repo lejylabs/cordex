@@ -2,10 +2,10 @@
 
 use std::future::Future;
 
-use drs_model::command::{ApplicationCommand, CommandOption, CommandType};
-use drs_model::id::Id;
-use drs_model::id::marker::{ApplicationMarker, CommandMarker, GuildMarker};
-use drs_model::permissions::Permissions;
+use cordex_model::command::{ApplicationCommand, CommandOption, CommandType};
+use cordex_model::id::Id;
+use cordex_model::id::marker::{ApplicationMarker, CommandMarker, GuildMarker};
+use cordex_model::permissions::Permissions;
 use serde::Serialize;
 
 use crate::client::Client;

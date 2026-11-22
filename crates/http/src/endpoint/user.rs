@@ -2,11 +2,11 @@
 
 use std::future::Future;
 
-use drs_model::channel::Channel;
-use drs_model::gateway::GatewayBot;
-use drs_model::id::Id;
-use drs_model::id::marker::{GuildMarker, UserMarker};
-use drs_model::user::User;
+use cordex_model::channel::Channel;
+use cordex_model::gateway::GatewayBot;
+use cordex_model::id::Id;
+use cordex_model::id::marker::{GuildMarker, UserMarker};
+use cordex_model::user::User;
 use serde::Serialize;
 
 use crate::client::Client;

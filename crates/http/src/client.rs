@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use drs_model::Token;
+use cordex_model::Token;
 use http::{HeaderValue, Method, Uri};
 
 use crate::error::HttpError;

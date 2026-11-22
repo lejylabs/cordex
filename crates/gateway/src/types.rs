@@ -2,12 +2,12 @@
 
 use std::time::Duration;
 
-use drs_model::gateway::event::Event;
+use cordex_model::gateway::event::Event;
 
 use crate::error::GatewayError;
 
 /// Library name sent as Identify `browser` and `device`.
-pub const LIBRARY_NAME: &str = "drs";
+pub const LIBRARY_NAME: &str = "cordex";
 
 /// Default gateway host; query parameters are added by the shard.
 pub const DEFAULT_GATEWAY_URL: &str = "wss://gateway.discord.gg";
@@ -223,7 +223,7 @@ pub(crate) fn with_gateway_query(url: &str) -> String {
     let without_query = without_query.trim_end_matches('/');
     format!(
         "{without_query}/?v={}&encoding=json&compress=zlib-stream",
-        drs_model::API_VERSION
+        cordex_model::API_VERSION
     )
 }
 

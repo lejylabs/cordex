@@ -6,10 +6,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use bytes::Bytes;
-use drs_model::gateway::command::{Command, ConnectionProperties, Heartbeat, Identify, Resume};
-use drs_model::gateway::event::{Event, GuildMembersChunk};
-use drs_model::gateway::{CloseAction, CloseCode, Envelope, Hello, Intents, OpCode};
-use drs_model::guild::Member;
+use cordex_model::gateway::command::{Command, ConnectionProperties, Heartbeat, Identify, Resume};
+use cordex_model::gateway::event::{Event, GuildMembersChunk};
+use cordex_model::gateway::{CloseAction, CloseCode, Envelope, Hello, Intents, OpCode};
+use cordex_model::guild::Member;
 use parking_lot::{Mutex, MutexGuard};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{Instant, timeout};
@@ -27,7 +27,7 @@ use crate::types::{
     ShardStatus, with_gateway_query,
 };
 use crate::zlib::ZlibStream;
-use drs_model::Token;
+use cordex_model::Token;
 
 pub(crate) enum UserCommand {
     Payload {
@@ -55,7 +55,7 @@ pub(crate) struct Shared<C> {
     pub event_types: EventTypeFlags,
     pub backpressure: Backpressure,
     pub large_threshold: u8,
-    pub presence: Option<drs_model::gateway::presence::UpdatePresence>,
+    pub presence: Option<cordex_model::gateway::presence::UpdatePresence>,
     pub member_timeout: Duration,
     pub cancel: CancellationToken,
     pub events: Arc<EventPipe>,

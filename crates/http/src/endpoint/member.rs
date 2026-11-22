@@ -3,10 +3,10 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::guild::Member;
-use drs_model::id::Id;
-use drs_model::id::marker::{ChannelMarker, GuildMarker, RoleMarker, UserMarker};
-use drs_model::timestamp::Timestamp;
+use cordex_model::guild::Member;
+use cordex_model::id::Id;
+use cordex_model::id::marker::{ChannelMarker, GuildMarker, RoleMarker, UserMarker};
+use cordex_model::timestamp::Timestamp;
 use serde::Serialize;
 
 use crate::client::Client;

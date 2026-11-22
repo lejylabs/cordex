@@ -3,9 +3,9 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::entitlement::Entitlement;
-use drs_model::id::Id;
-use drs_model::id::marker::{
+use cordex_model::entitlement::Entitlement;
+use cordex_model::id::Id;
+use cordex_model::id::marker::{
     ApplicationMarker, EntitlementMarker, GuildMarker, SkuMarker, UserMarker,
 };
 

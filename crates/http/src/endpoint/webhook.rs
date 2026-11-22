@@ -3,11 +3,11 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::id::Id;
-use drs_model::id::marker::{ChannelMarker, MessageMarker, WebhookMarker};
-use drs_model::message::{AllowedMentions, Embed, Message, MessageFlags};
-use drs_model::token::WebhookToken;
-use drs_model::webhook::Webhook;
+use cordex_model::id::Id;
+use cordex_model::id::marker::{ChannelMarker, MessageMarker, WebhookMarker};
+use cordex_model::message::{AllowedMentions, Embed, Message, MessageFlags};
+use cordex_model::token::WebhookToken;
+use cordex_model::webhook::Webhook;
 use serde::Serialize;
 
 use crate::client::Client;

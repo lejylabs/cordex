@@ -1,5 +1,5 @@
 [package]
-name = "drs"
+name = "cordex"
 description = "Independent Discord bot API library (facade crate)."
 version.workspace = true
 edition.workspace = true
@@ -11,18 +11,18 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-drs-model.workspace = true
-drs-http = { workspace = true, optional = true }
-drs-gateway = { workspace = true, optional = true }
-drs-cache = { workspace = true, optional = true }
-drs-interactions = { workspace = true, optional = true }
+cordex-model.workspace = true
+cordex-http = { workspace = true, optional = true }
+cordex-gateway = { workspace = true, optional = true }
+cordex-cache = { workspace = true, optional = true }
+cordex-interactions = { workspace = true, optional = true }
 
 [features]
 default = ["http", "gateway", "interactions"]
-http = ["dep:drs-http"]
-gateway = ["dep:drs-gateway"]
-interactions = ["dep:drs-interactions"]
-cache = ["dep:drs-cache"]
+http = ["dep:cordex-http"]
+gateway = ["dep:cordex-gateway"]
+interactions = ["dep:cordex-interactions"]
+cache = ["dep:cordex-cache"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }

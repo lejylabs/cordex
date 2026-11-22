@@ -3,11 +3,11 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::id::Id;
-use drs_model::id::marker::{ApplicationMarker, InteractionMarker};
-use drs_model::interaction::InteractionResponse;
-use drs_model::message::{AllowedMentions, Embed, Message, MessageFlags};
-use drs_model::token::InteractionToken;
+use cordex_model::id::Id;
+use cordex_model::id::marker::{ApplicationMarker, InteractionMarker};
+use cordex_model::interaction::InteractionResponse;
+use cordex_model::message::{AllowedMentions, Embed, Message, MessageFlags};
+use cordex_model::token::InteractionToken;
 use serde::Serialize;
 
 use crate::client::Client;

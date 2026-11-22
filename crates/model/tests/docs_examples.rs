@@ -8,15 +8,15 @@
 //! - `channel_voice.json`: trailing comma removed (invalid JSON in the docs).
 //! - `guild_member.json`: the docs use `"user": {}`; the test fills in a user.
 
-use drs_model::channel::{ChannelType, OverwriteType};
-use drs_model::emoji::Emoji;
-use drs_model::guild::{
+use cordex_model::channel::{ChannelType, OverwriteType};
+use cordex_model::emoji::Emoji;
+use cordex_model::guild::{
     DefaultMessageNotificationLevel, GuildFeature, IncidentsData, MfaLevel, PremiumTier,
     VerificationLevel, WelcomeScreen,
 };
-use drs_model::sticker::{StickerFormatType, StickerType};
-use drs_model::user::UserFlags;
-use drs_model::{Channel, Guild, Member, Permissions, Role, Sticker, UnavailableGuild, User};
+use cordex_model::sticker::{StickerFormatType, StickerType};
+use cordex_model::user::UserFlags;
+use cordex_model::{Channel, Guild, Member, Permissions, Role, Sticker, UnavailableGuild, User};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -179,8 +179,8 @@ fn sticker() {
 
 #[test]
 fn message() {
-    use drs_model::message::MessageType;
-    let msg: drs_model::Message = round_trip(include_str!("fixtures/message.json"));
+    use cordex_model::message::MessageType;
+    let msg: cordex_model::Message = round_trip(include_str!("fixtures/message.json"));
     assert_eq!(msg.kind, MessageType::Default);
     assert_eq!(msg.content.as_ref(), "Supa Hot");
     assert_eq!(msg.reactions[0].count_details.normal, 1);
@@ -189,7 +189,7 @@ fn message() {
         msg.author
             .avatar
             .as_ref()
-            .is_some_and(drs_model::ImageHash::is_animated)
+            .is_some_and(cordex_model::ImageHash::is_animated)
     );
     assert_eq!(
         msg.link(),
@@ -199,8 +199,8 @@ fn message() {
 
 #[test]
 fn crossposted_message() {
-    use drs_model::message::MessageFlags;
-    let msg: drs_model::Message = round_trip(include_str!("fixtures/message_crosspost.json"));
+    use cordex_model::message::MessageFlags;
+    let msg: cordex_model::Message = round_trip(include_str!("fixtures/message_crosspost.json"));
     assert!(msg.flags.contains(MessageFlags::IS_CROSSPOST));
     let reference = msg.message_reference.unwrap();
     assert!(reference.message_id.is_some() && reference.channel_id.is_some());
@@ -208,7 +208,7 @@ fn crossposted_message() {
 
 #[test]
 fn application() {
-    use drs_model::application::Application;
+    use cordex_model::application::Application;
     let app: Application = round_trip(include_str!("fixtures/application.json"));
     assert!(!app.name.is_empty());
     assert!(!app.verify_key.is_empty());
@@ -216,7 +216,7 @@ fn application() {
 
 #[test]
 fn application_command() {
-    use drs_model::command::{ApplicationCommand, CommandOptionType, CommandType};
+    use cordex_model::command::{ApplicationCommand, CommandOptionType, CommandType};
 
     let cmd: ApplicationCommand = round_trip(include_str!("fixtures/application_command.json"));
     assert_eq!(cmd.kind, CommandType::ChatInput);
@@ -230,8 +230,8 @@ fn application_command() {
 
 #[test]
 fn interactions() {
-    use drs_model::command::CommandType;
-    use drs_model::interaction::{Interaction, InteractionData, InteractionType};
+    use cordex_model::command::CommandType;
+    use cordex_model::interaction::{Interaction, InteractionData, InteractionType};
 
     // Docs slash example omits `application_id`; filled like guild_member's `"user": {}`.
     let slash_json = include_str!("fixtures/interaction_slash.json").replace(
@@ -246,7 +246,7 @@ fn interactions() {
     assert_eq!(&*data.name, "cardsearch");
     assert_eq!(
         data.option("cardname").unwrap().value.as_ref().unwrap(),
-        &drs_model::interaction::CommandOptionValue::String("The Gitrog Monster".into())
+        &cordex_model::interaction::CommandOptionValue::String("The Gitrog Monster".into())
     );
     assert_eq!(slash.author().unwrap().username.as_ref(), "Mason");
     assert!(!format!("{slash:?}").contains("A_UNIQUE_TOKEN"));
@@ -269,7 +269,7 @@ fn interactions() {
 
 #[test]
 fn entitlement() {
-    use drs_model::entitlement::{Entitlement, EntitlementType};
+    use cordex_model::entitlement::{Entitlement, EntitlementType};
 
     let ent: Entitlement = round_trip(include_str!("fixtures/entitlement.json"));
     assert_eq!(ent.kind, EntitlementType::ApplicationSubscription);
@@ -279,7 +279,7 @@ fn entitlement() {
 
 #[test]
 fn voice_state() {
-    use drs_model::voice::VoiceState;
+    use cordex_model::voice::VoiceState;
 
     let state: VoiceState = round_trip(include_str!("fixtures/voice_state.json"));
     assert!(state.is_connected());
@@ -289,7 +289,7 @@ fn voice_state() {
 
 #[test]
 fn invite() {
-    use drs_model::invite::{Invite, InviteTargetType, InviteType};
+    use cordex_model::invite::{Invite, InviteTargetType, InviteType};
 
     let invite: Invite = round_trip(include_str!("fixtures/invite.json"));
     assert_eq!(invite.kind, InviteType::Guild);
@@ -304,7 +304,7 @@ fn invite() {
 
 #[test]
 fn auto_moderation_rule() {
-    use drs_model::auto_moderation::{
+    use cordex_model::auto_moderation::{
         AutoModerationActionType, AutoModerationEventType, AutoModerationRule,
         AutoModerationTriggerType,
     };
@@ -320,7 +320,7 @@ fn auto_moderation_rule() {
 
 #[test]
 fn webhooks() {
-    use drs_model::webhook::{Webhook, WebhookType};
+    use cordex_model::webhook::{Webhook, WebhookType};
 
     let incoming: Webhook = round_trip(include_str!("fixtures/webhook_incoming.json"));
     assert_eq!(incoming.kind, WebhookType::Incoming);
@@ -341,7 +341,7 @@ fn webhooks() {
 
 #[test]
 fn shared_client_theme() {
-    use drs_model::message::SharedClientTheme;
+    use cordex_model::message::SharedClientTheme;
 
     // The docs example wraps the object in its message field name.
     #[derive(serde::Deserialize, serde::Serialize, PartialEq, Debug)]
@@ -351,12 +351,15 @@ fn shared_client_theme() {
     let theme = round_trip::<Wrapper>(include_str!("fixtures/shared_client_theme.json"))
         .shared_client_theme;
     assert_eq!(theme.colors.len(), 5);
-    assert_eq!(theme.base_theme, Some(drs_model::message::BaseTheme::Dark));
+    assert_eq!(
+        theme.base_theme,
+        Some(cordex_model::message::BaseTheme::Dark)
+    );
 }
 
 #[test]
 fn stage_instance() {
-    use drs_model::stage::{StageInstance, StagePrivacyLevel};
+    use cordex_model::stage::{StageInstance, StagePrivacyLevel};
 
     let stage: StageInstance = round_trip(include_str!("fixtures/stage_instance.json"));
     assert_eq!(stage.privacy_level, StagePrivacyLevel::Public);
@@ -366,7 +369,7 @@ fn stage_instance() {
 
 #[test]
 fn soundboard() {
-    use drs_model::soundboard::SoundboardSound;
+    use cordex_model::soundboard::SoundboardSound;
 
     let default: SoundboardSound = round_trip(include_str!("fixtures/soundboard_default.json"));
     assert_eq!(&*default.name, "quack");
@@ -380,7 +383,7 @@ fn soundboard() {
 
 #[test]
 fn presence_activity() {
-    use drs_model::gateway::presence::{ActivityType, PresenceActivity};
+    use cordex_model::gateway::presence::{ActivityType, PresenceActivity};
 
     let simple: PresenceActivity = round_trip(include_str!("fixtures/activity.json"));
     assert_eq!(simple.kind, ActivityType::Streaming);
@@ -394,7 +397,7 @@ fn presence_activity() {
 
 #[test]
 fn integration_partial() {
-    use drs_model::guild::{Integration, IntegrationType};
+    use cordex_model::guild::{Integration, IntegrationType};
 
     let integration: Integration = round_trip(include_str!("fixtures/integration_partial.json"));
     assert_eq!(integration.kind, IntegrationType::Twitch);

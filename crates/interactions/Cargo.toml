@@ -1,5 +1,5 @@
 [package]
-name = "drs-interactions"
+name = "cordex-interactions"
 description = "Discord interaction builders, responses and HTTP endpoint."
 version.workspace = true
 edition.workspace = true
@@ -11,8 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-drs-model.workspace = true
-drs-http.workspace = true
+cordex-model.workspace = true
+cordex-http.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

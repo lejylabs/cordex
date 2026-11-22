@@ -1,7 +1,7 @@
 //! Command builders with local validation (PLAN.md §11.1).
 //!
 //! ```
-//! use drs_interactions::command::{Command, CommandOption};
+//! use cordex_interactions::command::{Command, CommandOption};
 //!
 //! let greet = Command::slash("greet", "Greets a user")
 //!     .option(CommandOption::user("user", "Who to greet").required())
@@ -17,11 +17,11 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use drs_http::CommandBody;
-use drs_model::application::ApplicationIntegrationType;
-use drs_model::channel::ChannelType;
-use drs_model::command::{CommandOptionType, CommandType, InteractionContextType};
-use drs_model::permissions::Permissions;
+use cordex_http::CommandBody;
+use cordex_model::application::ApplicationIntegrationType;
+use cordex_model::channel::ChannelType;
+use cordex_model::command::{CommandOptionType, CommandType, InteractionContextType};
+use cordex_model::permissions::Permissions;
 use serde::Serialize;
 
 use crate::error::InteractionError;

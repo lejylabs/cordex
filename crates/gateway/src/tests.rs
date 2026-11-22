@@ -2,11 +2,11 @@
 
 use std::time::Duration;
 
-use drs_model::gateway::command::RequestGuildMembers;
-use drs_model::gateway::event::Event;
-use drs_model::gateway::presence::{Status, UpdatePresence};
-use drs_model::gateway::{CloseCode, GatewayBot, Intents, SessionStartLimit};
-use drs_model::id::Id;
+use cordex_model::gateway::command::RequestGuildMembers;
+use cordex_model::gateway::event::Event;
+use cordex_model::gateway::presence::{Status, UpdatePresence};
+use cordex_model::gateway::{CloseCode, GatewayBot, Intents, SessionStartLimit};
+use cordex_model::id::Id;
 use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio::time::{Instant, timeout};
@@ -96,7 +96,7 @@ async fn next_ok(h: &Harness) -> Event {
 #[test]
 fn ready_fixture_deserializes() {
     let json = ready_json("wss://resume.test");
-    let env = drs_model::gateway::Envelope::parse(&json).unwrap();
+    let env = cordex_model::gateway::Envelope::parse(&json).unwrap();
     let event = Event::from_dispatch(env.t.as_deref().unwrap(), env.d).unwrap();
     assert!(matches!(event, Event::Ready(_)));
 }

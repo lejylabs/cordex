@@ -1,7 +1,7 @@
 //! Debug-build warning for event filters that ask for events the intents
 //! never deliver (PLAN.md §8.12).
 
-use drs_model::gateway::Intents;
+use cordex_model::gateway::Intents;
 
 use crate::event_flags::EventTypeFlags;
 

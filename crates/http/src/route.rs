@@ -2,7 +2,7 @@
 
 use std::fmt::{self, Write};
 
-use drs_model::id::Id;
+use cordex_model::id::Id;
 use http::Method;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 
@@ -93,8 +93,8 @@ impl Route {
     /// # Examples
     ///
     /// ```
-    /// use drs_http::Route;
-    /// use drs_model::id::{Id, marker::GuildMarker};
+    /// use cordex_http::Route;
+    /// use cordex_model::id::{Id, marker::GuildMarker};
     ///
     /// let guild_id = Id::<GuildMarker>::new(1).unwrap();
     /// let route = Route::raw("/guilds/{guild_id}/onboarding", guild_id);
@@ -242,7 +242,7 @@ fn substitute(template: &str, params: &[String]) -> (String, MajorParameters, bo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use drs_model::id::marker::{ChannelMarker, GuildMarker};
+    use cordex_model::id::marker::{ChannelMarker, GuildMarker};
 
     #[test]
     fn fills_major_parameters() {

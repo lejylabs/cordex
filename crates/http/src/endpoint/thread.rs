@@ -3,9 +3,9 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use drs_model::channel::{AutoArchiveDuration, Channel, ChannelType, ThreadMember};
-use drs_model::id::Id;
-use drs_model::id::marker::{ChannelMarker, GuildMarker, MessageMarker, TagMarker, UserMarker};
+use cordex_model::channel::{AutoArchiveDuration, Channel, ChannelType, ThreadMember};
+use cordex_model::id::Id;
+use cordex_model::id::marker::{ChannelMarker, GuildMarker, MessageMarker, TagMarker, UserMarker};
 use serde::{Deserialize, Serialize};
 
 use crate::client::Client;

@@ -9,5 +9,5 @@ pub enum InteractionError {
     InvalidCommand(Box<str>),
     /// REST request failed.
     #[error(transparent)]
-    Http(#[from] drs_http::HttpError),
+    Http(#[from] cordex_http::HttpError),
 }

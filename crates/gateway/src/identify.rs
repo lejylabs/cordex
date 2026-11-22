@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::{Instant, sleep};
 
-use drs_model::gateway::SessionStartLimit;
+use cordex_model::gateway::SessionStartLimit;
 
 /// Discord: at most one Identify per bucket every 5 seconds.
 pub const IDENTIFY_INTERVAL: Duration = Duration::from_secs(5);
