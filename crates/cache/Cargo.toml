@@ -4,11 +4,20 @@ description = "Optional in-memory cache fed by gateway events."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-# Not published until Phase 6 builds it (PLAN.md §12).
-publish = false
 repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+documentation = "https://docs.rs/cordex-cache"
+readme = "README.md"
 
 [lints]
 workspace = true
 
 [dependencies]
+cordex-model.workspace = true
+bitflags.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

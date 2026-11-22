@@ -237,6 +237,21 @@ impl EventTypeFlags {
     }
 }
 
+/// Collect flags from dispatch names, e.g. a cache's `wanted_events()`:
+///
+/// ```
+/// use cordex_gateway::EventTypeFlags;
+/// let flags: EventTypeFlags = ["READY", "GUILD_CREATE"].into_iter().collect();
+/// assert!(flags.wants("GUILD_CREATE"));
+/// assert!(!flags.wants("MESSAGE_CREATE"));
+/// ```
+impl<'a> FromIterator<&'a str> for EventTypeFlags {
+    fn from_iter<I: IntoIterator<Item = &'a str>>(iter: I) -> Self {
+        iter.into_iter()
+            .fold(Self::empty(), |acc, name| acc | Self::for_name(name))
+    }
+}
+
 impl Default for EventTypeFlags {
     fn default() -> Self {
         Self::all()

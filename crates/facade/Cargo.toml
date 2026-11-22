@@ -19,12 +19,17 @@ cordex-model.workspace = true
 cordex-http = { workspace = true, optional = true }
 cordex-gateway = { workspace = true, optional = true }
 cordex-interactions = { workspace = true, optional = true }
+cordex-cache = { workspace = true, optional = true }
+# Bounded parallel backfill (comes with `http` anyway).
+tokio = { workspace = true, optional = true }
 
 [features]
 default = ["http", "gateway", "interactions"]
-http = ["dep:cordex-http"]
+http = ["dep:cordex-http", "dep:tokio"]
 gateway = ["dep:cordex-gateway"]
 interactions = ["dep:cordex-interactions"]
+# In-memory cache; off by default, and every resource inside is off too.
+cache = ["dep:cordex-cache"]
 # Ed25519 check for HTTP interactions (any web framework).
 interactions-verify = ["interactions", "cordex-interactions/verify"]
 # Standalone hyper endpoint for HTTP interactions.
@@ -33,6 +38,11 @@ interactions-server = ["interactions-verify", "cordex-interactions/server"]
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing-subscriber.workspace = true
+serde_json.workspace = true
+
+[[example]]
+name = "testbot"
+required-features = ["cache"]
 
 [package.metadata.docs.rs]
 all-features = true

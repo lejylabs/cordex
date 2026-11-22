@@ -85,6 +85,7 @@ is in [`crates/facade/examples/testbot.rs`](https://github.com/lejylabs/cordex/b
 | `interactions` | yes | command builders, responses (`cordex-interactions`) |
 | `interactions-verify` | no | `verify_signature()` for HTTP interactions in any web framework |
 | `interactions-server` | no | standalone hyper endpoint for HTTP interactions |
+| `cache` | no | in-memory cache (`cordex-cache`); every resource inside is off until enabled |
 
 The library sets no global allocator; applications may use `mimalloc`.
 
@@ -97,6 +98,7 @@ The library sets no global allocator; applications may use `mimalloc`.
 | `cordex-http` | REST client, rate limiter |
 | `cordex-gateway` | shards, shard manager, identify queue |
 | `cordex-interactions` | commands, responses, HTTP endpoint |
+| `cordex-cache` | optional in-memory cache, every resource and part switchable |
 
 ## Requirements
 
@@ -120,5 +122,5 @@ age (`.cargo/config.toml`); builds use `--locked`.
 ```bash
 cargo fmt --all
 cargo xtask check          # fmt, clippy, tests, docs, cargo-deny, layout-check
-cargo run -p cordex --example testbot   # live test bot, reads DISCORD_TOKEN from .env
+cargo run -p cordex --example testbot --features cache   # live test bot, reads DISCORD_TOKEN from .env
 ```

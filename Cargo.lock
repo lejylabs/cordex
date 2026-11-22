@@ -108,10 +108,12 @@ dependencies = [
 name = "cordex"
 version = "0.1.0-beta.1"
 dependencies = [
+ "cordex-cache",
  "cordex-gateway",
  "cordex-http",
  "cordex-interactions",
  "cordex-model",
+ "serde_json",
  "tokio",
  "tracing-subscriber",
 ]
@@ -119,6 +121,12 @@ dependencies = [
 [[package]]
 name = "cordex-cache"
 version = "0.1.0-beta.1"
+dependencies = [
+ "bitflags",
+ "cordex-model",
+ "parking_lot",
+ "serde_json",
+]
 
 [[package]]
 name = "cordex-gateway"

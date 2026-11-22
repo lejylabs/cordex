@@ -9,6 +9,8 @@
 //! - `!ping`: replies with the shard's heartbeat latency.
 //! - `!status`: state, latency, guilds and reconnects of every shard.
 //! - `!reconnect`: restarts the shard that received the message.
+//! - `!cache`: entry counts of the cache (guilds, channels, roles,
+//!   members, users and the last 20 messages per channel are on).
 //!
 //! Slash commands, registered per guild on READY (show up instantly):
 //!
@@ -19,7 +21,7 @@
 //! - `/whois user`: user option + follow-up message.
 //! - `User Info`: user context-menu command.
 //!
-//! Run with `cargo run -p cordex --example testbot`.
+//! Run with `cargo run -p cordex --example testbot --features cache`.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -66,6 +68,20 @@ async fn main() -> AnyResult {
     let mut manager = apply_shards(builder, &shards)?.build().await?;
     let mut events = manager.events();
     let manager = Arc::new(manager);
+    // Cache with a few resources on, to try the switches live (`!cache`).
+    let cache = Arc::new(InMemoryCache::new(
+        CacheConfig::new()
+            .resources(
+                ResourceType::GUILDS
+                    | ResourceType::CHANNELS
+                    | ResourceType::ROLES
+                    | ResourceType::MEMBERS
+                    | ResourceType::USERS
+                    | ResourceType::MESSAGES,
+            )
+            .parts(CacheParts::MEMBER_ROLES | CacheParts::MESSAGE_CONTENT)
+            .message_cache_size(20),
+    ));
     manager.start().await?;
     println!(
         "started {} shard(s) (SHARDS={shards}, Discord recommends {}), prefix {prefix:?}; Ctrl+C to quit",
@@ -75,34 +91,46 @@ async fn main() -> AnyResult {
 
     while let Some(item) = events.recv().await {
         match item {
-            ManagerEvent::Dispatch { shard, event } => match event {
-                Event::Ready(ready) => {
-                    println!(
-                        "[shard {}] READY as {} ({} guilds)",
-                        shard.number(),
-                        ready.user.username,
-                        ready.guilds.len()
-                    );
-                    tokio::spawn(register_commands(http.clone(), ready));
-                }
-                Event::Resumed => println!("[shard {}] RESUMED", shard.number()),
-                Event::InteractionCreate(interaction) => {
-                    let (http, manager) = (http.clone(), Arc::clone(&manager));
-                    let number = shard.number();
-                    tokio::spawn(async move {
-                        if let Err(e) = on_interaction(&http, &manager, number, &interaction).await
-                        {
-                            eprintln!("[shard {number}] interaction failed: {e}");
-                        }
-                    });
-                }
-                Event::MessageCreate(msg) if !msg.author.bot => {
-                    if let Some(cmd) = msg.content.strip_prefix(prefix.as_str()) {
-                        on_text_command(&http, &manager, shard.number(), &msg, cmd.trim());
+            ManagerEvent::Dispatch { shard, event } => {
+                cache.update(&event);
+                match event {
+                    Event::Ready(ready) => {
+                        println!(
+                            "[shard {}] READY as {} ({} guilds)",
+                            shard.number(),
+                            ready.user.username,
+                            ready.guilds.len()
+                        );
+                        tokio::spawn(register_commands(http.clone(), ready));
                     }
+                    Event::Resumed => println!("[shard {}] RESUMED", shard.number()),
+                    Event::MessageDelete(d) => log_delete(shard.number(), &d),
+                    Event::InteractionCreate(interaction) => {
+                        let (http, manager) = (http.clone(), Arc::clone(&manager));
+                        let number = shard.number();
+                        tokio::spawn(async move {
+                            if let Err(e) =
+                                on_interaction(&http, &manager, number, &interaction).await
+                            {
+                                eprintln!("[shard {number}] interaction failed: {e}");
+                            }
+                        });
+                    }
+                    Event::MessageCreate(msg) if !msg.author.bot => {
+                        if let Some(cmd) = msg.content.strip_prefix(prefix.as_str()) {
+                            on_text_command(
+                                &http,
+                                &manager,
+                                &cache,
+                                shard.number(),
+                                &msg,
+                                cmd.trim(),
+                            );
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
+            }
             ManagerEvent::StateChanged { shard, old, new } => {
                 println!("[shard {}] {old:?} -> {new:?}", shard.number());
             }
@@ -242,6 +270,7 @@ async fn on_interaction(
 fn on_text_command(
     http: &Client,
     manager: &Arc<ShardManager>,
+    cache: &InMemoryCache,
     shard: u32,
     msg: &Message,
     cmd: &str,
@@ -252,6 +281,14 @@ fn on_text_command(
             format!("pong (shard {shard}, latency {})", fmt_latency(latency))
         }
         "status" => status_text(manager),
+        "cache" => {
+            let s = cache.stats();
+            let in_channel = cache.channel_messages(msg.channel_id).len();
+            format!(
+                "cache: {} guilds, {} channels, {} roles, {} members, {} users, {} messages ({in_channel} in this channel)",
+                s.guilds, s.channels, s.roles, s.members, s.users, s.messages
+            )
+        }
         "reconnect" => {
             let manager = Arc::clone(manager);
             tokio::spawn(async move {
@@ -275,6 +312,21 @@ fn on_text_command(
             eprintln!("reply failed: {e}");
         }
     });
+}
+
+/// Snowflake → creation time; shows how soon after sending a message
+/// disappeared.
+fn log_delete(shard: u32, d: &cordex::model::gateway::event::MessageDelete) {
+    let created_ms = (d.id.get() >> 22) + 1_420_070_400_000;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |t| u64::try_from(t.as_millis()).unwrap_or(u64::MAX));
+    println!(
+        "[shard {shard}] MESSAGE_DELETE {} in channel {} ({} ms after it was sent)",
+        d.id,
+        d.channel_id,
+        now_ms.saturating_sub(created_ms)
+    );
 }
 
 /// Discord sends the first heartbeat after a random part of the interval

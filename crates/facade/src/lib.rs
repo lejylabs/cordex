@@ -10,6 +10,12 @@ use std::fmt;
 
 pub use cordex_model as model;
 
+#[cfg(feature = "cache")]
+pub use cordex_cache as cache;
+
+#[cfg(all(feature = "cache", feature = "http"))]
+pub mod backfill;
+
 #[cfg(feature = "gateway")]
 pub use cordex_gateway as gateway;
 #[cfg(feature = "http")]
@@ -101,6 +107,8 @@ pub mod prelude {
         Channel, Guild, Id, Member, Message, Permissions, Role, Timestamp, Token, User,
     };
 
+    #[cfg(feature = "cache")]
+    pub use cordex_cache::{CacheConfig, CacheParts, InMemoryCache, ResourceType};
     #[cfg(feature = "gateway")]
     pub use cordex_gateway::{CloseMode, EventTypeFlags, Shard, ShardId, ShardManager};
     #[cfg(feature = "http")]
