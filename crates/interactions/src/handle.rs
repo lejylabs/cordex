@@ -1,4 +1,4 @@
-//! Responding to one interaction (PLAN.md §11.2).
+//! Responding to one interaction.
 //!
 //! [`InteractionHandle`] hides the callback types and the 3-second rule:
 //!

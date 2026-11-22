@@ -1,4 +1,4 @@
-//! Typed access to the options of a command interaction (PLAN.md §11.1).
+//! Typed access to the options of a command interaction.
 //!
 //! [`CommandOptions`] walks down to the invoked subcommand, so getters look
 //! at the options the user actually filled in:

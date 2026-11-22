@@ -1,4 +1,4 @@
-//! Public shard API (PLAN.md §8, §9.1, §10).
+//! Public shard API.
 
 use std::fmt;
 use std::future::Future;
@@ -32,7 +32,7 @@ use crate::types::{
     ResumeInfo, ShardId, ShardState, ShardStatus,
 };
 
-/// Source of `GET /gateway/bot` (PLAN.md §4.2).
+/// Source of `GET /gateway/bot`.
 pub trait GatewayBotSource: Send + Sync {
     /// Fetch recommended URL, shard count and session-start limit.
     fn gateway_bot(
@@ -151,7 +151,7 @@ impl<C: Connector> ShardBuilder<C> {
 
     /// Where the shard task runs (default: [`CurrentRuntime`], the runtime
     /// calling [`Self::build`]). Use [`crate::RuntimeHandles`] for
-    /// thread-per-core (PLAN.md §16.4).
+    /// thread-per-core.
     #[must_use]
     pub fn spawn_with(mut self, spawner: Arc<dyn Spawner>) -> Self {
         self.spawner = spawner;

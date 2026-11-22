@@ -46,7 +46,7 @@ macro_rules! bitflags_serde_int {
 }
 
 /// An integer enum with an `Unknown(repr)` variant, so values Discord adds
-/// later never fail deserialization (PLAN.md §5.2). Serialized as a number.
+/// later never fail deserialization. Serialized as a number.
 macro_rules! int_enum {
     (
         $(#[$meta:meta])*
@@ -95,7 +95,7 @@ macro_rules! int_enum {
     };
 }
 
-/// A string enum with an `Unknown(Box<str>)` variant (PLAN.md §5.2).
+/// A string enum with an `Unknown(Box<str>)` variant.
 macro_rules! str_enum {
     (
         $(#[$meta:meta])*

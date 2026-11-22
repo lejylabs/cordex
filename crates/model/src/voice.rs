@@ -1,5 +1,5 @@
 //! Voice state and regions (resources/voice.mdx). Voice *transport* is out
-//! of scope (PLAN.md §1); these are the REST/gateway objects.
+//! of scope; these are the REST/gateway objects.
 
 use serde::{Deserialize, Serialize};
 

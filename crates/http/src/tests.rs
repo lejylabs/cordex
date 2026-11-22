@@ -1,4 +1,4 @@
-//! Mock REST tests (PLAN.md §17.3).
+//! Mock REST tests.
 
 use std::collections::HashMap;
 use std::sync::Arc;

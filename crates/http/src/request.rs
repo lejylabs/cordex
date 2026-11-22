@@ -1,4 +1,4 @@
-//! Raw request builder, retries and audit-log reason (PLAN.md §6.2–§6.3).
+//! Raw request builder, retries and audit-log reason.
 
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -152,7 +152,7 @@ impl Response {
     }
 }
 
-/// Percent-encode an audit-log reason (PLAN.md §6.1).
+/// Percent-encode an audit-log reason.
 pub fn encode_audit_log_reason(reason: &str) -> Result<HeaderValue, HttpError> {
     let chars = reason.chars().count();
     if chars > MAX_AUDIT_REASON_CHARS {

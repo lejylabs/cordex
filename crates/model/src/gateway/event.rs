@@ -2,7 +2,7 @@
 //!
 //! Typed variants are added per phase as their models exist; every other
 //! event arrives as [`Event::Unknown`] with its raw JSON, so a new Discord
-//! event never breaks a shard (PLAN.md D9, §8.3).
+//! event never breaks a shard.
 
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;

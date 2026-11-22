@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// animated images (reference.mdx, "Image Formatting"); they are stored
 /// compactly without a heap allocation. Any other string is kept as is, so
 /// an unexpected hash format never makes a whole object fail to parse
-/// (PLAN.md D14). Displays and serializes in the original form.
+/// (no panics on network input). Displays and serializes in the original form.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ImageHash(Repr);
 

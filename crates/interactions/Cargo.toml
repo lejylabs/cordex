@@ -4,8 +4,12 @@ description = "Discord interaction builders, responses and HTTP endpoint."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-publish.workspace = true
 repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+documentation = "https://docs.rs/cordex-interactions"
+readme = "README.md"
 
 [lints]
 workspace = true
@@ -18,7 +22,25 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+# Signature verification and HTTP endpoint (features `verify` / `server`).
+ed25519-dalek = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
+hyper = { workspace = true, optional = true }
+hyper-util = { workspace = true, optional = true }
+
+[features]
+default = []
+# `verify_signature()` and `PublicKey` (Ed25519), usable in any web framework.
+verify = ["dep:ed25519-dalek"]
+# Standalone hyper endpoint for HTTP interactions (PLAN.md §11.3).
+server = ["verify", "dep:bytes", "dep:http", "dep:http-body-util", "dep:hyper", "dep:hyper-util"]
 
 [dev-dependencies]
 parking_lot.workspace = true
-tokio = { workspace = true, features = ["test-util"] }
+tokio = { workspace = true, features = ["test-util", "io-util"] }
+ed25519-dalek.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true

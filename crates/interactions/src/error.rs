@@ -22,6 +22,12 @@ pub enum InteractionError {
     /// A Discord deadline has passed (3 s initial response, 15 min token).
     #[error("interaction expired: {0}")]
     Expired(&'static str),
+    /// The `X-Signature-Ed25519` signature is missing, malformed or wrong.
+    #[error("invalid request signature")]
+    BadSignature,
+    /// The application public key could not be parsed.
+    #[error("{0}")]
+    InvalidPublicKey(Box<str>),
     /// REST request failed.
     #[error(transparent)]
     Http(#[from] cordex_http::HttpError),

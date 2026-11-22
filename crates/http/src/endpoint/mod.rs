@@ -1,4 +1,4 @@
-//! Typed P0 REST endpoints (PLAN.md §6.2).
+//! Typed P0 REST endpoints.
 
 mod ban;
 mod channel;

@@ -1,5 +1,5 @@
-//! In-process mock REST client for tests of crates built on this one
-//! (PLAN.md §17.3). No network, no TCP server.
+//! In-process mock REST client for tests of crates built on this one.
+//! No network, no TCP server.
 
 use std::sync::Arc;
 

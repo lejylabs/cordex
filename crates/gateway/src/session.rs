@@ -178,10 +178,10 @@ pub(crate) async fn run_forever<C: Connector>(
 
         let (fwd_tx, fwd_rx) = mpsc::unbounded_channel();
         let shared_task = Arc::clone(&shared);
-        // One task per connection lifetime is the panic guard (PLAN.md §9.5):
+        // One task per connection lifetime is the panic guard:
         // a panic surfaces as a `JoinError` instead of unwinding through this
         // loop. It runs on this task's runtime, i.e. the one the `Spawner`
-        // chose, so no runtime is picked behind the caller's back (§16.4).
+        // chose, so no runtime is picked behind the caller's back.
         let mut handle =
             tokio::spawn(async move { run_session(shared_task, fwd_rx, try_resume).await });
 

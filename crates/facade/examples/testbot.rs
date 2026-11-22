@@ -1,4 +1,4 @@
-//! Minimal live test bot (PLAN.md §17.5).
+//! Minimal live test bot.
 //!
 //! Reads `DISCORD_TOKEN` (and optionally `SHARDS` = number, unset/`auto` =
 //! automatic, `PREFIX`) from the environment or from a `.env` file in the

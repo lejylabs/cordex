@@ -1,4 +1,4 @@
-//! `multipart/form-data` for Discord uploads (PLAN.md §6.2).
+//! `multipart/form-data` for Discord uploads.
 //!
 //! Discord expects `payload_json` plus `files[n]`, with matching entries in
 //! the JSON `attachments` array (`id` = index).

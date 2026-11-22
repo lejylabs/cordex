@@ -1,4 +1,4 @@
-//! Command builders with local validation (PLAN.md §11.1).
+//! Command builders with local validation.
 //!
 //! ```
 //! use cordex_interactions::command::{Command, CommandOption};

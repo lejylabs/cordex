@@ -1,4 +1,4 @@
-//! In-process mock gateway (PLAN.md §17.2). No listening TCP server.
+//! In-process mock gateway. No listening TCP server.
 
 use bytes::Bytes;
 use tokio::sync::mpsc;

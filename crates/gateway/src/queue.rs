@@ -1,4 +1,4 @@
-//! Bounded event pipe so heartbeats never wait on `next_event` (PLAN.md §10).
+//! Bounded event pipe so heartbeats never wait on `next_event`.
 
 use parking_lot::{Mutex, MutexGuard};
 use std::collections::VecDeque;

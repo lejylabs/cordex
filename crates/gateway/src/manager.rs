@@ -1,5 +1,4 @@
-//! Shard manager: automatic/manual ranges, identify queue, fan-in events
-//! (PLAN.md §9).
+//! Shard manager: automatic/manual ranges, identify queue, fan-in events.
 
 use std::ops::Range;
 use std::pin::Pin;
@@ -226,7 +225,7 @@ impl<C: Connector> ShardManagerBuilder<C> {
 
     /// Where shard tasks run (default: [`CurrentRuntime`], the runtime calling
     /// [`ShardManager::start`]). Pass [`crate::RuntimeHandles`] to spread shards
-    /// over several `current_thread` runtimes (PLAN.md §16.4).
+    /// over several `current_thread` runtimes.
     #[must_use]
     pub fn spawn_with(mut self, spawner: Arc<dyn Spawner>) -> Self {
         self.spawner = spawner;
@@ -370,8 +369,7 @@ impl<C: Connector> ShardManager<C> {
     ///
     /// When `session_start_limit.remaining` is lower than the shard count, the
     /// extra shards still start; the identify queue waits for `reset_after`.
-    /// Async so callers can `await` it like the rest of the manager API
-    /// (PLAN.md §9.2).
+    /// Async so callers can `await` it like the rest of the manager API.
     #[allow(clippy::unused_async, reason = "public API is `.start().await`")]
     #[allow(
         clippy::unused_async_trait_impl,

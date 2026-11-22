@@ -1,4 +1,4 @@
-//! Shard identity, connection state and backpressure (PLAN.md §8, §10).
+//! Shard identity, connection state and backpressure.
 
 use std::time::Duration;
 
@@ -83,7 +83,7 @@ impl Default for ShardId {
     }
 }
 
-/// Observable connection state (PLAN.md §8.2).
+/// Observable connection state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShardState {
     /// No socket.
@@ -104,7 +104,7 @@ pub enum ShardState {
     ShuttingDown,
 }
 
-/// How to close the gateway connection (PLAN.md §8.11).
+/// How to close the gateway connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CloseMode {
     /// Close with 4000 and keep session data so another process can resume.
@@ -124,7 +124,7 @@ pub struct ResumeInfo {
     pub resume_gateway_url: Box<str>,
 }
 
-/// What the shard does when the event buffer is full (PLAN.md §10.2).
+/// What the shard does when the event buffer is full.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Backpressure {
     /// Wait until the user reads an event. Heartbeats keep running.
@@ -138,7 +138,7 @@ pub enum Backpressure {
     Disconnect,
 }
 
-/// Fan-in item from [`crate::ShardManager::events`] (PLAN.md §9.4).
+/// Fan-in item from [`crate::ShardManager::events`].
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ManagerEvent {

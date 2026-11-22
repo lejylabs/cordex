@@ -1,4 +1,4 @@
-//! REST client errors (PLAN.md §6.4, §6.5).
+//! REST client errors.
 
 use std::fmt;
 use std::time::Duration;
@@ -56,7 +56,7 @@ pub enum HttpError {
     /// A builder or local check failed before the request was sent.
     #[error("validation: {0}")]
     Validation(Box<str>),
-    /// Too many 401/403/429 responses in the sliding window (PLAN.md §6.5).
+    /// Too many 401/403/429 responses in the sliding window.
     #[error("invalid request limit reached ({count}/{threshold})")]
     InvalidRequestLimit {
         /// Counted invalid responses in the current window.

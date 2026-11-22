@@ -2,7 +2,7 @@
 //! topics/opcodes-and-status-codes.mdx).
 //!
 //! Receive side: [`Envelope`] is parsed first with `d` left as raw JSON, then
-//! only the events that are consumed are parsed fully (PLAN.md §5.4).
+//! only the events that are consumed are parsed fully.
 //! Send side: [`command`] holds the serialize-only payloads.
 
 pub mod bot;

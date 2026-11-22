@@ -1,5 +1,5 @@
 //! Debug-build warning for event filters that ask for events the intents
-//! never deliver (PLAN.md §8.12).
+//! never deliver.
 
 use cordex_model::gateway::Intents;
 

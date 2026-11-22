@@ -10,7 +10,7 @@ use super::opcode::OpCode;
 /// Outer gateway payload `{ op, d, s, t }`, parsed without parsing `d`.
 ///
 /// Borrows from the received (decompressed) text, so parsing the envelope
-/// allocates nothing; `d` stays raw JSON until it is needed (PLAN.md §5.4).
+/// allocates nothing; `d` stays raw JSON until it is needed.
 #[derive(Debug, Deserialize)]
 pub struct Envelope<'a> {
     /// Opcode.

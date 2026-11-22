@@ -1,4 +1,4 @@
-//! Which dispatch events are deserialized fully (PLAN.md §10.3).
+//! Which dispatch events are deserialized fully.
 
 bitflags::bitflags! {
     /// Bitmask of typed gateway event names. Unset events are skipped after

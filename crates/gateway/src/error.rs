@@ -1,4 +1,4 @@
-//! Gateway errors (PLAN.md §8, D14: no panics on network input).
+//! Gateway errors (network input never panics).
 
 use std::fmt;
 use std::time::Duration;
@@ -67,8 +67,7 @@ pub enum GatewayError {
     /// repeats too often).
     #[error("shard panicked: {0}")]
     Panic(Box<str>),
-    /// The shard panicked more than 5 times within 10 minutes and stopped
-    /// (PLAN.md §9.5).
+    /// The shard panicked more than 5 times within 10 minutes and stopped.
     #[error("shard stopped after repeated panics; last: {0}")]
     PanicLimit(Box<str>),
     /// No Tokio runtime to spawn the shard task on. Call `build()` / `start()`

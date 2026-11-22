@@ -1,5 +1,5 @@
 //! Discord gateway: shard connection, zlib-stream, heartbeat, resume and
-//! sharding (PLAN.md §8, §9, §10).
+//! sharding.
 
 pub mod connection;
 pub mod error;

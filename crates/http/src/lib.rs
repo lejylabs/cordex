@@ -1,5 +1,5 @@
 //! Discord REST client: routes, rate limiter, invalid request guard and
-//! retries (PLAN.md §6, §7).
+//! retries.
 
 pub mod endpoint;
 pub mod error;

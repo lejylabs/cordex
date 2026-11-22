@@ -1,4 +1,4 @@
-//! Bot token with redacted formatting (PLAN.md §14).
+//! Bot token with redacted formatting.
 
 use std::fmt;
 use std::sync::Arc;

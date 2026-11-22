@@ -1,4 +1,4 @@
-//! In-process rate limiter and invalid-request guard (PLAN.md §6.5, §7).
+//! In-process rate limiter and invalid-request guard.
 
 use std::collections::{HashMap, VecDeque, hash_map::DefaultHasher};
 use std::fmt;
@@ -48,7 +48,7 @@ impl RateLimitScope {
     }
 }
 
-/// Pluggable rate limiter (PLAN.md §7.2). The default is [`InProcessRateLimiter`].
+/// Pluggable rate limiter. The default is [`InProcessRateLimiter`].
 pub trait RateLimiter: Send + Sync + 'static {
     /// Wait until `route` may be sent. Decrements the bucket; call [`record`](Self::record)
     /// after a response or [`release`](Self::release) if no usable headers came back.

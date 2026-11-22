@@ -98,7 +98,7 @@ async fn collect_limited(body: Incoming, limit: usize) -> Result<Bytes, HttpErro
     Ok(out.freeze())
 }
 
-/// Scriptable transport for mock REST tests (PLAN.md §17.3).
+/// Scriptable transport for mock REST tests.
 pub(crate) struct FnTransport<F> {
     f: F,
 }

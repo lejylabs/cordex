@@ -1,4 +1,4 @@
-//! Outbound gateway send limiter (PLAN.md §8.8).
+//! Outbound gateway send limiter.
 
 use std::collections::VecDeque;
 use std::time::Duration;

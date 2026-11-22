@@ -1,4 +1,4 @@
-//! REST `Client`: auth, User-Agent, pool, timeouts (PLAN.md §6.1).
+//! REST `Client`: auth, User-Agent, pool, timeouts.
 
 use std::fmt;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use crate::request::RequestBuilder;
 use crate::route::Route;
 use crate::transport::{HyperTransport, Transport};
 
-/// Mandatory Discord User-Agent (PLAN.md §6.1).
+/// Mandatory Discord User-Agent.
 pub const USER_AGENT: &str = concat!(
     "DiscordBot (",
     env!("CARGO_PKG_REPOSITORY"),

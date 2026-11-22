@@ -4,8 +4,12 @@ description = "Discord gateway shards and shard manager."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-publish.workspace = true
 repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+documentation = "https://docs.rs/cordex-gateway"
+readme = "README.md"
 
 [lints]
 workspace = true

@@ -1,14 +1,16 @@
-//! Project tasks (PLAN.md §18.1).
+//! Project tasks.
 //!
 //! - `cargo xtask check`: fmt check, clippy, tests, docs, cargo-deny, layout-check
-//! - `cargo xtask layout-check`: crate dependency rules (PLAN.md §4.2)
+//! - `cargo xtask layout-check`: crate dependency rules, README/license copies
+//! - `cargo xtask features`: clippy for every supported feature combination
+//! - `cargo xtask release-check`: `check` plus a `cargo publish --dry-run`
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 /// Allowed internal dependencies per crate folder in `crates/`, as folder
-/// names (PLAN.md §4.2). Package names are read from the manifests, so the
+/// names. Package names are read from the manifests, so the
 /// project name only lives in the `Cargo.toml` files.
 const INTERNAL_DEPS: &[(&str, &[&str])] = &[
     ("model", &[]),
@@ -50,7 +52,9 @@ fn main() -> ExitCode {
     let result = match task.as_str() {
         "check" => check(),
         "layout-check" => layout_check(),
-        _ => Err("usage: cargo xtask <check|layout-check>".to_owned()),
+        "features" => features(),
+        "release-check" => release_check(),
+        _ => Err("usage: cargo xtask <check|features|layout-check|release-check>".to_owned()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -112,6 +116,74 @@ fn check() -> Result<(), String> {
     layout_check()
 }
 
+/// Feature combinations users can pick; each must build without warnings.
+const FEATURE_SETS: &[(&str, &str)] = &[
+    ("cordex", ""),
+    ("cordex", "http"),
+    ("cordex", "gateway"),
+    ("cordex", "interactions"),
+    ("cordex", "interactions-verify"),
+    ("cordex", "interactions-server"),
+    ("cordex", "http,gateway,interactions"),
+    ("cordex-interactions", ""),
+    ("cordex-interactions", "verify"),
+    ("cordex-interactions", "server"),
+];
+
+fn features() -> Result<(), String> {
+    for (package, features) in FEATURE_SETS {
+        let mut args = vec!["clippy", "-p", package, "--no-default-features", "--locked"];
+        if !features.is_empty() {
+            args.extend(["--features", features]);
+        }
+        args.extend(["--", "-D", "warnings"]);
+        run(&args, &[])?;
+    }
+    println!("features: {} combinations ok", FEATURE_SETS.len());
+    Ok(())
+}
+
+/// Everything `check` does, then package and verify every publishable
+/// crate against a local registry (nothing is uploaded).
+fn release_check() -> Result<(), String> {
+    check()?;
+    run(
+        &[
+            "publish",
+            "--workspace",
+            "--dry-run",
+            "--locked",
+            "--allow-dirty",
+        ],
+        &[],
+    )
+}
+
+/// Published crates carry copies of the root README (facade) and licenses;
+/// they must not drift from the originals.
+fn copies_check(root: &Path, errors: &mut Vec<String>) -> Result<(), String> {
+    let mut pairs = vec![(root.join("README.md"), root.join("crates/facade/README.md"))];
+    for (folder, _) in INTERNAL_DEPS {
+        let dir = root.join("crates").join(folder);
+        if read(&dir.join("Cargo.toml"))?.contains("publish = false") {
+            continue;
+        }
+        for license in ["LICENSE-MIT", "LICENSE-APACHE"] {
+            pairs.push((root.join(license), dir.join(license)));
+        }
+    }
+    for (original, copy) in pairs {
+        if read(&original)? != read(&copy).unwrap_or_default() {
+            errors.push(format!(
+                "{} differs from {} (copy it again)",
+                copy.display(),
+                original.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn layout_check() -> Result<(), String> {
     let root = workspace_root();
     let mut errors = Vec::new();
@@ -171,6 +243,8 @@ fn layout_check() -> Result<(), String> {
             ));
         }
     }
+
+    copies_check(&root, &mut errors)?;
 
     if errors.is_empty() {
         println!("layout-check: {} crates ok", INTERNAL_DEPS.len());

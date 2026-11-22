@@ -4,8 +4,12 @@ description = "Independent Discord bot API library (facade crate)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-publish.workspace = true
 repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+documentation = "https://docs.rs/cordex"
+readme = "README.md"
 
 [lints]
 workspace = true
@@ -14,7 +18,6 @@ workspace = true
 cordex-model.workspace = true
 cordex-http = { workspace = true, optional = true }
 cordex-gateway = { workspace = true, optional = true }
-cordex-cache = { workspace = true, optional = true }
 cordex-interactions = { workspace = true, optional = true }
 
 [features]
@@ -22,8 +25,14 @@ default = ["http", "gateway", "interactions"]
 http = ["dep:cordex-http"]
 gateway = ["dep:cordex-gateway"]
 interactions = ["dep:cordex-interactions"]
-cache = ["dep:cordex-cache"]
+# Ed25519 check for HTTP interactions (any web framework).
+interactions-verify = ["interactions", "cordex-interactions/verify"]
+# Standalone hyper endpoint for HTTP interactions.
+interactions-server = ["interactions-verify", "cordex-interactions/server"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing-subscriber.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true

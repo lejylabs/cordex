@@ -1,4 +1,4 @@
-//! zlib-stream inflate for one gateway connection (PLAN.md §8.10).
+//! zlib-stream inflate for one gateway connection.
 
 use flate2::{Decompress, FlushDecompress, Status};
 

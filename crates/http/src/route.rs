@@ -1,4 +1,4 @@
-//! Route identity for REST requests and the rate limiter (PLAN.md §6.2, §7.1).
+//! Route identity for REST requests and the rate limiter.
 
 use std::fmt::{self, Write};
 

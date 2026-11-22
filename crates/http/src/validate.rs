@@ -1,4 +1,4 @@
-//! Local builder limits (PLAN.md §6.2), checked before the request is sent.
+//! Local builder limits, checked before the request is sent.
 
 use cordex_model::message::Embed;
 

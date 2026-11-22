@@ -1,5 +1,5 @@
 //! Gateway close codes (topics/opcodes-and-status-codes.mdx, "Gateway Close
-//! Event Codes") and what a shard does after each (PLAN.md §8.6).
+//! Event Codes") and what a shard does after each.
 
 use crate::serde_util::int_enum;
 

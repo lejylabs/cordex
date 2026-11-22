@@ -62,11 +62,11 @@ pub trait Connector: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Result<Self::Connection, GatewayError>> + Send;
 }
 
-/// Default cap for one received WebSocket message (16 MiB, PLAN.md §14).
+/// Default cap for one received WebSocket message (16 MiB).
 /// zlib-stream frames are compressed, so real frames stay far below it.
 pub const DEFAULT_MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 
-/// rustls + platform verifier WebSocket connector (PLAN.md D4, D5).
+/// rustls + platform verifier WebSocket connector.
 #[derive(Clone, Debug)]
 pub struct WsConnector {
     max_frame_bytes: usize,

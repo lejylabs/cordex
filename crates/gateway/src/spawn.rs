@@ -1,4 +1,4 @@
-//! Where shard tasks run (PLAN.md §16.4).
+//! Where shard tasks run.
 //!
 //! The library never spawns on a runtime the caller did not choose. A shard's
 //! long-running task is handed to a [`Spawner`]; the default

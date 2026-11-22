@@ -1,4 +1,4 @@
-//! Identify queue (PLAN.md §9.3): one Identify per bucket every 5 s, plus
+//! Identify queue: one Identify per bucket every 5 s, plus
 //! the session-start limit from `GET /gateway/bot`.
 
 use std::future::Future;

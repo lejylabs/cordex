@@ -1,14 +1,15 @@
-//! Facade crate: re-exports the `cordex-*` crates behind features
-//! (PLAN.md §4.3), one [`Error`] type over all of them (§13) and a
-//! [`prelude`].
+//! Facade crate: re-exports the `cordex-*` crates behind features, one
+//! [`Error`] type over all of them and a [`prelude`].
+//!
+//! The rest of this page is the project README.
+#![doc = ""]
+#![doc = include_str!("../README.md")]
 
 use std::error::Error as StdError;
 use std::fmt;
 
 pub use cordex_model as model;
 
-#[cfg(feature = "cache")]
-pub use cordex_cache as cache;
 #[cfg(feature = "gateway")]
 pub use cordex_gateway as gateway;
 #[cfg(feature = "http")]
@@ -93,8 +94,6 @@ impl From<cordex_interactions::InteractionError> for Error {
 
 /// The types most bots need: `use cordex::prelude::*;`.
 ///
-/// The simple layer from PLAN.md §4.4 (`Bot`, `Command`, contexts) is added
-/// here once Phase 5 builds it.
 pub mod prelude {
     pub use crate::{Error, Result};
     pub use cordex_model::gateway::{Event, Intents};

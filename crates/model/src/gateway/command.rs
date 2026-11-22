@@ -2,7 +2,7 @@
 //!
 //! Each command implements [`Command`]; [`Command::write_json`] serializes
 //! `{ "op": …, "d": … }` into a caller-owned buffer, so the gateway can
-//! reuse one buffer per connection (PLAN.md §16.2).
+//! reuse one buffer per connection.
 
 use serde::Serialize;
 
@@ -64,7 +64,7 @@ pub struct Identify<'a> {
     /// Connection properties.
     pub properties: ConnectionProperties<'a>,
     /// Payload compression; always off because transport compression
-    /// (`zlib-stream`) is used instead (PLAN.md §8.5).
+    /// (`zlib-stream`) is used instead.
     pub compress: bool,
     /// 50–250: members above which offline members are not sent.
     #[serde(skip_serializing_if = "Option::is_none")]
