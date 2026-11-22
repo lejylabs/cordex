@@ -1,4 +1,4 @@
-# Nexcord – Rust Discord Library
+# <lib> – Rust Discord Library (working title, name not decided)
 ## Project Plan & Technical Specification
 
 | | |
@@ -8,7 +8,7 @@
 | **Language / Runtime** | Rust (stable), Tokio |
 | **Discord API version** | v10 (REST and Gateway) |
 | **Voice** | Explicitly out of scope |
-| **Plan status** | Approved spec for v0.1.0 |
+| **Plan status** | Spec for v0.1.0; open items at the end of §24 |
 
 The words **MUST**, **MUST NOT**, **SHOULD** and **MAY** are used as in RFC 2119. Every MUST in this document has to be covered by a test or a review checklist item before v0.1.0 ships (see §22).
 
@@ -20,8 +20,8 @@ These decisions are final for v0.1.0. Changing one requires updating this table 
 
 | # | Topic | Decision | Reason |
 |---|---|---|---|
-| D1 | Project / crate name | `nexcord` (all crates prefixed `nexcord-`) | Discord's brand guidelines disallow "Discord" in product names; a single name across repo, crates and docs. |
-| D2 | API version | v10 only, constant in `nexcord-model` | One version keeps models and tests manageable. |
+| D1 | Project / crate name | **Open.** `<lib>` is a placeholder in this plan; all crates will be prefixed `<lib>-`. Must be decided in Phase 0 before any crate is created. Constraint: no "Discord" in the name (Discord brand guidelines). | One name across repo, crates and docs. |
+| D2 | API version | v10 only, constant in `<lib>-model` | One version keeps models and tests manageable. |
 | D3 | HTTP stack | `hyper` 1.x + `hyper-util` + `hyper-rustls` + `http-body-util` | Full control, no hidden middleware. |
 | D4 | TLS | `rustls` with the `aws-lc-rs` provider by default, `ring` as an opt-in feature; root certificates from `webpki-roots` by default, `rustls-native-certs` as a feature | Reproducible builds and no OpenSSL. |
 | D5 | WebSocket | `tokio-websockets` with rustls features | Small, fast and Tokio-native. |
@@ -30,10 +30,13 @@ These decisions are final for v0.1.0. Changing one requires updating this table 
 | D8 | Event delivery | Pull-based async stream per shard (`Shard::next_event()`) plus an optional fan-in stream in the manager; no callback traits in the core | Explicit backpressure, no hidden task spawning (see §10). |
 | D9 | Unknown data | Every event/model keeps an escape hatch (`Event::Unknown`, unknown enum variants, optional raw JSON) | Discord changes faster than releases. |
 | D10 | Cache | Separate crate, behind feature `cache` in the facade, off by default | Zero cost when unused. |
-| D11 | MSRV | Latest stable at the time of 0.1.0 minus 2 minor releases, checked in CI | Predictable for users. |
+| D11 | Toolchain / MSRV | Toolchain pinned in `rust-toolchain.toml` (`1.100.0`, `profile = "minimal"`, `rustfmt` + `clippy`), `rust-version = "1.100"`; same as `zeny/backend-rs` | One toolchain locally and on the server. |
 | D12 | License | `MIT OR Apache-2.0` | Rust ecosystem standard. |
-| D13 | `unsafe` | `#![forbid(unsafe_code)]` in every crate | Safety; allowing it later needs an ADR. |
-| D14 | Panics | Library code MUST NOT panic on any input coming from the network | Robustness. |
+| D13 | `unsafe` | `unsafe_code = "forbid"` without exception, not even in an isolated module. `unsafe` inside maintained dependencies (tokio, hyper, rustls, mimalloc, …) is allowed if they pass `cargo deny`. | Same decision as `zeny/backend-rs` (2026-11-22). |
+| D14 | Panics | Library code MUST NOT panic on any input coming from the network. `panic = "unwind"`; long-running library tasks (shard tasks) run behind a panic guard, so a panic ends one shard run, not the process (§9.5). | Same model as the backend supervisor. |
+| D15 | Supply chain | `.cargo/config.toml` with `[registry] global-min-publish-age = "3 days"`; dependencies always at the newest version this allows (no pre-releases); `Cargo.lock` committed; all builds with `--locked`; new dependencies only after asking | Taken over from `zeny/backend-rs`. |
+| D16 | Lints | Lint set taken over 1:1 from `zeny/backend-rs` (§18.2). Lints are never weakened; a single `#[allow(...)]` needs a reason in a comment. | Proven setup. |
+| D17 | Global allocator | The library does **not** set a global allocator. Applications (ZenyBot, examples, benchmarks) use `mimalloc`, as the backend does. | A library must not decide the allocator for its users. |
 
 ---
 
@@ -73,6 +76,8 @@ Before implementation starts, produce `docs/zenybot-inventory.md` listing:
 
 That inventory decides what goes into P0. The list below is the minimum P0, which is needed by practically every bot.
 
+**Note:** ZenyBot today is C++ (`zeny/bot`, D++ v10.1.6, callbacks, no coroutines). The inventory is therefore taken from the C++ sources (D++ calls and event handlers). How ZenyBot will consume this library (a Rust port of the bot, or a new Rust bot next to it) is an open decision (§0 open items) and does not change the library itself.
+
 ### P0 – required for v0.1.0
 
 | Area | Content |
@@ -99,32 +104,37 @@ Entitlements, SKUs, Subscriptions (monetization), Soundboard, Application Role C
 
 # 3. Technology Stack
 
-Versions are pinned in `[workspace.dependencies]`; `Cargo.lock` is committed.
+Versions are pinned in `[workspace.dependencies]`; `Cargo.lock` is committed. Where `zeny/backend-rs` already uses a crate, the **same major version and feature style** is used, so both projects stay in step (reference versions from its `Cargo.lock`, 2026-11-22, in brackets; at Phase 0 always take the newest version the 3-day rule allows).
 
 | Purpose | Crate | Notes |
 |---|---|---|
-| Runtime | `tokio` | features `rt`, `net`, `time`, `sync`, `macros` (tests only) |
+| Runtime | `tokio` [1.54] | features `rt`, `net`, `time`, `sync`, `macros` (tests only). The library MUST work on both `current_thread` and multi-thread runtimes (§16.4). |
 | Cancellation | `tokio-util` | `CancellationToken` for shutdown |
-| HTTP | `hyper`, `hyper-util`, `http`, `http-body-util` | client + optional server for interactions |
-| TLS | `rustls`, `hyper-rustls`, `webpki-roots` / `rustls-native-certs` | see D4 |
-| WebSocket | `tokio-websockets` | rustls features |
-| Bytes | `bytes` | buffer reuse |
-| Serialization | `serde`, `serde_json` | `serde_json` with `raw_value` |
-| Compression | `flate2` (`zlib-rs`), `zstd` (optional) | see D7 |
+| HTTP | `hyper` [1.12], `hyper-util` [0.1.21], `http` [1.5], `http-body-util` | client + optional server for interactions; `default-features = false` as in the backend |
+| TLS | `rustls` [0.23], `hyper-rustls`, `aws-lc-rs` provider [as in backend], `webpki-roots` / `rustls-platform-verifier` | see D4; the backend uses `rustls-platform-verifier` (system roots), offered here as feature `native-roots` |
+| WebSocket | `tokio-websockets` [0.13] | `default-features = false`, `client`, `fastrand`, `sha1_smol` as in the backend, plus rustls features |
+| Bytes | `bytes` [1.12] | buffer reuse |
+| Serialization | `serde`, `serde_json` [1.0.154] | `serde_json` with `raw_value` (same as backend). `sonic-rs` only if a profile shows JSON as the bottleneck (backend rule). |
+| Time | `time` [0.3] | no `chrono` (backend decision); `serde`, `parsing`, `formatting` features |
+| Locks | `parking_lot` [0.13] | short synchronous critical sections (rate limiter buckets, cache shards); never held across `.await` |
+| Compression | `flate2` (`zlib-rs`) [1.1], `zstd` (optional) | see D7 |
 | Flags | `bitflags` 2.x | permissions, intents, flags |
-| Errors | `thiserror` | library errors only; no `anyhow` in library crates |
-| Logging | `tracing` | no `log` dependency |
-| Crypto | `ed25519-dalek` | interaction signature verification only |
-| Randomness | `fastrand` | heartbeat jitter, backoff jitter |
+| Errors | `thiserror` [2.0] | library errors only; no `anyhow` in library crates |
+| Logging | `tracing` [0.1] | no `log` dependency; `tracing-subscriber` only in examples/tests |
+| Crypto | `ed25519-dalek` | interaction signature verification only; `subtle` for constant-time compares where needed (as in the backend) |
+| Randomness | `fastrand` [2.5] | heartbeat jitter, backoff jitter (already pulled in by tokio-websockets) |
 | Encoding | `percent-encoding` | audit log reason, route parameters |
-| Cache maps | `dashmap` (cache crate only) | to be confirmed by a benchmark against `RwLock<HashMap>` |
-| Dev | `tokio-test`, `proptest`, `criterion`, `insta` (snapshots), `cargo-fuzz` | |
+| Cache maps | `dashmap` or sharded `parking_lot::RwLock<HashMap>` (cache crate only) | decided by benchmark |
+| Allocator (apps only) | `mimalloc` [0.1.52] | examples, benches and ZenyBot; never in library crates (D17) |
+| Dev | `tokio-test`, `proptest`, `criterion`, `insta` (snapshots), `dhat` (allocation counting), `cargo-fuzz` | |
 
-Dependency rules:
+Dependency rules (same as `zeny/backend-rs`):
 
-- New dependencies need a reason in the PR description and must pass `cargo-deny` (licenses, advisories, duplicates).
+- Always the newest version that `global-min-publish-age = "3 days"` allows; no pre-releases (e.g. no `-rc`).
+- New dependencies only when needed and only after asking; reason written in the plan or PR.
+- Every new dependency must pass `cargo deny check` (licenses, advisories, duplicates, sources).
 - Every crate sets `default-features = false` on its dependencies and enables only what it needs.
-- No dependency may pull in OpenSSL.
+- No OpenSSL. Unix-only code behind `#[cfg(unix)]`; everything else builds on Windows and Debian alike.
 
 ---
 
@@ -133,7 +143,7 @@ Dependency rules:
 ## 4.1 Repository layout
 
 ```text
-nexcord/
+<lib>/
 ├── Cargo.toml                 # virtual workspace manifest (no root package)
 ├── Cargo.lock
 ├── clippy.toml
@@ -142,15 +152,16 @@ nexcord/
 ├── README.md
 ├── CHANGELOG.md
 ├── LICENSE-MIT / LICENSE-APACHE
-├── .github/workflows/         # CI (§18)
+├── .cargo/config.toml         # global-min-publish-age = "3 days", alias xtask (as in backend-rs)
+├── .github/workflows/         # prepared for later; GitHub Actions is currently not usable (§18)
 ├── crates/
-│   ├── nexcord/               # facade: re-exports, Client, prelude
-│   ├── nexcord-model/         # models, snowflakes, flags, gateway payloads
-│   ├── nexcord-http/          # REST client, routes, rate limiter
-│   ├── nexcord-gateway/       # shard, compression, identify queue, shard manager
-│   ├── nexcord-cache/         # optional in-memory cache
-│   └── nexcord-interactions/  # builders, HTTP interaction server, signature verification
-├── xtask/                     # dev automation (codegen checks, coverage report, release)
+│   ├── <lib>/               # facade: re-exports, Client, prelude
+│   ├── <lib>-model/         # models, snowflakes, flags, gateway payloads
+│   ├── <lib>-http/          # REST client, routes, rate limiter
+│   ├── <lib>-gateway/       # shard, compression, identify queue, shard manager
+│   ├── <lib>-cache/         # optional in-memory cache
+│   └── <lib>-interactions/  # builders, HTTP interaction server, signature verification
+├── xtask/                     # cargo xtask check | layout-check | bench | release (§18.1)
 ├── examples/
 ├── benches/
 ├── fuzz/
@@ -160,38 +171,38 @@ nexcord/
 ## 4.2 Crate dependency graph
 
 ```text
-nexcord-model  ←  nexcord-http
+<lib>-model  ←  <lib>-http
       ↑               ↑
-nexcord-gateway   nexcord-interactions
+<lib>-gateway   <lib>-interactions
       ↑               ↑
-nexcord-cache (model only)
+<lib>-cache (model only)
       ↑
-nexcord (facade, all optional via features)
+<lib> (facade, all optional via features)
 ```
 
 Rules:
 
-- `nexcord-model` has no async or network dependencies (serde, bitflags only).
-- `nexcord-gateway` uses `nexcord-http` only for `GET /gateway/bot`, through a small trait, so it can be tested with a fake.
-- `nexcord-cache` depends only on `nexcord-model` and consumes events, not connections.
-- No dependency cycles; checked in CI with `cargo tree`.
+- `<lib>-model` has no async or network dependencies (serde, bitflags only).
+- `<lib>-gateway` uses `<lib>-http` only for `GET /gateway/bot`, through a small trait, so it can be tested with a fake.
+- `<lib>-cache` depends only on `<lib>-model` and consumes events, not connections.
+- No dependency cycles; checked by `cargo xtask layout-check`.
 
 ## 4.3 Facade features
 
 | Feature | Default | Enables |
 |---|---|---|
-| `gateway` | yes | `nexcord-gateway` |
-| `http` | yes | `nexcord-http` |
-| `interactions` | yes | `nexcord-interactions` (without the server) |
+| `gateway` | yes | `<lib>-gateway` |
+| `http` | yes | `<lib>-http` |
+| `interactions` | yes | `<lib>-interactions` (without the server) |
 | `interactions-server` | no | HTTP interaction endpoint (hyper server) |
-| `cache` | no | `nexcord-cache` |
+| `cache` | no | `<lib>-cache` |
 | `zstd` | no | zstd-stream gateway compression |
 | `native-roots` | no | system root certificates |
 | `ring` | no | rustls `ring` provider instead of `aws-lc-rs` |
 
 ---
 
-# 5. Models (`nexcord-model`)
+# 5. Models (`<lib>-model`)
 
 ## 5.1 Basic types
 
@@ -238,7 +249,7 @@ Builder-level validation of documented limits (e.g. 5 action rows, 25 select opt
 
 ---
 
-# 6. REST Client (`nexcord-http`)
+# 6. REST Client (`<lib>-http`)
 
 ## 6.1 Client
 
@@ -250,7 +261,9 @@ Builder-level validation of documented limits (e.g. 5 action rows, 25 select opt
   - `Content-Type` according to the body.
   - `X-Audit-Log-Reason`, percent-encoded, max. 512 characters, set per request.
 - HTTP/1.1 keep-alive with a pool and HTTP/2 via ALPN (configurable; enabled only after testing).
-- Timeouts: connect (default 10 s), whole request (default 30 s), both configurable.
+- `TCP_NODELAY` on every connection; idle pooled connections are dropped after **30 s**, because Discord or NAT silently drop idle connections (lesson from the backend's Discord client).
+- No DNS lookup per request: the pool reuses connections; hyper-util's resolver runs off the runtime threads.
+- Timeouts: connect (default 10 s), whole request (default 15 s, the value proven in the backend), both configurable.
 - Response bodies are read in full with a size limit (default 32 MiB) and then deserialized from `Bytes`.
 
 ## 6.2 Request API
@@ -280,7 +293,7 @@ let value: serde_json::Value = http
 
 | Situation | Behavior |
 |---|---|
-| 429 | Wait `retry_after` (from the body, float seconds; fall back to the header), then retry. Max. 3 retries per request. |
+| 429 | Wait `retry_after` (from the body, float seconds; fall back to `Retry-After`, else 1 s), then retry. Max. 3 retries per request, and only if the wait is ≤ a configurable cap (default 10 s, as in the backend). Longer locks return `HttpError::RateLimited` at once, so callers are not blocked for minutes. |
 | 502/503/504, connection reset before the response | Retry only for `GET`, `HEAD`, `PUT`, `DELETE` (idempotent), with exponential backoff and jitter (100 ms → 1.6 s), max. 3 retries. |
 | 500 | No retry. |
 | `POST`, `PATCH` | Never retried automatically except on 429, because a 429 guarantees the request was not processed. |
@@ -345,7 +358,7 @@ Discord blocks the IP address (Cloudflare) for a while if more than **10,000 inv
 
 ---
 
-# 8. Gateway (`nexcord-gateway`)
+# 8. Gateway (`<lib>-gateway`)
 
 ## 8.1 Connection URL
 
@@ -393,7 +406,7 @@ Active → Reconnecting (resume) | Reconnecting (new session) | Disconnected (fa
 
 ## 8.5 Identify
 
-- Payload: token, intents, `properties { os, browser: "nexcord", device: "nexcord" }`, `compress: false` (transport compression is used instead), `large_threshold` (default 50, 50–250), `shard: [id, count]`, optional initial presence.
+- Payload: token, intents, `properties { os, browser: "<lib>", device: "<lib>" }`, `compress: false` (transport compression is used instead), `large_threshold` (default 50, 50–250), `shard: [id, count]`, optional initial presence.
 - An identify happens only after a permit from the **identify queue** (§9.3).
 - `session_start_limit.remaining` is decreased for every identify; at 0 the shard waits until `reset_after` instead of identifying (logged at `warn`).
 
@@ -519,6 +532,15 @@ The manager:
 - **Resharding:** when the recommended shard count changes (or 4011), only a coordinated restart is supported: start the new shard set, wait until all are `Active`, then stop the old ones. Optional for v0.1 (documented as P1); v0.1 at least emits a warning event when `/gateway/bot` recommends more shards than are running.
 - A fatal error on one shard does not stop the others; it is reported as `ShardEvent::Fatal`.
 
+## 9.5 Panic guard and supervision
+
+Taken over from the backend's job supervisor (`jobs/supervisor.rs`, `run_guarded`):
+
+- Every shard run (one connection lifetime) is wrapped in `AssertUnwindSafe(..).catch_unwind()`. A panic becomes `ShardEvent::Error(Panic(msg))`, is logged at `error` with the shard id, and the shard reconnects with the normal backoff (resume info is kept if still valid).
+- A panic never ends the manager, other shards or the process (`panic = "unwind"` is required; documented for users).
+- Panics are counted per shard (metric). More than 5 panics in 10 minutes on one shard → the shard stops with `ShardEvent::Fatal` to avoid a hot loop.
+- The panic guard is a safety net, not error handling: every panic found is a bug and gets a regression test.
+
 ---
 
 # 10. Event Delivery and Backpressure
@@ -553,7 +575,7 @@ The `Disconnect` default is safe: no event is lost and memory stays bounded.
 
 ---
 
-# 11. Interactions (`nexcord-interactions`)
+# 11. Interactions (`<lib>-interactions`)
 
 ## 11.1 Commands
 
@@ -591,7 +613,7 @@ The `Disconnect` default is safe: no event is lost and memory stays bounded.
 
 ---
 
-# 12. Cache (`nexcord-cache`)
+# 12. Cache (`<lib>-cache`)
 
 - Completely optional (D10). It is fed with `cache.update(&event)`; no network access of its own.
 - Resource types configurable individually (`ResourceType` bitflags): guilds, channels, threads, users, members, roles, emojis, stickers, voice states, presences, messages.
@@ -620,8 +642,8 @@ The `Disconnect` default is safe: no event is lost and memory stays bounded.
 - **TLS:** certificate verification is always on; there is no option to disable it.
 - **Input limits:** maximum sizes for WebSocket frames, decompressed messages, HTTP response bodies and interaction request bodies (all configurable, with safe defaults).
 - **Interaction endpoint:** signature verification is mandatory and cannot be turned off in the server.
-- **Dependencies:** `cargo-deny` (advisories, licenses, sources) and `cargo-audit` in CI; Dependabot/Renovate for updates.
-- **CI secrets:** the test bot token only exists as a CI secret, is only available on protected branches, never on fork PRs.
+- **Dependencies:** `cargo deny check` (advisories, licenses, sources) in `cargo xtask check`; 3-day publish age; manual update pass at least monthly.
+- **Test secrets:** the test bot token lives only in a local, git-ignored `.env` (mode 600 on Linux, like the backend), is never committed and never printed.
 - **Fuzzing:** gateway frame parsing, decompression and model deserialization (§17.4).
 - `SECURITY.md` with a reporting channel.
 
@@ -638,27 +660,67 @@ The `Disconnect` default is safe: no event is lost and memory stays bounded.
 
 # 16. Performance
 
-## 16.1 Targets (to be validated with benchmarks; adjust after the first measurements)
+The approach is the one that worked for `zeny/backend-rs` (see `zeny/docs/plans/Backend Rust Rewrite.md`, "Performance: voll getunt"): fully tuned, but **without own `unsafe`**, measured against an own baseline, with regressions caught by `cargo xtask bench`.
 
-| Metric | Target |
+## 16.1 Targets
+
+First values are estimates. After the first full measurement (Phase 7) the measured numbers become the **binding baseline** in `benches/baseline.json` (same process as the backend: first measurement = baseline, then only regression checks).
+
+| Metric | Initial target |
 |---|---|
 | Gateway dispatch (receive frame → event in channel) for MESSAGE_CREATE | p99 < 50 µs (excluding the network) |
 | Skipped (filtered) event | < 5 µs |
 | Memory per idle shard (no cache) | < 1 MiB |
+| RSS of a test bot (1 shard, no cache) idle / under replayed load / after 1 h | < 15 MB / < 40 MB / plateau |
 | REST overhead (client side, excluding the network) | p99 < 100 µs |
 | Cache lookup by id | < 200 ns |
-| Allocations per filtered event | 0 additional heap allocations after warm-up (buffer reuse) |
+| Allocations per filtered event | 0 after warm-up (measured with `dhat`) |
+| Allocations per typed MESSAGE_CREATE | ≤ 15 (measured with `dhat`, then fixed as budget) |
+| Allocations per REST request (client side) | ≤ 20 |
+| Regression | Warning at > 10 % worse than `benches/baseline.json` (throughput, p99 or allocations) |
+
+Benchmarks run on the production KVM (8 cores, AMD EPYC 7543) for the official numbers, like the backend; local numbers are only for comparisons within one machine. Single runs on the shared KVM vary a lot, so a regression must be confirmed by a second run.
 
 ## 16.2 Rules
 
-- Gateway: reused receive and decompression buffers; two-step parsing (§5.4); `Box<str>` instead of `String` in long-lived models.
-- No serialize → deserialize round trips in the hot path.
-- No global locks on the hot path (rate limiter and cache use sharded structures).
-- Optimizations only with a benchmark showing the effect (criterion; results go into `docs/performance.md`).
+**Allocations and memory** (backend rules)
+- Allocation budgets per hot path (table above), measured with `dhat` as a dev feature.
+- `&str` / `Cow` instead of `String` in transient data, `Box<str>` / `Box<[T]>` in long-lived models; small fixed values without heap (snowflakes as `u64`, image hashes as 16 bytes).
+- Buffers reused per connection: WebSocket receive buffer, inflate output buffer, JSON send buffer (serialize into a reused `Vec<u8>` / `BytesMut`).
+- Pre-sized buffers instead of `format!` on hot paths (route keys, URLs); the clippy perf lints (§18.2) enforce most of this.
+- No unbounded queue, map or cache anywhere; every structure has an upper limit (rate limiter buckets are cleaned, event channels are bounded, caches have caps).
 
-## 16.3 Benchmarks (`benches/`)
+**Latency**
+- No blocking on runtime threads. CPU-heavy work (e.g. parsing a huge READY/GUILD_CREATE) stays in the shard task, which is fine because each shard is independent; no `spawn_blocking` in the library.
+- No serialize → deserialize round trips; two-step envelope parsing (§5.4).
+- No global locks on the hot path (sharded rate limiter and cache); `parking_lot` locks only for short synchronous sections, never across `.await`.
+- `TCP_NODELAY` on gateway and REST connections.
+- Independent async work is run concurrently (`tokio::join!`), e.g. fetching `/gateway/bot` and application info at startup (same pattern as the backend's parallel queries).
 
-JSON deserialization of real payloads (READY of a large guild, GUILD_CREATE, MESSAGE_CREATE, INTERACTION_CREATE), envelope parsing, decompression, event dispatch, rate limiter acquire under contention, cache update/lookup, memory under a replayed event load (with `dhat` or a counting allocator).
+**Process**
+- Optimizations only with a benchmark or profile showing the effect; results go into `docs/performance.md`.
+- `serde_json` is the default; `sonic-rs` or similar only if a profile shows JSON as the bottleneck **and** the output is identical.
+
+## 16.3 Benchmarks and tooling
+
+- **Micro benchmarks** (`criterion`, `benches/`): JSON deserialization of real payloads (READY of a large guild, GUILD_CREATE, MESSAGE_CREATE, INTERACTION_CREATE), envelope parsing, zlib-stream inflate, event dispatch, rate limiter acquire under contention, cache update/lookup.
+- **Allocation benchmarks** (`dhat`): per hot path, compared against the budgets.
+- **Load replay**: a recorded (anonymized) gateway event stream replayed through the mock gateway at a fixed rate; measures throughput, p99 dispatch latency, RSS.
+- **`cargo xtask bench`**: runs all of the above and compares with `benches/baseline.json`; warning at > 10 % regression. Run before every larger merge.
+- **Profiling**: `perf` + flamegraph on the KVM, `tokio-console` for scheduling, `dhat` for allocations (same tools as the backend).
+
+## 16.4 Runtime model compatibility
+
+The backend runs **thread-per-core** (one `current_thread` runtime per core, `SO_REUSEPORT`, no work stealing on the hot path) and found it clearly faster than one multi-thread runtime. The library MUST support both models:
+
+- No hidden `tokio::spawn` on a runtime the user did not choose; a shard's tasks run on the runtime where the shard was started.
+- Shards can be distributed over several `current_thread` runtimes (e.g. shard `i` on runtime `i % cores`); the shard manager accepts a spawner per shard (`ShardManager::spawn_with(...)`) for that.
+- The REST client and the rate limiter are `Send + Sync` and can be shared between runtimes; their own background work (bucket cleanup) is lazy and does not need a dedicated task.
+- An example `examples/thread_per_core.rs` and a benchmark comparing both models on the replayed load. The faster one becomes the recommendation in the docs.
+
+## 16.5 Build profile for applications
+
+Profiles taken over from the backend (already in the workspace `Cargo.toml`): `[profile.dev.package."*"] opt-level = 1`; release with `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "unwind"`, `debug = "limited"`, `strip = "debuginfo"`; `release-fast` without LTO. Applications on the KVM build with `-C target-cpu=native` (opt-out like the backend's `ZENY_PORTABLE=1`). PGO/BOLT is deferred, as in the backend, until real traffic gives a representative profile.
 
 ---
 
@@ -701,12 +763,12 @@ A mock HTTP server for: authentication headers, User-Agent, rate limit headers a
 ## 17.4 Property and fuzz tests
 
 - `proptest`: snowflake and flag round trips, model serialize → deserialize round trips.
-- `cargo-fuzz` targets: envelope parsing, event deserialization, zlib-stream inflate, interaction signature verification. Run nightly in CI for a fixed time (e.g. 10 min per target).
+- `cargo-fuzz` targets: envelope parsing, event deserialization, zlib-stream inflate, interaction signature verification. Run before each release for a fixed time (e.g. 10 min per target; needs Linux/nightly, so on the KVM or WSL when available).
 
 ## 17.5 Live tests
 
-- A dedicated test application and test guild; tests are `#[ignore]` and run with `cargo test -- --ignored` when `NEXCORD_TEST_TOKEN` is set.
-- Run in CI only on `main` and before releases (protected secret), plus manually.
+- A dedicated test application and test guild; tests are `#[ignore]` and run with `cargo test -- --ignored` when `LIB_TEST_TOKEN` is set.
+- Run manually before releases and after gateway/sharding changes. Without a token they are skipped visibly (same pattern as the backend's `ZENY_PG_TEST_URL` tests).
 - Scenarios: connect + READY, slash command registration and response, message create/edit/delete, multipart upload, reaction, 2 shards with a forced reconnect, member chunk request.
 
 ## 17.6 Soak test
@@ -715,36 +777,45 @@ Before every release: ZenyBot (or a test bot) runs on the release candidate for 
 
 ## 17.7 Coverage
 
-Line coverage measured with `cargo-llvm-cov`; target ≥ 80 % for `nexcord-gateway` and `nexcord-http`, ≥ 70 % overall. Coverage is a guideline; the scenario list above is the requirement.
+Line coverage measured with `cargo-llvm-cov`; target ≥ 80 % for `<lib>-gateway` and `<lib>-http`, ≥ 70 % overall. Coverage is a guideline; the scenario list above is the requirement.
 
 ---
 
-# 18. CI/CD, Versioning and Release
+# 18. Quality Gate, Versioning and Release
 
-## 18.1 CI (every PR)
+## 18.1 Local checks with `cargo xtask` (the quality gate)
 
-| Job | Command / tool |
+GitHub Actions is currently **not usable** (quota used up, same situation as the backend). The quality gate is therefore `cargo xtask check`, run locally after every change; a step counts as done only when it is green. A workflow file that calls the same `xtask` commands is kept in `.github/workflows/` for later.
+
+| Command | Content |
 |---|---|
-| Format | `cargo fmt --all --check` |
-| Lint | `cargo clippy --workspace --all-targets --all-features -- -D warnings` |
-| Test | `cargo test --workspace --all-features` on Linux, Windows, macOS |
-| Feature matrix | `cargo hack check --feature-powerset --depth 2` (every feature combination compiles) |
-| MSRV | `cargo +<msrv> check --workspace` |
-| Docs | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features` |
-| Supply chain | `cargo deny check` |
-| Semver (after 0.1) | `cargo semver-checks` |
-| Coverage | `cargo llvm-cov` (report, not a gate in v0.1) |
+| `cargo xtask check` | `cargo fmt --all --check` → `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` → `cargo test --workspace --all-features --locked` → `cargo deny check` → `layout-check` → docs (`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features`) |
+| `cargo xtask layout-check` | Enforces the crate dependency rules of §4.2 (like the backend's layer check): `<lib>-model` has no async/network dependencies, no cycles, `cache` depends only on `model`, no other Discord library anywhere in `cargo tree` |
+| `cargo xtask features` | `cargo hack check --feature-powerset --depth 2` (every feature combination compiles) |
+| `cargo xtask bench` | §16.3, compared with `benches/baseline.json` |
+| `cargo xtask release <version>` | §18.4 |
 
-Nightly CI: fuzzing, benchmarks (with a stored baseline; regressions > 10 % fail), live tests.
+Before a release, additionally: `cargo semver-checks` (after 0.1), `cargo llvm-cov` report, fuzzing, live tests, and a build + test run on Debian 13 (acceptance platform, like the backend).
 
-## 18.2 Versioning
+## 18.2 Lints
+
+Taken over 1:1 from `zeny/backend-rs` and already in the workspace `Cargo.toml`:
+
+- `unsafe_code = "forbid"`.
+- `clippy::perf` = deny, `clippy::pedantic` = warn (with `-D warnings` effectively mandatory). Exceptions: `module_name_repetitions`, `must_use_candidate`, `missing_errors_doc`, `missing_panics_doc`, `too_many_arguments`.
+- Performance lints outside `perf` = deny: `needless_pass_by_value`, `large_types_passed_by_value`, `large_futures`, `trivially_copy_pass_by_ref`, `implicit_clone`, `unnecessary_to_owned`, `inefficient_to_string`, `format_push_string`, `format_collect`, `needless_collect`, `or_fun_call`, `manual_memcpy`, `rc_buffer`, `mutex_atomic`, `string_lit_as_bytes`, `redundant_clone`.
+- Hygiene = deny: `enum_glob_use`, `dbg_macro`, `todo`, `unwrap_used`, `expect_used` (tests excluded via `clippy.toml` `allow-unwrap-in-tests` / `allow-expect-in-tests`).
+- Additionally for a library: `missing_docs` = warn (public API must be documented), `unreachable_pub` = warn.
+- Lints are never weakened. A single `#[allow(...)]` needs a reason in a comment.
+
+## 18.3 Versioning
 
 - SemVer. Before 1.0, minor versions may break the API; every break is listed in `CHANGELOG.md`.
 - All public enums and structs that Discord may extend are `#[non_exhaustive]`.
-- Raising the MSRV counts as a minor version bump.
+- Raising the pinned toolchain / `rust-version` counts as a minor version bump.
 - All workspace crates are released with the same version.
 
-## 18.3 Release process
+## 18.4 Release process
 
 1. All DoD items (§22) are checked off.
 2. `CHANGELOG.md` updated (Keep a Changelog format).
@@ -769,7 +840,7 @@ Sources (in this order of authority):
 
 ### After v0.1 (automated, P2)
 
-A scheduled CI job (`cargo xtask api-diff`) that:
+A scheduled job (`cargo xtask api-diff`, run manually or by a cron job until CI is available) that:
 
 1. Fetches the latest `discord-api-spec` and `discord-api-docs`.
 2. Diffs against the commit recorded in `docs/api-baseline.toml`.
@@ -786,15 +857,14 @@ Every phase has exit criteria. A phase is done only when its criteria are met.
 
 ## Phase 0 – Setup (blocker for everything else)
 
-- [ ] Rename `cargo.toml` → `Cargo.toml`, turn it into a virtual workspace manifest (`members = ["crates/*", "xtask"]`), remove the root `[package]`.
-- [ ] Set the name to `nexcord` everywhere (D1).
-- [ ] Set a valid `rust-version` (D11) and add `rust-toolchain.toml`.
-- [ ] Create all crates, `xtask`, `[workspace.dependencies]`.
-- [ ] `clippy.toml` (`allow-unwrap-in-tests`, `allow-expect-in-tests`), `deny.toml`, licenses, `SECURITY.md`.
-- [ ] CI pipeline (§18.1).
-- [ ] ZenyBot inventory (§2).
+- [ ] **Decide the project name (D1)** and replace `<lib>` everywhere.
+- [ ] Rename `cargo.toml` → `Cargo.toml`, turn it into a virtual workspace manifest (`members = ["crates/*", "xtask"]`), remove the root `[package]`; keep lints and profiles (already 1:1 from the backend).
+- [ ] Copy from `zeny/backend-rs` and adapt: `rust-toolchain.toml`, `clippy.toml`, `deny.toml` (for a library additionally drop `[licenses.private]` once the crates get a license field), `.cargo/config.toml` (3-day rule, `xtask` alias).
+- [ ] Create all crates, `xtask` (`check`, `layout-check`, `features`, `bench`), `[workspace.dependencies]` with the newest versions the 3-day rule allows.
+- [ ] Licenses, `SECURITY.md`, README, `.github/workflows/` prepared for later.
+- [ ] ZenyBot inventory from the C++ bot (§2).
 
-**Exit:** `cargo build`, `cargo clippy -D warnings` and CI are green on an empty workspace; the inventory exists.
+**Exit:** `cargo xtask check` green on an empty workspace on Windows; the inventory exists.
 
 ## Phase 1 – Models
 
@@ -849,8 +919,9 @@ Every phase has exit criteria. A phase is done only when its criteria are met.
 
 ## Phase 7 – Hardening and release
 
-- [ ] Fuzzing, benchmarks, compare to §16.1 and record results in `docs/performance.md`.
-- [ ] Examples: `basic_bot`, `manual_sharding`, `automatic_sharding`, `multi_process_sharding`, `interactions_gateway`, `interactions_http`, `raw_requests`.
+- [ ] Fuzzing, benchmarks, compare to §16.1, record results in `docs/performance.md`, write `benches/baseline.json`.
+- [ ] Thread-per-core vs. multi-thread comparison (§16.4).
+- [ ] Examples: `basic_bot`, `manual_sharding`, `automatic_sharding`, `multi_process_sharding`, `thread_per_core`, `interactions_gateway`, `interactions_http`, `raw_requests` (all with `mimalloc`).
 - [ ] Docs: rustdoc for every public item, `docs/architecture.md`, `gateway.md`, `sharding.md`, `rate-limits.md`, `performance.md`, `coverage.md`.
 - [ ] ZenyBot integration on a staging bot.
 - [ ] 72 h soak test.
@@ -883,14 +954,14 @@ The original 5–10 day target is enough for a working prototype (Phases 0–4 w
 
 # 22. Definition of Done – v0.1.0
 
-Each item must be verifiable by a test, a CI job or a document.
+Each item must be verifiable by a test, an `xtask` command or a document.
 
 **Build and quality**
-- [ ] CI (§18.1) green on Linux, Windows, macOS, MSRV, all feature combinations.
-- [ ] No dependency on any other Discord library (`cargo tree` check in CI).
+- [ ] `cargo xtask check` and `cargo xtask features` green on Windows **and** Debian 13 (acceptance platform).
+- [ ] No dependency on any other Discord library (`layout-check`).
 - [ ] No voice implementation.
-- [ ] `#![forbid(unsafe_code)]` in every crate; no `unwrap`/`expect` in library code.
-- [ ] `cargo deny check` clean.
+- [ ] `unsafe_code = "forbid"` in every crate; no `unwrap`/`expect` in library code; no unexplained `#[allow]`.
+- [ ] `cargo deny check` clean; all builds `--locked`.
 
 **Functionality**
 - [ ] All P0 items from §2 implemented and listed in `docs/coverage.md`.
@@ -906,12 +977,13 @@ Each item must be verifiable by a test, a CI job or a document.
 - [ ] All input size limits in place with defaults (§14).
 - [ ] Metrics getters available (§15).
 - [ ] 72 h soak test passed (§17.6) with ZenyBot or a test bot.
-- [ ] Benchmarks run and recorded; deviations from §16.1 explained.
+- [ ] Benchmarks run on the KVM and recorded; `benches/baseline.json` written; deviations from §16.1 explained; allocation budgets met.
+- [ ] Panic guard tested (a panicking shard run reconnects, others keep running).
 
 **Documentation**
-- [ ] rustdoc for every public item (`#![warn(missing_docs)]`, CI uses `-D warnings`).
-- [ ] README with quick start, feature table, MSRV, license.
-- [ ] Examples compile in CI.
+- [ ] rustdoc for every public item (`missing_docs`, `-D warnings`).
+- [ ] README with quick start, feature table, toolchain, license.
+- [ ] Examples compile (`--all-targets` in `xtask check`).
 - [ ] CHANGELOG entry for 0.1.0.
 
 ---
@@ -927,7 +999,9 @@ Each item must be verifiable by a test, a CI job or a document.
 | Slow consumer | Memory growth or gateway disconnect | Bounded channels, `Disconnect` policy |
 | Scope creep (full API coverage) | Release never happens | Scope tiers, P0 from the ZenyBot inventory |
 | Single maintainer | Bus factor | Docs in `docs/`, ADRs for decisions, high test coverage |
-| Dependency vulnerabilities | Security issues | `cargo-deny`, Dependabot, minimal dependencies |
+| Dependency vulnerabilities / supply chain | Security issues | `cargo-deny`, 3-day publish age, `--locked`, minimal dependencies |
+| No CI available | Regressions slip through | `cargo xtask check` mandatory after every change; Debian run before releases |
+| ZenyBot is C++ | Integration and soak test delayed | Soak test with a dedicated Rust test bot if the Rust bot is not ready (§17.6) |
 
 ---
 
@@ -947,3 +1021,14 @@ Each item must be verifiable by a test, a CI job or a document.
 12. Correctness first, then measured optimization.
 13. No ZenyBot-specific logic in the library.
 14. Every architectural deviation from this plan is recorded in §0 or as an ADR in `docs/adr/`.
+15. After every change: `cargo fmt --all && cargo xtask check`. A step is done only when it is green.
+16. Lints are never weakened; single `#[allow(...)]` only with a reason in a comment.
+17. New dependencies only when needed and after asking; always the newest version the 3-day rule allows.
+18. Code, comments and user-visible texts in English.
+
+## Open items
+
+- [ ] Project name (D1).
+- [ ] How ZenyBot consumes the library: Rust port of the C++ bot, or a new Rust bot (§2).
+- [ ] Whether the cache is P0 (depends on the inventory).
+- [ ] Shared rate limiter / identify queue over Redis (Dragonfly) for multi-process: needed for v0.1 or later.
