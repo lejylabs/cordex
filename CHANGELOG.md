@@ -4,7 +4,7 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
-## Unreleased
+## 0.1.0-beta.2 - 2026-11-23
 
 - `cordex-cache` (new, facade feature `cache`): optional in-memory cache fed
   with `update(&event)`. Everything is off by default: 14 resources

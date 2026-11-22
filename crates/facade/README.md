@@ -25,7 +25,7 @@ Questions, feedback or help: join the [cordex Discord server](https://discord.gg
 
 ```toml
 [dependencies]
-cordex = "0.1.0-beta.1"
+cordex = "0.1.0-beta.2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
