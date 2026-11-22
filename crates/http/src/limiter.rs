@@ -200,6 +200,20 @@ impl Bucket {
     fn apply(&self, headers: &ParsedHeaders) {
         self.touch();
         let mut st = self.state.lock();
+        if headers.limit.is_none()
+            && headers.remaining.is_none()
+            && headers.reset_after.is_none()
+            && headers.retry_after.is_none()
+        {
+            // No rate limit information at all (some routes send none):
+            // the request is done, so let the next one through now instead
+            // of waiting for a reset that never comes (a probe bucket's
+            // `reset_at` is an hour away).
+            st.reset_at = Instant::now();
+            drop(st);
+            self.notify.notify_waiters();
+            return;
+        }
         if let Some(limit) = headers.limit {
             st.limit = i64::from(limit);
         }
@@ -723,6 +737,20 @@ mod tests {
         limiter.acquire(&a).await.unwrap();
         assert_eq!(limiter.known_bucket_count(), 1);
         assert_eq!(limiter.unknown_bucket_count(), 0);
+    }
+
+    /// A response without any rate limit headers must not block the route.
+    #[tokio::test]
+    async fn response_without_headers_frees_the_probe() {
+        let limiter = InProcessRateLimiter::new();
+        let a = route("/channels/{channel_id}/messages", 1);
+        for _ in 0..3 {
+            tokio::time::timeout(Duration::from_secs(1), limiter.acquire(&a))
+                .await
+                .expect("route stays usable")
+                .unwrap();
+            limiter.record(&a, &HeaderMap::new(), StatusCode::OK);
+        }
     }
 
     #[tokio::test(start_paused = true)]

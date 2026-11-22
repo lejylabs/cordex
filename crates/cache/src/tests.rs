@@ -515,3 +515,49 @@ fn validate_and_wanted_events() {
     assert!(!events.contains(&"MESSAGE_CREATE"));
     assert!(!events.contains(&"PRESENCE_UPDATE"));
 }
+
+#[test]
+fn insert_messages_merges_limits_and_respects_switches() {
+    let text = Id::new(TEXT).unwrap();
+    let parse = |n: u64, channel: u64| -> cordex_model::message::Message {
+        serde_json::from_value(message(n, channel)).unwrap()
+    };
+    let cache = InMemoryCache::new(all().message_cache_size(3));
+    cache.update(&ev("MESSAGE_CREATE", &message(10, TEXT)));
+    // 10 is already cached (live wins), 99 belongs to another channel.
+    let added = cache.insert_messages(
+        text,
+        [7, 8, 9, 10]
+            .map(|n| parse(n, TEXT))
+            .into_iter()
+            .chain([parse(99, 1)]),
+    );
+    assert_eq!(added, 2, "7 falls out of the 3-message window");
+    let ids: Vec<u64> = cache
+        .channel_messages(text)
+        .iter()
+        .map(|m| m.id.get())
+        .collect();
+    assert_eq!(ids, [8, 9, 10]);
+
+    let no_content = InMemoryCache::new(all().without_parts(CacheParts::MESSAGE_CONTENT));
+    no_content.insert_messages(text, [parse(1, TEXT)]);
+    assert_eq!(&*no_content.channel_messages(text)[0].content, "");
+
+    let off = InMemoryCache::new(CacheConfig::default());
+    assert_eq!(off.insert_messages(text, [parse(1, TEXT)]), 0);
+    assert_eq!(off.stats(), CacheStats::default());
+}
+
+#[test]
+fn insert_members_respects_switches_and_cap() {
+    let g = Id::new(GUILD).unwrap();
+    let parse =
+        |n: u64| -> cordex_model::guild::Member { serde_json::from_value(member(n)).unwrap() };
+    let cache = InMemoryCache::new(all().max_members_per_guild(Some(2)));
+    assert_eq!(cache.insert_members(g, [parse(1), parse(2), parse(3)]), 2);
+    assert_eq!(cache.stats().users, 2);
+    let off = InMemoryCache::new(CacheConfig::new().resources(ResourceType::USERS));
+    assert_eq!(off.insert_members(g, [parse(1)]), 0);
+    assert_eq!(off.stats().users, 0);
+}

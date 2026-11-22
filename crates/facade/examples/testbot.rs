@@ -10,7 +10,9 @@
 //! - `!status`: state, latency, guilds and reconnects of every shard.
 //! - `!reconnect`: restarts the shard that received the message.
 //! - `!cache`: entry counts of the cache (guilds, channels, roles,
-//!   members, users and the last 20 messages per channel are on).
+//!   members, users and the last 20 messages per channel are on). After
+//!   each `GUILD_CREATE` the last 20 messages per channel are loaded over
+//!   REST (`cordex::backfill`), so history from before the start counts.
 //!
 //! Slash commands, registered per guild on READY (show up instantly):
 //!
@@ -28,10 +30,11 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
 
+use cordex::backfill::{self, BackfillOptions};
 use cordex::gateway::{ManagerEvent, ShardManager, ShardManagerBuilder};
 use cordex::http::Client;
 use cordex::interactions::handle::DEFAULT_AUTO_DEFER;
-use cordex::model::gateway::event::Ready;
+use cordex::model::gateway::event::{GuildCreate, Ready};
 use cordex::model::interaction::{Interaction, InteractionData, InteractionType};
 use cordex::prelude::*;
 
@@ -102,6 +105,9 @@ async fn main() -> AnyResult {
                             ready.guilds.len()
                         );
                         tokio::spawn(register_commands(http.clone(), ready));
+                    }
+                    Event::GuildCreate(GuildCreate::Available(g)) => {
+                        tokio::spawn(backfill_guild(http.clone(), Arc::clone(&cache), g.guild.id));
                     }
                     Event::Resumed => println!("[shard {}] RESUMED", shard.number()),
                     Event::MessageDelete(d) => log_delete(shard.number(), &d),
@@ -312,6 +318,25 @@ fn on_text_command(
             eprintln!("reply failed: {e}");
         }
     });
+}
+
+/// History from before the start: the gateway sends channels, roles, …
+/// in `GUILD_CREATE` but never old messages, so load them over REST.
+async fn backfill_guild(
+    http: Client,
+    cache: Arc<InMemoryCache>,
+    guild: Id<cordex::model::id::marker::GuildMarker>,
+) {
+    let report = backfill::guild_messages(&http, &cache, guild, BackfillOptions::new()).await;
+    println!(
+        "backfill guild {guild}: {} messages from {} channels, {} skipped",
+        report.messages,
+        report.channels,
+        report.skipped.len()
+    );
+    for (channel, err) in &report.skipped {
+        println!("  skipped channel {channel}: {err}");
+    }
 }
 
 /// Snowflake → creation time; shows how soon after sending a message
