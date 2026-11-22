@@ -1,10 +1,14 @@
 //! Guilds (resources/guild.mdx, "Guild Object").
 
+pub mod integration;
 pub mod member;
 pub mod role;
 
 use serde::{Deserialize, Serialize};
 
+pub use integration::{
+    Integration, IntegrationAccount, IntegrationExpireBehavior, IntegrationType,
+};
 pub use member::{Member, MemberFlags};
 pub use role::{Role, RoleColors, RoleFlags, RoleTags};
 

@@ -13,7 +13,9 @@ use crate::serde_util::{bitflags_serde_int, int_enum};
 pub struct User {
     /// User ID.
     pub id: Id<UserMarker>,
-    /// Username, not unique across the platform.
+    /// Username, not unique across the platform. Empty on some partial
+    /// users (presence updates send only `id`).
+    #[serde(default)]
     pub username: Box<str>,
     /// Discord tag (`"0"` for users on the new username system; empty if a
     /// partial user omits it).

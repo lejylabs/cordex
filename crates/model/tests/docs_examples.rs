@@ -353,3 +353,53 @@ fn shared_client_theme() {
     assert_eq!(theme.colors.len(), 5);
     assert_eq!(theme.base_theme, Some(drs_model::message::BaseTheme::Dark));
 }
+
+#[test]
+fn stage_instance() {
+    use drs_model::stage::{StageInstance, StagePrivacyLevel};
+
+    let stage: StageInstance = round_trip(include_str!("fixtures/stage_instance.json"));
+    assert_eq!(stage.privacy_level, StagePrivacyLevel::Public);
+    assert_eq!(&*stage.topic, "Testing Testing, 123");
+    assert!(stage.guild_scheduled_event_id.is_some());
+}
+
+#[test]
+fn soundboard() {
+    use drs_model::soundboard::SoundboardSound;
+
+    let default: SoundboardSound = round_trip(include_str!("fixtures/soundboard_default.json"));
+    assert_eq!(&*default.name, "quack");
+    assert_eq!(default.emoji_name.as_deref(), Some("🦆"));
+    assert!(default.guild_id.is_none());
+
+    let guild: SoundboardSound = round_trip(include_str!("fixtures/soundboard_guild.json"));
+    assert_eq!(&*guild.name, "Yay");
+    assert!(guild.guild_id.is_some());
+}
+
+#[test]
+fn presence_activity() {
+    use drs_model::gateway::presence::{ActivityType, PresenceActivity};
+
+    let simple: PresenceActivity = round_trip(include_str!("fixtures/activity.json"));
+    assert_eq!(simple.kind, ActivityType::Streaming);
+    assert_eq!(&*simple.name, "Twitch");
+
+    let rich: PresenceActivity = round_trip(include_str!("fixtures/activity_rich.json"));
+    assert_eq!(rich.kind, ActivityType::Playing);
+    assert_eq!(rich.party.as_ref().unwrap().size, Some([2, 2]));
+    assert!(!format!("{rich:?}").contains("025ed05c71f639de"));
+}
+
+#[test]
+fn integration_partial() {
+    use drs_model::guild::{Integration, IntegrationType};
+
+    let integration: Integration = round_trip(include_str!("fixtures/integration_partial.json"));
+    assert_eq!(integration.kind, IntegrationType::Twitch);
+    assert_eq!(
+        integration.account.as_ref().unwrap().name.as_ref(),
+        "twitchusername"
+    );
+}

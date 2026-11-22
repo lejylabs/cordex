@@ -8,18 +8,25 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
 use crate::application::Application;
+use crate::audit_log::AuditLogEntry;
 use crate::auto_moderation::{AutoModerationActionExecution, AutoModerationRule};
 use crate::channel::{Channel, ThreadMember};
 use crate::command::GuildCommandPermissions;
 use crate::emoji::Emoji;
 use crate::entitlement::Entitlement;
+use crate::gateway::presence::PresenceUpdate;
 use crate::guild::{Guild, Member, Role, UnavailableGuild};
 use crate::id::Id;
 use crate::id::marker::{ChannelMarker, GuildMarker, MessageMarker, RoleMarker, UserMarker};
 use crate::interaction::Interaction;
 use crate::invite::{InviteCreate, InviteDelete};
 use crate::message::{Message, ReactionType};
+use crate::poll::MessagePollVote;
 use crate::scheduled_event::{GuildScheduledEventUserAdd, ScheduledEvent};
+use crate::soundboard::{
+    GuildSoundboardSoundDelete, SoundboardSound, SoundboardSounds, VoiceChannelEffectSend,
+};
+use crate::stage::StageInstance;
 use crate::sticker::Sticker;
 use crate::timestamp::Timestamp;
 use crate::user::User;
@@ -143,6 +150,34 @@ pub enum Event {
     InviteCreate(Box<InviteCreate>),
     /// `INVITE_DELETE`.
     InviteDelete(InviteDelete),
+    /// `STAGE_INSTANCE_CREATE`.
+    StageInstanceCreate(Box<StageInstance>),
+    /// `STAGE_INSTANCE_UPDATE`.
+    StageInstanceUpdate(Box<StageInstance>),
+    /// `STAGE_INSTANCE_DELETE`.
+    StageInstanceDelete(Box<StageInstance>),
+    /// `GUILD_SOUNDBOARD_SOUND_CREATE`.
+    GuildSoundboardSoundCreate(Box<SoundboardSound>),
+    /// `GUILD_SOUNDBOARD_SOUND_UPDATE`.
+    GuildSoundboardSoundUpdate(Box<SoundboardSound>),
+    /// `GUILD_SOUNDBOARD_SOUND_DELETE`.
+    GuildSoundboardSoundDelete(GuildSoundboardSoundDelete),
+    /// `GUILD_SOUNDBOARD_SOUNDS_UPDATE`.
+    GuildSoundboardSoundsUpdate(Box<SoundboardSounds>),
+    /// `SOUNDBOARD_SOUNDS` (response to Request Soundboard Sounds).
+    SoundboardSounds(Box<SoundboardSounds>),
+    /// `PRESENCE_UPDATE`.
+    PresenceUpdate(Box<PresenceUpdate>),
+    /// `TYPING_START`.
+    TypingStart(Box<TypingStart>),
+    /// `GUILD_AUDIT_LOG_ENTRY_CREATE`.
+    GuildAuditLogEntryCreate(Box<AuditLogEntry>),
+    /// `MESSAGE_POLL_VOTE_ADD`.
+    MessagePollVoteAdd(MessagePollVote),
+    /// `MESSAGE_POLL_VOTE_REMOVE`.
+    MessagePollVoteRemove(MessagePollVote),
+    /// `VOICE_CHANNEL_EFFECT_SEND`.
+    VoiceChannelEffectSend(Box<VoiceChannelEffectSend>),
     /// An event without a typed variant (yet).
     Unknown(UnknownEvent),
 }
@@ -235,6 +270,15 @@ pub struct AvailableGuild {
     /// Scheduled events.
     #[serde(default)]
     pub guild_scheduled_events: Vec<ScheduledEvent>,
+    /// Presences (partial; non-offline only above the large threshold).
+    #[serde(default)]
+    pub presences: Vec<PresenceUpdate>,
+    /// Live stages.
+    #[serde(default)]
+    pub stage_instances: Vec<StageInstance>,
+    /// Guild soundboard sounds.
+    #[serde(default)]
+    pub soundboard_sounds: Vec<SoundboardSound>,
 }
 
 /// `GUILD_BAN_ADD` / `GUILD_BAN_REMOVE` payload.
@@ -521,6 +565,22 @@ pub struct WebhooksUpdate {
     pub channel_id: Id<ChannelMarker>,
 }
 
+/// `TYPING_START` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct TypingStart {
+    /// Channel.
+    pub channel_id: Id<ChannelMarker>,
+    /// Guild.
+    pub guild_id: Option<Id<GuildMarker>>,
+    /// User who started typing.
+    pub user_id: Id<UserMarker>,
+    /// Unix time in seconds.
+    pub timestamp: u64,
+    /// Member (guilds).
+    pub member: Option<Member>,
+}
+
 /// Raw form of an event without a typed variant.
 #[derive(Debug, Clone)]
 pub struct UnknownEvent {
@@ -630,6 +690,20 @@ impl Event {
             }
             "INVITE_CREATE" => parse(data).map(Self::InviteCreate),
             "INVITE_DELETE" => parse(data).map(Self::InviteDelete),
+            "STAGE_INSTANCE_CREATE" => parse(data).map(Self::StageInstanceCreate),
+            "STAGE_INSTANCE_UPDATE" => parse(data).map(Self::StageInstanceUpdate),
+            "STAGE_INSTANCE_DELETE" => parse(data).map(Self::StageInstanceDelete),
+            "GUILD_SOUNDBOARD_SOUND_CREATE" => parse(data).map(Self::GuildSoundboardSoundCreate),
+            "GUILD_SOUNDBOARD_SOUND_UPDATE" => parse(data).map(Self::GuildSoundboardSoundUpdate),
+            "GUILD_SOUNDBOARD_SOUND_DELETE" => parse(data).map(Self::GuildSoundboardSoundDelete),
+            "GUILD_SOUNDBOARD_SOUNDS_UPDATE" => parse(data).map(Self::GuildSoundboardSoundsUpdate),
+            "SOUNDBOARD_SOUNDS" => parse(data).map(Self::SoundboardSounds),
+            "PRESENCE_UPDATE" => parse(data).map(Self::PresenceUpdate),
+            "TYPING_START" => parse(data).map(Self::TypingStart),
+            "GUILD_AUDIT_LOG_ENTRY_CREATE" => parse(data).map(Self::GuildAuditLogEntryCreate),
+            "MESSAGE_POLL_VOTE_ADD" => parse(data).map(Self::MessagePollVoteAdd),
+            "MESSAGE_POLL_VOTE_REMOVE" => parse(data).map(Self::MessagePollVoteRemove),
+            "VOICE_CHANNEL_EFFECT_SEND" => parse(data).map(Self::VoiceChannelEffectSend),
             _ => return None,
         };
         Some(event)
@@ -695,6 +769,20 @@ impl Event {
             Self::GuildScheduledEventUserRemove(_) => "GUILD_SCHEDULED_EVENT_USER_REMOVE",
             Self::InviteCreate(_) => "INVITE_CREATE",
             Self::InviteDelete(_) => "INVITE_DELETE",
+            Self::StageInstanceCreate(_) => "STAGE_INSTANCE_CREATE",
+            Self::StageInstanceUpdate(_) => "STAGE_INSTANCE_UPDATE",
+            Self::StageInstanceDelete(_) => "STAGE_INSTANCE_DELETE",
+            Self::GuildSoundboardSoundCreate(_) => "GUILD_SOUNDBOARD_SOUND_CREATE",
+            Self::GuildSoundboardSoundUpdate(_) => "GUILD_SOUNDBOARD_SOUND_UPDATE",
+            Self::GuildSoundboardSoundDelete(_) => "GUILD_SOUNDBOARD_SOUND_DELETE",
+            Self::GuildSoundboardSoundsUpdate(_) => "GUILD_SOUNDBOARD_SOUNDS_UPDATE",
+            Self::SoundboardSounds(_) => "SOUNDBOARD_SOUNDS",
+            Self::PresenceUpdate(_) => "PRESENCE_UPDATE",
+            Self::TypingStart(_) => "TYPING_START",
+            Self::GuildAuditLogEntryCreate(_) => "GUILD_AUDIT_LOG_ENTRY_CREATE",
+            Self::MessagePollVoteAdd(_) => "MESSAGE_POLL_VOTE_ADD",
+            Self::MessagePollVoteRemove(_) => "MESSAGE_POLL_VOTE_REMOVE",
+            Self::VoiceChannelEffectSend(_) => "VOICE_CHANNEL_EFFECT_SEND",
             Self::Unknown(event) => &event.name,
         }
     }
@@ -799,6 +887,33 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(add, Event::GuildScheduledEventUserAdd(_)));
+    }
+
+    #[test]
+    fn poll_vote_and_typing() {
+        let vote = Event::from_dispatch(
+            "MESSAGE_POLL_VOTE_ADD",
+            Some(
+                &RawValue::from_string(
+                    r#"{"user_id":"1","channel_id":"2","message_id":"3","answer_id":1}"#.into(),
+                )
+                .unwrap(),
+            ),
+        )
+        .unwrap();
+        assert!(matches!(vote, Event::MessagePollVoteAdd(v) if v.answer_id == 1));
+
+        let typing = Event::from_dispatch(
+            "TYPING_START",
+            Some(
+                &RawValue::from_string(
+                    r#"{"channel_id":"1","user_id":"2","timestamp":1578056622}"#.into(),
+                )
+                .unwrap(),
+            ),
+        )
+        .unwrap();
+        assert!(matches!(typing, Event::TypingStart(_)));
     }
 
     #[test]

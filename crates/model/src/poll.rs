@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::emoji::Emoji;
+use crate::id::Id;
+use crate::id::marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker};
 use crate::serde_util::int_enum;
 use crate::timestamp::Timestamp;
 
@@ -120,6 +122,22 @@ pub struct PollCreate {
 pub struct PollCreateAnswer {
     /// Answer content.
     pub poll_media: PollMedia,
+}
+
+/// `MESSAGE_POLL_VOTE_ADD` / `MESSAGE_POLL_VOTE_REMOVE` payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct MessagePollVote {
+    /// Voter.
+    pub user_id: Id<UserMarker>,
+    /// Channel.
+    pub channel_id: Id<ChannelMarker>,
+    /// Message with the poll.
+    pub message_id: Id<MessageMarker>,
+    /// Guild.
+    pub guild_id: Option<Id<GuildMarker>>,
+    /// Answer (starts at 1).
+    pub answer_id: u32,
 }
 
 impl PollCreate {

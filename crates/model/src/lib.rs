@@ -7,6 +7,7 @@
 //! developer documentation wins over every other source).
 
 pub mod application;
+pub mod audit_log;
 pub mod auto_moderation;
 pub mod channel;
 pub mod command;
@@ -24,6 +25,8 @@ pub mod message;
 pub mod permissions;
 pub mod poll;
 pub mod scheduled_event;
+pub mod soundboard;
+pub mod stage;
 pub mod sticker;
 pub mod timestamp;
 pub mod token;
@@ -43,6 +46,8 @@ pub use invite::Invite;
 pub use message::Message;
 pub use permissions::Permissions;
 pub use scheduled_event::ScheduledEvent;
+pub use soundboard::SoundboardSound;
+pub use stage::StageInstance;
 pub use sticker::Sticker;
 pub use timestamp::Timestamp;
 pub use token::{InteractionToken, Token, WebhookToken};
