@@ -81,6 +81,46 @@ impl<'de> Deserialize<'de> for InteractionToken {
     }
 }
 
+/// Incoming-webhook token. `Debug` and `Display` never print the secret.
+#[derive(Clone, PartialEq, Eq)]
+pub struct WebhookToken(Box<str>);
+
+impl WebhookToken {
+    /// Wraps a raw webhook token.
+    pub fn new(raw: impl Into<Box<str>>) -> Self {
+        Self(raw.into())
+    }
+
+    /// The raw secret. Never log the result.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for WebhookToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("WebhookToken(***)")
+    }
+}
+
+impl fmt::Display for WebhookToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("***")
+    }
+}
+
+impl Serialize for WebhookToken {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for WebhookToken {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Box::<str>::deserialize(deserializer).map(Self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +145,18 @@ mod tests {
         let back: InteractionToken = serde_json::from_str(&json).unwrap();
         assert_eq!(back.expose(), "A_UNIQUE_TOKEN");
         assert!(!format!("{back:?}").contains("UNIQUE"));
+    }
+
+    #[test]
+    fn webhook_token_never_prints_the_secret() {
+        let token = WebhookToken::new("webhook-secret");
+        assert_eq!(token.expose(), "webhook-secret");
+        assert_eq!(format!("{token:?}"), "WebhookToken(***)");
+        assert_eq!(format!("{token}"), "***");
+        let json = serde_json::to_string(&token).unwrap();
+        assert_eq!(json, r#""webhook-secret""#);
+        let back: WebhookToken = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.expose(), "webhook-secret");
+        assert!(!format!("{back:?}").contains("webhook-secret"));
     }
 }

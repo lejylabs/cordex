@@ -288,6 +288,58 @@ fn voice_state() {
 }
 
 #[test]
+fn invite() {
+    use drs_model::invite::{Invite, InviteTargetType, InviteType};
+
+    let invite: Invite = round_trip(include_str!("fixtures/invite.json"));
+    assert_eq!(invite.kind, InviteType::Guild);
+    assert_eq!(&*invite.code, "0vCdhLbwjZZTWZLD");
+    assert_eq!(invite.target_type, Some(InviteTargetType::Stream));
+    assert_eq!(
+        invite.guild.as_ref().unwrap().name.as_ref(),
+        "CS:GO Fraggers Only"
+    );
+    assert!(invite.expires_at.is_none());
+}
+
+#[test]
+fn auto_moderation_rule() {
+    use drs_model::auto_moderation::{
+        AutoModerationActionType, AutoModerationEventType, AutoModerationRule,
+        AutoModerationTriggerType,
+    };
+
+    let rule: AutoModerationRule = round_trip(include_str!("fixtures/auto_moderation_rule.json"));
+    assert_eq!(rule.trigger_type, AutoModerationTriggerType::Keyword);
+    assert_eq!(rule.event_type, AutoModerationEventType::MessageSend);
+    assert_eq!(rule.actions.len(), 3);
+    assert_eq!(rule.actions[0].kind, AutoModerationActionType::BlockMessage);
+    assert_eq!(rule.trigger_metadata.keyword_filter.len(), 4);
+    assert!(rule.enabled);
+}
+
+#[test]
+fn webhooks() {
+    use drs_model::webhook::{Webhook, WebhookType};
+
+    let incoming: Webhook = round_trip(include_str!("fixtures/webhook_incoming.json"));
+    assert_eq!(incoming.kind, WebhookType::Incoming);
+    assert!(incoming.token.is_some());
+    assert!(!format!("{incoming:?}").contains("3d89bb7572e0fb30"));
+
+    let follower: Webhook = round_trip(include_str!("fixtures/webhook_follower.json"));
+    assert_eq!(follower.kind, WebhookType::ChannelFollower);
+    assert_eq!(
+        follower.source_channel.as_ref().unwrap().name.as_deref(),
+        Some("announcements")
+    );
+
+    let app: Webhook = round_trip(include_str!("fixtures/webhook_application.json"));
+    assert_eq!(app.kind, WebhookType::Application);
+    assert!(app.channel_id.is_none() && app.guild_id.is_none());
+}
+
+#[test]
 fn shared_client_theme() {
     use drs_model::message::SharedClientTheme;
 

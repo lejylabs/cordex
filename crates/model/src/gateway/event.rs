@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 
 use crate::application::Application;
+use crate::auto_moderation::{AutoModerationActionExecution, AutoModerationRule};
 use crate::channel::{Channel, ThreadMember};
 use crate::command::GuildCommandPermissions;
 use crate::emoji::Emoji;
@@ -16,7 +17,9 @@ use crate::guild::{Guild, Member, Role, UnavailableGuild};
 use crate::id::Id;
 use crate::id::marker::{ChannelMarker, GuildMarker, MessageMarker, RoleMarker, UserMarker};
 use crate::interaction::Interaction;
+use crate::invite::{InviteCreate, InviteDelete};
 use crate::message::{Message, ReactionType};
+use crate::scheduled_event::{GuildScheduledEventUserAdd, ScheduledEvent};
 use crate::sticker::Sticker;
 use crate::timestamp::Timestamp;
 use crate::user::User;
@@ -118,6 +121,28 @@ pub enum Event {
     UserUpdate(Box<User>),
     /// `WEBHOOKS_UPDATE`.
     WebhooksUpdate(WebhooksUpdate),
+    /// `AUTO_MODERATION_RULE_CREATE`.
+    AutoModerationRuleCreate(Box<AutoModerationRule>),
+    /// `AUTO_MODERATION_RULE_UPDATE`.
+    AutoModerationRuleUpdate(Box<AutoModerationRule>),
+    /// `AUTO_MODERATION_RULE_DELETE`.
+    AutoModerationRuleDelete(Box<AutoModerationRule>),
+    /// `AUTO_MODERATION_ACTION_EXECUTION`.
+    AutoModerationActionExecution(Box<AutoModerationActionExecution>),
+    /// `GUILD_SCHEDULED_EVENT_CREATE`.
+    GuildScheduledEventCreate(Box<ScheduledEvent>),
+    /// `GUILD_SCHEDULED_EVENT_UPDATE`.
+    GuildScheduledEventUpdate(Box<ScheduledEvent>),
+    /// `GUILD_SCHEDULED_EVENT_DELETE`.
+    GuildScheduledEventDelete(Box<ScheduledEvent>),
+    /// `GUILD_SCHEDULED_EVENT_USER_ADD`.
+    GuildScheduledEventUserAdd(GuildScheduledEventUserAdd),
+    /// `GUILD_SCHEDULED_EVENT_USER_REMOVE`.
+    GuildScheduledEventUserRemove(GuildScheduledEventUserAdd),
+    /// `INVITE_CREATE`.
+    InviteCreate(Box<InviteCreate>),
+    /// `INVITE_DELETE`.
+    InviteDelete(InviteDelete),
     /// An event without a typed variant (yet).
     Unknown(UnknownEvent),
 }
@@ -207,6 +232,9 @@ pub struct AvailableGuild {
     /// Active threads the bot can see.
     #[serde(default)]
     pub threads: Vec<Channel>,
+    /// Scheduled events.
+    #[serde(default)]
+    pub guild_scheduled_events: Vec<ScheduledEvent>,
 }
 
 /// `GUILD_BAN_ADD` / `GUILD_BAN_REMOVE` payload.
@@ -587,6 +615,21 @@ impl Event {
             "ENTITLEMENT_DELETE" => parse(data).map(Self::EntitlementDelete),
             "USER_UPDATE" => parse(data).map(Self::UserUpdate),
             "WEBHOOKS_UPDATE" => parse(data).map(Self::WebhooksUpdate),
+            "AUTO_MODERATION_RULE_CREATE" => parse(data).map(Self::AutoModerationRuleCreate),
+            "AUTO_MODERATION_RULE_UPDATE" => parse(data).map(Self::AutoModerationRuleUpdate),
+            "AUTO_MODERATION_RULE_DELETE" => parse(data).map(Self::AutoModerationRuleDelete),
+            "AUTO_MODERATION_ACTION_EXECUTION" => {
+                parse(data).map(Self::AutoModerationActionExecution)
+            }
+            "GUILD_SCHEDULED_EVENT_CREATE" => parse(data).map(Self::GuildScheduledEventCreate),
+            "GUILD_SCHEDULED_EVENT_UPDATE" => parse(data).map(Self::GuildScheduledEventUpdate),
+            "GUILD_SCHEDULED_EVENT_DELETE" => parse(data).map(Self::GuildScheduledEventDelete),
+            "GUILD_SCHEDULED_EVENT_USER_ADD" => parse(data).map(Self::GuildScheduledEventUserAdd),
+            "GUILD_SCHEDULED_EVENT_USER_REMOVE" => {
+                parse(data).map(Self::GuildScheduledEventUserRemove)
+            }
+            "INVITE_CREATE" => parse(data).map(Self::InviteCreate),
+            "INVITE_DELETE" => parse(data).map(Self::InviteDelete),
             _ => return None,
         };
         Some(event)
@@ -641,6 +684,17 @@ impl Event {
             Self::EntitlementDelete(_) => "ENTITLEMENT_DELETE",
             Self::UserUpdate(_) => "USER_UPDATE",
             Self::WebhooksUpdate(_) => "WEBHOOKS_UPDATE",
+            Self::AutoModerationRuleCreate(_) => "AUTO_MODERATION_RULE_CREATE",
+            Self::AutoModerationRuleUpdate(_) => "AUTO_MODERATION_RULE_UPDATE",
+            Self::AutoModerationRuleDelete(_) => "AUTO_MODERATION_RULE_DELETE",
+            Self::AutoModerationActionExecution(_) => "AUTO_MODERATION_ACTION_EXECUTION",
+            Self::GuildScheduledEventCreate(_) => "GUILD_SCHEDULED_EVENT_CREATE",
+            Self::GuildScheduledEventUpdate(_) => "GUILD_SCHEDULED_EVENT_UPDATE",
+            Self::GuildScheduledEventDelete(_) => "GUILD_SCHEDULED_EVENT_DELETE",
+            Self::GuildScheduledEventUserAdd(_) => "GUILD_SCHEDULED_EVENT_USER_ADD",
+            Self::GuildScheduledEventUserRemove(_) => "GUILD_SCHEDULED_EVENT_USER_REMOVE",
+            Self::InviteCreate(_) => "INVITE_CREATE",
+            Self::InviteDelete(_) => "INVITE_DELETE",
             Self::Unknown(event) => &event.name,
         }
     }
@@ -723,6 +777,28 @@ mod tests {
         assert!(msg.member.is_some());
         assert!(msg.mentions[0].member.is_some());
         assert_eq!(msg.mentions[0].user.id.get(), 1);
+    }
+
+    #[test]
+    fn invite_delete_and_scheduled_event_user() {
+        let deleted = Event::from_dispatch(
+            "INVITE_DELETE",
+            Some(&RawValue::from_string(r#"{"channel_id":"1","code":"abc"}"#.into()).unwrap()),
+        )
+        .unwrap();
+        assert!(matches!(deleted, Event::InviteDelete(inv) if &*inv.code == "abc"));
+
+        let add = Event::from_dispatch(
+            "GUILD_SCHEDULED_EVENT_USER_ADD",
+            Some(
+                &RawValue::from_string(
+                    r#"{"guild_scheduled_event_id":"1","user_id":"2","guild_id":"3"}"#.into(),
+                )
+                .unwrap(),
+            ),
+        )
+        .unwrap();
+        assert!(matches!(add, Event::GuildScheduledEventUserAdd(_)));
     }
 
     #[test]

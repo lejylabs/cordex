@@ -7,6 +7,7 @@
 //! developer documentation wins over every other source).
 
 pub mod application;
+pub mod auto_moderation;
 pub mod channel;
 pub mod command;
 pub mod component;
@@ -18,14 +19,17 @@ pub mod guild;
 pub mod id;
 pub mod image_hash;
 pub mod interaction;
+pub mod invite;
 pub mod message;
 pub mod permissions;
 pub mod poll;
+pub mod scheduled_event;
 pub mod sticker;
 pub mod timestamp;
 pub mod token;
 pub mod user;
 pub mod voice;
+pub mod webhook;
 
 mod serde_util;
 
@@ -35,12 +39,15 @@ pub use error::ParseError;
 pub use guild::{Guild, Member, Role, UnavailableGuild};
 pub use id::Id;
 pub use image_hash::ImageHash;
+pub use invite::Invite;
 pub use message::Message;
 pub use permissions::Permissions;
+pub use scheduled_event::ScheduledEvent;
 pub use sticker::Sticker;
 pub use timestamp::Timestamp;
-pub use token::{InteractionToken, Token};
+pub use token::{InteractionToken, Token, WebhookToken};
 pub use user::User;
+pub use webhook::Webhook;
 
 /// Discord API version this crate models.
 pub const API_VERSION: u8 = 10;

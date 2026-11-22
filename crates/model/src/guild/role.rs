@@ -22,18 +22,24 @@ pub struct Role {
     /// Role colors (gradient with secondary/tertiary color).
     pub colors: Option<RoleColors>,
     /// Whether the role is shown separately in the member list.
+    /// Defaulted: invite `roles` arrays omit this.
+    #[serde(default)]
     pub hoist: bool,
     /// Role icon hash.
     pub icon: Option<ImageHash>,
     /// Role unicode emoji.
     pub unicode_emoji: Option<Box<str>>,
     /// Position; equal positions are sorted by ID.
+    #[serde(default)]
     pub position: i32,
-    /// Permissions.
+    /// Permissions. Defaulted: invite `roles` arrays omit this.
+    #[serde(default)]
     pub permissions: Permissions,
     /// Whether the role is managed by an integration.
+    #[serde(default)]
     pub managed: bool,
     /// Whether the role is mentionable.
+    #[serde(default)]
     pub mentionable: bool,
     /// Tags.
     pub tags: Option<RoleTags>,
