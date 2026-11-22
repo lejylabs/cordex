@@ -1,0 +1,22 @@
+name: Feature request
+description: Missing Discord feature, endpoint or API improvement.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: The use case, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API
+      description: How you would like to write it (code sketch welcome).
+      render: rust
+  - type: input
+    id: docs
+    attributes:
+      label: Discord docs link
+      description: For new endpoints, events or fields.
