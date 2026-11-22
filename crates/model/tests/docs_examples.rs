@@ -175,3 +175,55 @@ fn sticker() {
     // The docs example has escaped surrogate pairs in `tags`.
     assert!(sticker.tags.contains('👋'));
 }
+
+#[test]
+fn message() {
+    use drs_model::message::MessageType;
+    let msg: drs_model::Message = round_trip(include_str!("fixtures/message.json"));
+    assert_eq!(msg.kind, MessageType::Default);
+    assert_eq!(msg.content.as_ref(), "Supa Hot");
+    assert_eq!(msg.reactions[0].count_details.normal, 1);
+    assert!(msg.reactions[0].emoji.is_unicode());
+    assert!(
+        msg.author
+            .avatar
+            .as_ref()
+            .is_some_and(drs_model::ImageHash::is_animated)
+    );
+    assert_eq!(
+        msg.link(),
+        "https://discord.com/channels/@me/290926798999357250/334385199974967042"
+    );
+}
+
+#[test]
+fn crossposted_message() {
+    use drs_model::message::MessageFlags;
+    let msg: drs_model::Message = round_trip(include_str!("fixtures/message_crosspost.json"));
+    assert!(msg.flags.contains(MessageFlags::IS_CROSSPOST));
+    let reference = msg.message_reference.unwrap();
+    assert!(reference.message_id.is_some() && reference.channel_id.is_some());
+}
+
+#[test]
+fn application() {
+    use drs_model::application::Application;
+    let app: Application = round_trip(include_str!("fixtures/application.json"));
+    assert!(!app.name.is_empty());
+    assert!(!app.verify_key.is_empty());
+}
+
+#[test]
+fn shared_client_theme() {
+    use drs_model::message::SharedClientTheme;
+
+    // The docs example wraps the object in its message field name.
+    #[derive(serde::Deserialize, serde::Serialize, PartialEq, Debug)]
+    struct Wrapper {
+        shared_client_theme: SharedClientTheme,
+    }
+    let theme = round_trip::<Wrapper>(include_str!("fixtures/shared_client_theme.json"))
+        .shared_client_theme;
+    assert_eq!(theme.colors.len(), 5);
+    assert_eq!(theme.base_theme, Some(drs_model::message::BaseTheme::Dark));
+}

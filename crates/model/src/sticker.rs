@@ -32,7 +32,7 @@ pub struct Sticker {
     /// Guild that owns the sticker.
     pub guild_id: Option<Id<GuildMarker>>,
     /// User that uploaded the guild sticker.
-    pub user: Option<User>,
+    pub user: Option<Box<User>>,
     /// Sort order within its pack.
     pub sort_value: Option<u32>,
 }
@@ -59,4 +59,16 @@ int_enum! {
         /// GIF.
         Gif = 4,
     }
+}
+
+/// Sticker as sent in messages (resources/sticker.mdx, "Sticker Item Object").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct StickerItem {
+    /// Sticker ID.
+    pub id: Id<StickerMarker>,
+    /// Name.
+    pub name: Box<str>,
+    /// Format type.
+    pub format_type: StickerFormatType,
 }

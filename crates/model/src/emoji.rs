@@ -21,7 +21,7 @@ pub struct Emoji {
     #[serde(default)]
     pub roles: Vec<Id<RoleMarker>>,
     /// User that created this emoji.
-    pub user: Option<User>,
+    pub user: Option<Box<User>>,
     /// Whether the emoji must be wrapped in colons.
     pub require_colons: Option<bool>,
     /// Whether the emoji is managed by an integration.

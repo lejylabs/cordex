@@ -38,8 +38,9 @@ pub struct Guild {
     pub discovery_splash: Option<ImageHash>,
     /// Whether the current user owns the guild (`GET /users/@me/guilds`).
     pub owner: Option<bool>,
-    /// Owner ID.
-    pub owner_id: Id<UserMarker>,
+    /// Owner ID; missing in partial guilds (`GET /users/@me/guilds`,
+    /// application and invite objects).
+    pub owner_id: Option<Id<UserMarker>>,
     /// Current user's permissions (`GET /users/@me/guilds`).
     pub permissions: Option<Permissions>,
     /// Deprecated voice region.

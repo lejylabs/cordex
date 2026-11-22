@@ -148,6 +148,25 @@ macro_rules! str_enum {
 
 pub(crate) use {bitflags_serde_int, bitflags_serde_string, int_enum, str_enum};
 
+/// Optional snowflake where Discord uses `"0"` for "none" (e.g. the guild
+/// key of `authorizing_integration_owners` in bot DMs).
+pub(crate) fn id_or_zero<'de, D: de::Deserializer<'de>, T>(
+    deserializer: D,
+) -> Result<Option<crate::id::Id<T>>, D::Error> {
+    let raw: Option<crate::id::Id<T>> =
+        Option::<RawId>::deserialize(deserializer)?.and_then(|raw| crate::id::Id::new(raw.0));
+    Ok(raw)
+}
+
+/// Snowflake value that may be zero.
+struct RawId(u64);
+
+impl<'de> Deserialize<'de> for RawId {
+    fn deserialize<D: de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        u64_from_str_or_int(deserializer, "a snowflake").map(RawId)
+    }
+}
+
 /// Fields Discord documents with type `null` whose *presence* means `true`
 /// (e.g. role tags `premium_subscriber`). Use with
 /// `#[serde(default, deserialize_with = "present", serialize_with = "null_if_true",

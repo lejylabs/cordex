@@ -8,13 +8,17 @@
 
 pub mod application;
 pub mod channel;
+pub mod component;
 pub mod emoji;
 pub mod error;
 pub mod gateway;
 pub mod guild;
 pub mod id;
 pub mod image_hash;
+pub mod interaction;
+pub mod message;
 pub mod permissions;
+pub mod poll;
 pub mod sticker;
 pub mod timestamp;
 pub mod token;
@@ -28,6 +32,7 @@ pub use error::ParseError;
 pub use guild::{Guild, Member, Role, UnavailableGuild};
 pub use id::Id;
 pub use image_hash::ImageHash;
+pub use message::Message;
 pub use permissions::Permissions;
 pub use sticker::Sticker;
 pub use timestamp::Timestamp;

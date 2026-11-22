@@ -15,7 +15,9 @@ pub struct User {
     pub id: Id<UserMarker>,
     /// Username, not unique across the platform.
     pub username: Box<str>,
-    /// Discord tag (`"0"` for users on the new username system).
+    /// Discord tag (`"0"` for users on the new username system; empty if a
+    /// partial user omits it).
+    #[serde(default)]
     pub discriminator: Box<str>,
     /// Display name, if set.
     pub global_name: Option<Box<str>>,
