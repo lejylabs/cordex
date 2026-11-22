@@ -4,6 +4,8 @@ Thanks for helping! Bug reports, docs fixes and code are all welcome.
 
 ## Before you start
 
+- **Questions and quick help**: ask on the [cordex Discord server](https://discord.gg/Xj9nRKyKNV).
+
 - **Bugs**: open an issue with the bug template (version, what you did, what
   happened, logs with tokens removed).
 - **Features or API changes**: open an issue first so we can agree on the

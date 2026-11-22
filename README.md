@@ -5,6 +5,8 @@ Independent, fast Discord bot API library for Rust on Tokio. No voice.
 > **Beta.** The API can still change between `0.x` releases. See
 > `CHANGELOG.md` for what is in each release.
 
+Questions, feedback or help: join the [cordex Discord server](https://discord.gg/Xj9nRKyKNV).
+
 - **Gateway**: zlib-stream compression, heartbeat with zombie detection,
   resume/reconnect, close-code handling, outbound rate limit, event filter,
   backpressure, panic isolation per shard.
@@ -105,6 +107,12 @@ The library sets no global allocator; applications may use `mimalloc`.
 Rust 1.95 or newer (MSRV, edition 2024), Tokio. Raising the MSRV counts as a
 minor (`0.x`) change and is noted in the changelog. TLS uses rustls with aws-lc-rs
 and the platform certificate verifier.
+
+## Community
+
+- [Discord server](https://discord.gg/Xj9nRKyKNV) for questions, help and showing what you built.
+- Bugs and feature requests: [GitHub issues](https://github.com/lejylabs/cordex/issues).
+- Contributions: see [CONTRIBUTING.md](https://github.com/lejylabs/cordex/blob/master/CONTRIBUTING.md).
 
 ## License
 
