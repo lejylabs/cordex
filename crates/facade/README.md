@@ -100,7 +100,8 @@ The library sets no global allocator; applications may use `mimalloc`.
 
 ## Requirements
 
-Rust 1.100 or newer (edition 2024), Tokio. TLS uses rustls with aws-lc-rs
+Rust 1.95 or newer (MSRV, edition 2024), Tokio. Raising the MSRV counts as a
+minor (`0.x`) change and is noted in the changelog. TLS uses rustls with aws-lc-rs
 and the platform certificate verifier.
 
 ## License
