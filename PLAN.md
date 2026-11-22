@@ -155,12 +155,12 @@ Dependency rules (same as `zeny/backend-rs`):
 ├── .cargo/config.toml         # global-min-publish-age = "3 days", alias xtask (as in backend-rs)
 ├── .github/workflows/         # prepared for later; GitHub Actions is currently not usable (§18)
 ├── crates/
-│   ├── <lib>/               # facade: re-exports, Client, prelude
-│   ├── <lib>-model/         # models, snowflakes, flags, gateway payloads
-│   ├── <lib>-http/          # REST client, routes, rate limiter
-│   ├── <lib>-gateway/       # shard, compression, identify queue, shard manager
-│   ├── <lib>-cache/         # optional in-memory cache
-│   └── <lib>-interactions/  # builders, HTTP interaction server, signature verification
+│   ├── facade/               # facade (package `<lib>`): re-exports, Client, prelude
+│   ├── model/                # package `<lib>-model`: models, snowflakes, flags, gateway payloads
+│   ├── http/                 # package `<lib>-http`: REST client, routes, rate limiter
+│   ├── gateway/              # package `<lib>-gateway`: shard, compression, identify queue, shard manager
+│   ├── cache/                # package `<lib>-cache`: optional in-memory cache
+│   └── interactions/         # package `<lib>-interactions`: builders, HTTP interaction server, signature verification
 ├── xtask/                     # cargo xtask check | layout-check | bench | release (§18.1)
 ├── examples/
 ├── benches/
@@ -857,10 +857,10 @@ Every phase has exit criteria. A phase is done only when its criteria are met.
 
 ## Phase 0 – Setup (blocker for everything else)
 
-- [ ] **Decide the project name (D1)** and replace `<lib>` everywhere.
-- [ ] Rename `cargo.toml` → `Cargo.toml`, turn it into a virtual workspace manifest (`members = ["crates/*", "xtask"]`), remove the root `[package]`; keep lints and profiles (already 1:1 from the backend).
-- [ ] Copy from `zeny/backend-rs` and adapt: `rust-toolchain.toml`, `clippy.toml`, `deny.toml` (for a library additionally drop `[licenses.private]` once the crates get a license field), `.cargo/config.toml` (3-day rule, `xtask` alias).
-- [ ] Create all crates, `xtask` (`check`, `layout-check`, `features`, `bench`), `[workspace.dependencies]` with the newest versions the 3-day rule allows.
+- [ ] **Decide the project name (D1)** and replace `<lib>` everywhere. Working name in code until then: `drs` (one search-and-replace).
+- [x] Rename `cargo.toml` → `Cargo.toml`, turn it into a virtual workspace manifest (`members = ["crates/*", "xtask"]`), remove the root `[package]`; keep lints and profiles (already 1:1 from the backend).
+- [x] Copy from `zeny/backend-rs` and adapt: `rust-toolchain.toml`, `clippy.toml`, `deny.toml` (for a library additionally drop `[licenses.private]` once the crates get a license field), `.cargo/config.toml` (3-day rule, `xtask` alias).
+- [x] Create all crates, `xtask` (`check`, `layout-check`; `features` and `bench` follow with the phases that need them), `[workspace.dependencies]` with the newest versions the 3-day rule allows.
 - [ ] Licenses, `SECURITY.md`, README, `.github/workflows/` prepared for later.
 - [ ] ZenyBot inventory from the C++ bot (§2).
 

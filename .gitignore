@@ -1,0 +1,25 @@
+# Build output
+/target
+
+# Secrets (test bot token etc.); never commit
+.env
+.env.*
+*.env
+
+# Profiling and benchmarks; benches/baseline.json is versioned, local runs are not
+dhat-heap.json
+dhat-*.json
+perf.data
+perf.data.old
+flamegraph*.svg
+/benches/results/
+/criterion/
+
+# Logs and editor leftovers
+*.log
+*.orig
+*.rej
+*.swp
+*~
+.idea/
+.vscode/

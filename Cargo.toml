@@ -1,26 +1,31 @@
-[package]
-name = "Nexcord"
-description = "Independent Discord API library for Rust."
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.100"
-publish = false
-
-[lints]
-workspace = true
+# Virtual workspace. `drs` is a working name (PLAN.md §0 D1), replace it
+# everywhere once the project name is decided.
 
 [workspace]
 resolver = "3"
-members = ["xtask"]
+members = ["crates/*", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.100"
 publish = false
+repository = "https://github.com/lejylabs/discord-rs"
+
+[workspace.dependencies]
+# Internal crates.
+drs-model = { version = "0.1.0", path = "crates/model" }
+drs-http = { version = "0.1.0", path = "crates/http" }
+drs-gateway = { version = "0.1.0", path = "crates/gateway" }
+drs-cache = { version = "0.1.0", path = "crates/cache" }
+drs-interactions = { version = "0.1.0", path = "crates/interactions" }
+# External crates are added per phase (PLAN.md §3): newest version the
+# 3-day rule allows, `default-features = false`, only after approval.
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+missing_docs = "warn"
+unreachable_pub = "warn"
 
 [workspace.lints.clippy]
 # Groups: perf always fails the build, pedantic warns (CI uses -D warnings).
@@ -58,9 +63,6 @@ unwrap_used = "deny"
 expect_used = "deny"
 too_many_arguments = "allow"
 #large_enum_variant = "allow" # We often have large enum variants yet we rarely actually bother with splitting them up.
-
-[dependencies]
-
 
 [profile.dev.package."*"]
 opt-level = 1
