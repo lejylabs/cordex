@@ -23,3 +23,6 @@ http = ["dep:drs-http"]
 gateway = ["dep:drs-gateway"]
 interactions = ["dep:drs-interactions"]
 cache = ["dep:drs-cache"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread"] }

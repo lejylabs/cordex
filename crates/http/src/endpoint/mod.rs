@@ -16,7 +16,7 @@ mod thread;
 mod user;
 mod webhook;
 
-pub use command::CommandPayload;
+pub use command::{CommandBody, CommandPayload};
 pub use message::{CreateMessage, EditMessage, GetChannelMessages};
 pub use webhook::ExecuteWebhook;
 

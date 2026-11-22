@@ -117,6 +117,7 @@ dependencies = [
  "drs-http",
  "drs-interactions",
  "drs-model",
+ "tokio",
 ]
 
 [[package]]
@@ -171,6 +172,13 @@ dependencies = [
 [[package]]
 name = "drs-interactions"
 version = "0.1.0"
+dependencies = [
+ "drs-http",
+ "drs-model",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "drs-model"

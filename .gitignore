@@ -4,6 +4,7 @@
 # Secrets (test bot token etc.); never commit
 .env
 .env.*
+!.env.example
 *.env
 
 # Profiling and benchmarks; benches/baseline.json is versioned, local runs are not

@@ -14,7 +14,7 @@ mod validate;
 
 pub use client::{AuthScheme, Client, ClientBuilder, DEFAULT_BASE_URL, USER_AGENT};
 pub use endpoint::{
-    CommandPayload, CreateMessage, EditMessage, ExecuteWebhook, GetChannelMessages,
+    CommandBody, CommandPayload, CreateMessage, EditMessage, ExecuteWebhook, GetChannelMessages,
 };
 pub use error::{DiscordErrorCode, HttpError, flatten_discord_errors};
 pub use limiter::{InProcessRateLimiter, RateLimitScope, RateLimiter};

@@ -12,6 +12,20 @@ use crate::client::Client;
 use crate::error::HttpError;
 use crate::route::Route;
 
+/// A command body the command endpoints accept: [`CommandPayload`] here, or
+/// the full builder from the interactions crate.
+pub trait CommandBody: Serialize + Send + Sync + 'static {
+    /// Local checks before the request is sent; the message names the
+    /// problem (e.g. `"command name 'Ping' must be lowercase"`).
+    fn check(&self) -> Result<(), Box<str>>;
+}
+
+impl CommandBody for CommandPayload {
+    fn check(&self) -> Result<(), Box<str>> {
+        self.validate()
+    }
+}
+
 /// Body for creating or bulk-overwriting a command.
 #[derive(Clone, Debug, Serialize)]
 pub struct CommandPayload {
@@ -98,20 +112,15 @@ impl CommandPayload {
         self
     }
 
-    fn validate(&self) -> Result<(), HttpError> {
+    fn validate(&self) -> Result<(), Box<str>> {
         let n = self.name.chars().count();
         if !(1..=32).contains(&n) {
-            return Err(HttpError::validation(
-                format!("command name is {n} characters; must be 1–32").into_boxed_str(),
-            ));
+            return Err(format!("command name is {n} characters; must be 1–32").into());
         }
         if self.kind == Some(CommandType::ChatInput) {
             let d = self.description.chars().count();
             if !(1..=100).contains(&d) {
-                return Err(HttpError::validation(
-                    format!("command description is {d} characters; must be 1–100")
-                        .into_boxed_str(),
-                ));
+                return Err(format!("command description is {d} characters; must be 1–100").into());
             }
         }
         Ok(())
@@ -123,7 +132,7 @@ impl Client {
     pub fn bulk_overwrite_global_commands(
         &self,
         application_id: Id<ApplicationMarker>,
-        commands: impl IntoIterator<Item = CommandPayload>,
+        commands: impl IntoIterator<Item = impl CommandBody>,
     ) -> impl Future<Output = Result<Vec<ApplicationCommand>, HttpError>> + Send + 'static {
         let client = self.clone();
         let route = Route::raw("/applications/{application_id}/commands", application_id);
@@ -136,7 +145,7 @@ impl Client {
         &self,
         application_id: Id<ApplicationMarker>,
         guild_id: Id<GuildMarker>,
-        commands: impl IntoIterator<Item = CommandPayload>,
+        commands: impl IntoIterator<Item = impl CommandBody>,
     ) -> impl Future<Output = Result<Vec<ApplicationCommand>, HttpError>> + Send + 'static {
         let client = self.clone();
         let route = Route::raw(
@@ -183,13 +192,107 @@ impl Client {
     }
 }
 
-async fn put_commands(
+async fn put_commands<C: CommandBody>(
     client: Client,
     route: Route,
-    commands: Vec<CommandPayload>,
+    commands: Vec<C>,
 ) -> Result<Vec<ApplicationCommand>, HttpError> {
     for command in &commands {
-        command.validate()?;
+        command.check().map_err(HttpError::validation)?;
     }
     client.put(route).json(&commands)?.send_json().await
+}
+
+async fn send_command(
+    request: crate::RequestBuilder,
+    command: impl CommandBody,
+) -> Result<ApplicationCommand, HttpError> {
+    command.check().map_err(HttpError::validation)?;
+    request.json(&command)?.send_json().await
+}
+
+impl Client {
+    /// `POST /applications/{application_id}/commands` (create or replace by name).
+    pub fn create_global_command(
+        &self,
+        application_id: Id<ApplicationMarker>,
+        command: impl CommandBody,
+    ) -> impl Future<Output = Result<ApplicationCommand, HttpError>> + Send + 'static {
+        let request = self.post(Route::raw(
+            "/applications/{application_id}/commands",
+            application_id,
+        ));
+        send_command(request, command)
+    }
+
+    /// `POST /applications/{application_id}/guilds/{guild_id}/commands`.
+    pub fn create_guild_command(
+        &self,
+        application_id: Id<ApplicationMarker>,
+        guild_id: Id<GuildMarker>,
+        command: impl CommandBody,
+    ) -> impl Future<Output = Result<ApplicationCommand, HttpError>> + Send + 'static {
+        let request = self.post(Route::raw(
+            "/applications/{application_id}/guilds/{guild_id}/commands",
+            (application_id, guild_id),
+        ));
+        send_command(request, command)
+    }
+
+    /// `PATCH /applications/{application_id}/commands/{command_id}` with the
+    /// full new definition.
+    pub fn edit_global_command(
+        &self,
+        application_id: Id<ApplicationMarker>,
+        command_id: Id<CommandMarker>,
+        command: impl CommandBody,
+    ) -> impl Future<Output = Result<ApplicationCommand, HttpError>> + Send + 'static {
+        let request = self.patch(Route::raw(
+            "/applications/{application_id}/commands/{command_id}",
+            (application_id, command_id),
+        ));
+        send_command(request, command)
+    }
+
+    /// `PATCH /applications/{application_id}/guilds/{guild_id}/commands/{command_id}`.
+    pub fn edit_guild_command(
+        &self,
+        application_id: Id<ApplicationMarker>,
+        guild_id: Id<GuildMarker>,
+        command_id: Id<CommandMarker>,
+        command: impl CommandBody,
+    ) -> impl Future<Output = Result<ApplicationCommand, HttpError>> + Send + 'static {
+        let request = self.patch(Route::raw(
+            "/applications/{application_id}/guilds/{guild_id}/commands/{command_id}",
+            (application_id, guild_id, command_id),
+        ));
+        send_command(request, command)
+    }
+
+    /// `DELETE /applications/{application_id}/commands/{command_id}`.
+    pub fn delete_global_command(
+        &self,
+        application_id: Id<ApplicationMarker>,
+        command_id: Id<CommandMarker>,
+    ) -> impl Future<Output = Result<(), HttpError>> + Send + 'static {
+        self.delete(Route::raw(
+            "/applications/{application_id}/commands/{command_id}",
+            (application_id, command_id),
+        ))
+        .send_empty()
+    }
+
+    /// `DELETE /applications/{application_id}/guilds/{guild_id}/commands/{command_id}`.
+    pub fn delete_guild_command(
+        &self,
+        application_id: Id<ApplicationMarker>,
+        guild_id: Id<GuildMarker>,
+        command_id: Id<CommandMarker>,
+    ) -> impl Future<Output = Result<(), HttpError>> + Send + 'static {
+        self.delete(Route::raw(
+            "/applications/{application_id}/guilds/{guild_id}/commands/{command_id}",
+            (application_id, guild_id, command_id),
+        ))
+        .send_empty()
+    }
 }
