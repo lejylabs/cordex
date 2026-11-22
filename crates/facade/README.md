@@ -23,7 +23,7 @@ Independent, fast Discord bot API library for Rust on Tokio. No voice.
 
 ```toml
 [dependencies]
-cordex = "0.1"
+cordex = "0.1.0-beta.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

@@ -4,9 +4,9 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
-## 0.1.0 - unreleased
+## 0.1.0-beta.1 - 2026-11-22
 
-First beta.
+First beta. Rust 1.95 or newer.
 
 - `cordex-model`: typed Discord objects (users, guilds, members, roles,
   channels, threads, messages, embeds, components incl. Components V2,
