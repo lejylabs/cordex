@@ -23,10 +23,10 @@ These decisions are final for v0.1.0. Changing one requires updating this table 
 | D1 | Project / crate name | **Open.** `<lib>` is a placeholder in this plan; all crates will be prefixed `<lib>-`. Must be decided in Phase 0 before any crate is created. Constraint: no "Discord" in the name (Discord brand guidelines). | One name across repo, crates and docs. |
 | D2 | API version | v10 only, constant in `<lib>-model` | One version keeps models and tests manageable. |
 | D3 | HTTP stack | `hyper` 1.x + `hyper-util` + `hyper-rustls` + `http-body-util` | Full control, no hidden middleware. |
-| D4 | TLS | `rustls` with the `aws-lc-rs` provider by default, `ring` as an opt-in feature; root certificates from `webpki-roots` by default, `rustls-native-certs` as a feature | Reproducible builds and no OpenSSL. |
+| D4 | TLS | `rustls` with the `aws-lc-rs` provider and system root certificates via `rustls-platform-verifier`, exactly as in `zeny/backend-rs` | No OpenSSL; same TLS stack as the backend. |
 | D5 | WebSocket | `tokio-websockets` with rustls features | Small, fast and Tokio-native. |
 | D6 | Gateway encoding | JSON only (no ETF) | serde ecosystem; ETF is not worth it for v0.1. |
-| D7 | Gateway compression | Transport `zlib-stream` by default (`flate2`, `zlib-rs` backend), `zstd-stream` behind feature `zstd` | Big bandwidth saving with one inflate context per connection. |
+| D7 | Gateway compression | Transport `zlib-stream` (`flate2` with the pure-Rust `zlib-rs` backend). No zstd: `zstd-sys` is C code. | Big bandwidth saving with one inflate context per connection. |
 | D8 | Event delivery | Pull-based async stream per shard (`Shard::next_event()`) plus an optional fan-in stream in the manager; no callback traits in the core | Explicit backpressure, no hidden task spawning (see §10). |
 | D9 | Unknown data | Every event/model keeps an escape hatch (`Event::Unknown`, unknown enum variants, optional raw JSON) | Discord changes faster than releases. |
 | D10 | Cache | Separate crate, behind feature `cache` in the facade, off by default | Zero cost when unused. |
@@ -104,29 +104,29 @@ Entitlements, SKUs, Subscriptions (monetization), Soundboard, Application Role C
 
 # 3. Technology Stack
 
-Versions are pinned in `[workspace.dependencies]`; `Cargo.lock` is committed. Where `zeny/backend-rs` already uses a crate, the **same major version and feature style** is used, so both projects stay in step (reference versions from its `Cargo.lock`, 2026-11-22, in brackets; at Phase 0 always take the newest version the 3-day rule allows).
+**Source of truth: `[workspace.dependencies]` in `Cargo.toml`** (approved 2026-11-22, newest versions the 3-day rule allowed that day, `default-features = false`, features verified by a test build and `cargo deny`). Crates opt in per phase. Version bumps follow the 3-day rule; new crates only after approval.
 
 | Purpose | Crate | Notes |
 |---|---|---|
 | Runtime | `tokio` [1.54] | features `rt`, `net`, `time`, `sync`, `macros` (tests only). The library MUST work on both `current_thread` and multi-thread runtimes (§16.4). |
 | Cancellation | `tokio-util` | `CancellationToken` for shutdown |
 | HTTP | `hyper` [1.12], `hyper-util` [0.1.21], `http` [1.5], `http-body-util` | client + optional server for interactions; `default-features = false` as in the backend |
-| TLS | `rustls` [0.23], `hyper-rustls`, `aws-lc-rs` provider [as in backend], `webpki-roots` / `rustls-platform-verifier` | see D4; the backend uses `rustls-platform-verifier` (system roots), offered here as feature `native-roots` |
+| TLS | `rustls` 0.23, `hyper-rustls` 0.27, `rustls-platform-verifier` 0.7 | `aws-lc-rs` provider, system roots; see D4 |
 | WebSocket | `tokio-websockets` [0.13] | `default-features = false`, `client`, `fastrand`, `sha1_smol` as in the backend, plus rustls features |
 | Bytes | `bytes` [1.12] | buffer reuse |
 | Serialization | `serde`, `serde_json` [1.0.154] | `serde_json` with `raw_value` (same as backend). `sonic-rs` only if a profile shows JSON as the bottleneck (backend rule). |
 | Time | `time` [0.3] | no `chrono` (backend decision); `serde`, `parsing`, `formatting` features |
 | Locks | `parking_lot` [0.13] | short synchronous critical sections (rate limiter buckets, cache shards); never held across `.await` |
-| Compression | `flate2` (`zlib-rs`) [1.1], `zstd` (optional) | see D7 |
+| Compression | `flate2` 1.1 (`zlib-rs`) | see D7 |
 | Flags | `bitflags` 2.x | permissions, intents, flags |
 | Errors | `thiserror` [2.0] | library errors only; no `anyhow` in library crates |
 | Logging | `tracing` [0.1] | no `log` dependency; `tracing-subscriber` only in examples/tests |
 | Crypto | `ed25519-dalek` | interaction signature verification only; `subtle` for constant-time compares where needed (as in the backend) |
 | Randomness | `fastrand` [2.5] | heartbeat jitter, backoff jitter (already pulled in by tokio-websockets) |
 | Encoding | `percent-encoding` | audit log reason, route parameters |
-| Cache maps | `dashmap` or sharded `parking_lot::RwLock<HashMap>` (cache crate only) | decided by benchmark |
+| Cache maps | sharded `parking_lot::RwLock<HashMap>` (cache crate only) | no `dashmap` (would be a new crate) |
 | Allocator (apps only) | `mimalloc` [0.1.52] | examples, benches and ZenyBot; never in library crates (D17) |
-| Dev | `tokio-test`, `proptest`, `criterion`, `insta` (snapshots), `dhat` (allocation counting), `cargo-fuzz` | |
+| Dev | `tokio` (`test-util`), `proptest` 1.12, `criterion` 0.8, `dhat` 0.3 | no `tokio-test`, no `insta`; fuzzing (`cargo-fuzz`, needs C++) only in a separate `fuzz/` folder outside the workspace before releases |
 
 Dependency rules (same as `zeny/backend-rs`):
 
@@ -196,9 +196,6 @@ Rules:
 | `interactions` | yes | `<lib>-interactions` (without the server) |
 | `interactions-server` | no | HTTP interaction endpoint (hyper server) |
 | `cache` | no | `<lib>-cache` |
-| `zstd` | no | zstd-stream gateway compression |
-| `native-roots` | no | system root certificates |
-| `ring` | no | rustls `ring` provider instead of `aws-lc-rs` |
 
 ---
 
@@ -363,7 +360,7 @@ Discord blocks the IP address (Cloudflare) for a while if more than **10,000 inv
 ## 8.1 Connection URL
 
 - Fetch `GET /gateway/bot` once at startup (shard count, `session_start_limit`, URL); cache the URL.
-- Connect to `<url>/?v=10&encoding=json&compress=zlib-stream` (or `zstd-stream`).
+- Connect to `<url>/?v=10&encoding=json&compress=zlib-stream`.
 - For a resume, connect to the `resume_gateway_url` from READY (with the same query parameters), **never** to the original URL.
 
 ## 8.2 Connection state machine
@@ -459,7 +456,6 @@ Fatal codes MUST NOT lead to a reconnect loop. The shard goes to `Disconnected` 
 
 - `zlib-stream`: **one** inflate context for the whole connection; a message is complete when the received binary data ends with `00 00 FF FF`. Frames are collected in a reused buffer.
 - The decompression buffer is reused, its capacity is capped (shrunk after unusually large payloads, e.g. > 1 MiB), and a maximum decompressed message size protects against memory exhaustion (default 16 MiB).
-- `zstd-stream` (feature): one streaming decoder per connection.
 - A new connection (including a resume) always starts with a new context.
 
 ## 8.11 Graceful shutdown
@@ -623,7 +619,7 @@ The `Disconnect` default is safe: no event is lost and memory stays bounded.
 - Lookups return guards or cheap clones (`Arc`) and never hold a lock across an `.await`.
 - Correctness rules: GUILD_DELETE with `unavailable: true` only marks the guild unavailable; with `unavailable` missing it removes the guild **and** all dependent entries (channels, members, roles, …).
 - Metrics: entry count per resource type.
-- Tests: an event sequence is replayed and the cache is compared to the expected snapshot (`insta`), plus concurrency tests (parallel read/update).
+- Tests: an event sequence is replayed and the cache is compared to the expected snapshot (plain `assert_eq!`), plus concurrency tests (parallel read/update).
 
 ---
 

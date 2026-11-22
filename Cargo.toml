@@ -19,8 +19,48 @@ drs-http = { version = "0.1.0", path = "crates/http" }
 drs-gateway = { version = "0.1.0", path = "crates/gateway" }
 drs-cache = { version = "0.1.0", path = "crates/cache" }
 drs-interactions = { version = "0.1.0", path = "crates/interactions" }
-# External crates are added per phase (PLAN.md §3): newest version the
-# 3-day rule allows, `default-features = false`, only after approval.
+
+# External crates (PLAN.md §3), approved 2026-11-22. Newest versions the
+# 3-day rule allowed on that day, `default-features = false`, only the
+# features we need. Crates opt in with `name.workspace = true` in the phase
+# that needs them (unused dependencies make cargo warn).
+
+# Models and errors (Phase 1)
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["std", "raw_value"] }
+bitflags = { version = "2.13.2", default-features = false }
+thiserror = { version = "2.0.21", default-features = false, features = ["std"] }
+time = { version = "0.3.55", default-features = false, features = ["std", "parsing", "formatting"] }
+
+# Runtime, REST and TLS (Phase 2); TLS via aws-lc-rs and system roots, as in backend-rs
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "net", "time", "sync", "macros"] }
+bytes = { version = "1.12.2", default-features = false, features = ["std"] }
+http = { version = "1.5.0", default-features = false, features = ["std"] }
+hyper = { version = "1.12.0", default-features = false, features = ["client", "server", "http1"] }
+hyper-util = { version = "0.1.21", default-features = false, features = ["client", "client-legacy", "server", "service", "tokio", "http1"] }
+http-body-util = { version = "0.1.5", default-features = false }
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "aws-lc-rs", "rustls-platform-verifier"] }
+rustls = { version = "0.23.46", default-features = false, features = ["std", "aws_lc_rs"] }
+rustls-platform-verifier = { version = "0.7.1", default-features = false }
+parking_lot = { version = "0.13.0", default-features = false }
+percent-encoding = { version = "2.3.2", default-features = false, features = ["std"] }
+fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }
+
+# Gateway (Phase 3); zlib-stream in pure Rust (zlib-rs)
+tokio-websockets = { version = "0.13.3", default-features = false, features = ["client", "fastrand", "sha1_smol", "rustls-platform-verifier", "aws_lc_rs"] }
+tokio-util = { version = "0.7.20", default-features = false }
+flate2 = { version = "1.1.11", default-features = false, features = ["zlib-rs"] }
+
+# Interactions (Phase 5); signature verification of HTTP interactions
+ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast"] }
+
+# Examples, tests, benchmarks only (Phase 7); never in library [dependencies]
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "fmt", "env-filter", "ansi"] }
+mimalloc = { version = "0.1.52", default-features = false }
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+dhat = { version = "0.3.3", default-features = false }
+proptest = { version = "1.12.0", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -79,3 +119,9 @@ strip = "debuginfo"
 inherits = "release"
 lto = false
 codegen-units = 16
+
+[workspace.lints.cargo]
+# Temporary: all approved crates are listed in [workspace.dependencies] up
+# front (PLAN.md §3), but crates only opt in per phase. Remove this allow
+# once every entry is used (latest Phase 7).
+unused_workspace_dependencies = "allow"
