@@ -67,6 +67,14 @@ pub enum GatewayError {
     /// repeats too often).
     #[error("shard panicked: {0}")]
     Panic(Box<str>),
+    /// The shard panicked more than 5 times within 10 minutes and stopped
+    /// (PLAN.md §9.5).
+    #[error("shard stopped after repeated panics; last: {0}")]
+    PanicLimit(Box<str>),
+    /// No Tokio runtime to spawn the shard task on. Call `build()` / `start()`
+    /// inside a runtime or pass a spawner.
+    #[error("no Tokio runtime available to spawn the shard task")]
+    NoRuntime,
 }
 
 impl GatewayError {
@@ -93,6 +101,6 @@ impl GatewayError {
     /// Whether this error ends the shard (no reconnect).
     #[must_use]
     pub const fn is_fatal(&self) -> bool {
-        matches!(self, Self::Fatal { .. })
+        matches!(self, Self::Fatal { .. } | Self::PanicLimit(_))
     }
 }

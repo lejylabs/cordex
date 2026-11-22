@@ -11,7 +11,11 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio::time::{Instant, timeout};
 
-use crate::connection::Outgoing;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use crate::connection::{Connector, Outgoing};
+use crate::error::GatewayError;
 use crate::identify::IDENTIFY_SPACING;
 use crate::manager::ShardManager;
 use crate::mock::{MockConnect, MockConnector, MockServer};
@@ -54,7 +58,7 @@ fn harness_with(
         .gateway_url("wss://gateway.test")
         .connector(connector);
     Harness {
-        shard: f(builder).build(),
+        shard: f(builder).build().expect("build"),
         connects,
     }
 }
@@ -419,7 +423,8 @@ fn members_harness() -> Harness {
         shard: Shard::builder(TOKEN, Intents::GUILDS | Intents::GUILD_MEMBERS)
             .gateway_url("wss://gateway.test")
             .connector(connector)
-            .build(),
+            .build()
+            .expect("build"),
         connects,
     }
 }
@@ -615,4 +620,154 @@ async fn manager_status_and_recommended_count() {
     assert_eq!(status.len(), 1);
     assert_eq!(status[0].guild_count, 1);
     assert_eq!(status[0].state, ShardState::Active);
+}
+
+/// Connector that panics on the first `panics` connects, then behaves like
+/// the mock (PLAN.md §9.5 panic guard).
+#[derive(Clone)]
+struct PanickingConnector {
+    inner: MockConnector,
+    remaining: Arc<AtomicU32>,
+}
+
+impl Connector for PanickingConnector {
+    type Connection = <MockConnector as Connector>::Connection;
+
+    async fn connect(&self, url: &str) -> Result<Self::Connection, GatewayError> {
+        if self.remaining.load(Ordering::SeqCst) > 0 {
+            self.remaining.fetch_sub(1, Ordering::SeqCst);
+            panic!("injected connect panic");
+        }
+        self.inner.connect(url).await
+    }
+}
+
+fn panicking_shard(
+    panics: u32,
+) -> (
+    Shard<PanickingConnector>,
+    mpsc::UnboundedReceiver<MockConnect>,
+) {
+    let (inner, connects) = MockConnector::pair();
+    let shard = Shard::builder(TOKEN, Intents::GUILDS)
+        .gateway_url("wss://gateway.test")
+        .connector(PanickingConnector {
+            inner,
+            remaining: Arc::new(AtomicU32::new(panics)),
+        })
+        .build()
+        .expect("build");
+    (shard, connects)
+}
+
+/// PLAN.md §22: a panicking shard run is reported and the shard reconnects.
+#[tokio::test(start_paused = true)]
+async fn panic_in_shard_run_reports_and_reconnects() {
+    let (shard, mut connects) = panicking_shard(1);
+
+    let first = timeout(Duration::from_secs(30), shard.next_event())
+        .await
+        .expect("panic report")
+        .expect("shard stopped");
+    match first {
+        Err(GatewayError::Panic(msg)) => assert!(msg.contains("injected"), "{msg}"),
+        other => panic!("expected Panic, got {other:?}"),
+    }
+
+    let conn = timeout(Duration::from_secs(30), connects.recv())
+        .await
+        .expect("reconnect timeout")
+        .expect("connector closed");
+    let mut server = conn.server;
+    handshake(&mut server, 45_000, "wss://resume.test").await;
+    let event = timeout(Duration::from_secs(5), shard.next_event())
+        .await
+        .expect("event timeout")
+        .expect("shard stopped")
+        .expect("gateway error");
+    assert!(matches!(event, Event::Ready(_)));
+    assert_eq!(shard.status().reconnect_count, 1);
+}
+
+/// §9.5: more than 5 panics in 10 minutes stop the shard; another shard on
+/// the same runtime keeps running.
+#[tokio::test(start_paused = true)]
+async fn repeated_panics_stop_only_that_shard() {
+    let mut healthy = harness();
+    let (_, mut server) = accept(&mut healthy).await;
+    // Long interval: the healthy shard must not hit a heartbeat timeout while
+    // the broken one backs off (≈ 37 s of virtual time).
+    handshake(&mut server, 600_000, "wss://resume.test").await;
+    assert!(matches!(next_ok(&healthy).await, Event::Ready(_)));
+
+    let (broken, mut broken_connects) = panicking_shard(u32::MAX);
+
+    let mut soft = 0;
+    let fatal = loop {
+        let item = timeout(Duration::from_secs(600), broken.next_event())
+            .await
+            .expect("panic report")
+            .expect("stream ended before the panic limit");
+        match item {
+            Err(GatewayError::Panic(_)) => soft += 1,
+            Err(err) => break err,
+            Ok(event) => panic!("unexpected event {event:?}"),
+        }
+    };
+    assert!(matches!(fatal, GatewayError::PanicLimit(_)), "{fatal}");
+    assert!(fatal.is_fatal());
+    assert_eq!(soft, crate::types::PANIC_LIMIT);
+    assert!(broken.next_event().await.is_none());
+    assert_eq!(broken.state(), ShardState::Disconnected);
+    assert!(broken_connects.try_recv().is_err(), "no connect after stop");
+
+    server.send_json(message_create());
+    assert!(matches!(next_ok(&healthy).await, Event::MessageCreate(_)));
+    assert_eq!(healthy.shard.state(), ShardState::Active);
+}
+
+#[test]
+fn build_outside_runtime_is_an_error() {
+    let (connector, _connects) = MockConnector::pair();
+    let result = Shard::builder(TOKEN, Intents::GUILDS)
+        .connector(connector)
+        .build();
+    assert!(matches!(result, Err(GatewayError::NoRuntime)));
+}
+
+/// §16.4: a manager can place shards on explicit runtimes.
+#[test]
+fn manager_runs_shards_on_given_runtimes() {
+    let shard_rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let spawner = Arc::new(crate::RuntimeHandles::new([shard_rt.handle().clone()]).unwrap());
+    let (connector, mut connects) = MockConnector::pair();
+    let control = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let manager = control.block_on(async {
+        let manager = ShardManager::builder(TOKEN, Intents::GUILDS)
+            .shards(0..1, 1)
+            .connector(connector)
+            .gateway_bot(gateway_bot(1, 1000, 0, 16))
+            .spawn_with(spawner)
+            .build()
+            .await
+            .unwrap();
+        manager.start().await.unwrap();
+        manager
+    });
+    // Nothing connects until the shard runtime is driven.
+    assert!(connects.try_recv().is_err());
+    let conn = shard_rt.block_on(async {
+        timeout(Duration::from_secs(2), connects.recv())
+            .await
+            .expect("connect on shard runtime")
+            .expect("connector closed")
+    });
+    assert!(conn.url.contains("v=10"));
+    drop(manager);
 }

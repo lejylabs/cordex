@@ -136,6 +136,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
+ "parking_lot",
  "rustls",
  "serde_json",
  "thiserror",

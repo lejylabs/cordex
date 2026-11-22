@@ -9,7 +9,7 @@ use futures_core::Stream;
 use futures_sink::Sink;
 use http::Uri;
 use tokio::net::TcpStream;
-use tokio_websockets::ClientBuilder;
+use tokio_websockets::{ClientBuilder, Limits};
 
 use crate::error::GatewayError;
 
@@ -62,9 +62,45 @@ pub trait Connector: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Result<Self::Connection, GatewayError>> + Send;
 }
 
+/// Default cap for one received WebSocket message (16 MiB, PLAN.md §14).
+/// zlib-stream frames are compressed, so real frames stay far below it.
+pub const DEFAULT_MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
+
 /// rustls + platform verifier WebSocket connector (PLAN.md D4, D5).
-#[derive(Clone, Debug, Default)]
-pub struct WsConnector;
+#[derive(Clone, Debug)]
+pub struct WsConnector {
+    max_frame_bytes: usize,
+}
+
+impl WsConnector {
+    /// Connector with the default frame cap ([`DEFAULT_MAX_FRAME_BYTES`]).
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            max_frame_bytes: DEFAULT_MAX_FRAME_BYTES,
+        }
+    }
+
+    /// Largest WebSocket message accepted from Discord; a larger one ends
+    /// the connection with a transport error (the shard then resumes).
+    #[must_use]
+    pub const fn max_frame_bytes(mut self, bytes: usize) -> Self {
+        self.max_frame_bytes = bytes;
+        self
+    }
+
+    /// The configured frame cap.
+    #[must_use]
+    pub const fn frame_limit(&self) -> usize {
+        self.max_frame_bytes
+    }
+}
+
+impl Default for WsConnector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 fn install_rustls_provider() {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
@@ -112,6 +148,7 @@ impl Connector for WsConnector {
         };
 
         let (ws, _response) = ClientBuilder::from_uri(uri)
+            .limits(Limits::default().max_payload_len(Some(self.max_frame_bytes)))
             .connect_on(stream)
             .await
             .map_err(GatewayError::connect)?;

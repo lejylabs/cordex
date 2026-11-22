@@ -105,7 +105,10 @@ impl InviteType {
 }
 
 /// `INVITE_CREATE` payload (not the REST invite object).
-#[allow(clippy::struct_excessive_bools)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "Discord sends these as separate fields"
+)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct InviteCreate {

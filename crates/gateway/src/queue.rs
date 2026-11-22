@@ -1,9 +1,7 @@
 //! Bounded event pipe so heartbeats never wait on `next_event` (PLAN.md §10).
 
+use parking_lot::{Mutex, MutexGuard};
 use std::collections::VecDeque;
-use std::sync::Mutex;
-use std::sync::PoisonError;
-
 use tokio::sync::Notify;
 
 use drs_model::gateway::Event;
@@ -44,8 +42,8 @@ impl EventPipe {
         }
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.inner.lock().unwrap_or_else(PoisonError::into_inner)
+    fn lock(&self) -> MutexGuard<'_, Inner> {
+        self.inner.lock()
     }
 
     pub(crate) fn dropped(&self) -> u64 {
@@ -90,6 +88,22 @@ impl EventPipe {
         drop(inner);
         self.notify_recv.notify_waiters();
         self.notify_space.notify_waiters();
+    }
+
+    /// Deliver a non-fatal error (e.g. a guarded panic) without closing the
+    /// pipe; the shard keeps running.
+    pub(crate) fn push_soft_error(&self, err: GatewayError) {
+        let mut inner = self.lock();
+        if inner.closed {
+            return;
+        }
+        if inner.items.len() >= inner.cap {
+            inner.items.pop_front();
+            inner.dropped += 1;
+        }
+        inner.items.push_back(Err(err));
+        drop(inner);
+        self.notify_recv.notify_one();
     }
 
     pub(crate) fn push_event(&self, event: Event, policy: Backpressure) -> Push {

@@ -187,7 +187,7 @@ macro_rules! impl_path_tuple {
     ($($A:ident),+) => {
         impl<$($A: ToString),+> IntoPathParams for ($($A,)+) {
             fn into_path_params(self, out: &mut Vec<String>) {
-                #[allow(non_snake_case)]
+                #[allow(non_snake_case, reason = "macro reuses the type parameter names as bindings")]
                 let ($($A,)+) = self;
                 $(out.push($A.to_string());)+
             }

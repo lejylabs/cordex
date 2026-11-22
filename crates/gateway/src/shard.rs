@@ -22,8 +22,10 @@ use crate::connection::{Connector, WsConnector};
 use crate::error::GatewayError;
 use crate::event_flags::EventTypeFlags;
 use crate::identify::{IdentifyQueue, ImmediateIdentifyQueue};
+use crate::intents_check::warn_missing_intents;
 use crate::queue::EventPipe;
 use crate::session::{self, Shared, UserCommand};
+use crate::spawn::{CurrentRuntime, Spawner};
 use crate::types::{
     Backpressure, CloseMode, DEFAULT_COMMAND_CAPACITY, DEFAULT_EVENT_CAPACITY, DEFAULT_GATEWAY_URL,
     DEFAULT_LARGE_THRESHOLD, DEFAULT_MEMBER_TIMEOUT, Latency, MAX_PAYLOAD_BYTES, ManagerEvent,
@@ -71,6 +73,7 @@ pub struct ShardBuilder<C: Connector = WsConnector> {
     resume: Option<ResumeInfo>,
     cancel: CancellationToken,
     manager_tx: Option<mpsc::Sender<ManagerEvent>>,
+    spawner: Arc<dyn Spawner>,
 }
 
 impl ShardBuilder<WsConnector> {
@@ -81,7 +84,7 @@ impl ShardBuilder<WsConnector> {
             intents,
             shard: ShardId::one(),
             gateway_url: DEFAULT_GATEWAY_URL.into(),
-            connector: WsConnector,
+            connector: WsConnector::new(),
             identify_queue: Arc::new(ImmediateIdentifyQueue),
             event_types: EventTypeFlags::all(),
             backpressure: Backpressure::Disconnect,
@@ -92,6 +95,7 @@ impl ShardBuilder<WsConnector> {
             resume: None,
             cancel: CancellationToken::new(),
             manager_tx: None,
+            spawner: Arc::new(CurrentRuntime),
         }
     }
 
@@ -141,7 +145,17 @@ impl<C: Connector> ShardBuilder<C> {
             resume: self.resume,
             cancel: self.cancel,
             manager_tx: self.manager_tx,
+            spawner: self.spawner,
         }
+    }
+
+    /// Where the shard task runs (default: [`CurrentRuntime`], the runtime
+    /// calling [`Self::build`]). Use [`crate::RuntimeHandles`] for
+    /// thread-per-core (PLAN.md §16.4).
+    #[must_use]
+    pub fn spawn_with(mut self, spawner: Arc<dyn Spawner>) -> Self {
+        self.spawner = spawner;
+        self
     }
 
     /// Parent cancellation token (the manager uses a child token per shard).
@@ -212,8 +226,15 @@ impl<C: Connector> ShardBuilder<C> {
         self
     }
 
-    /// Spawn the shard task and return the handle.
-    pub fn build(self) -> Shard<C> {
+    /// Spawn the shard task on the configured [`Spawner`] and return the
+    /// handle.
+    ///
+    /// Fails with [`GatewayError::NoRuntime`] when the default spawner is used
+    /// outside a Tokio runtime.
+    pub fn build(self) -> Result<Shard<C>, GatewayError> {
+        if cfg!(debug_assertions) {
+            warn_missing_intents(self.intents, self.event_types);
+        }
         let events = Arc::new(EventPipe::new(self.event_capacity));
         let (tx, rx) = mpsc::channel(DEFAULT_COMMAND_CAPACITY);
         let shared = Arc::new(Shared {
@@ -230,23 +251,26 @@ impl<C: Connector> ShardBuilder<C> {
             member_timeout: self.member_timeout,
             cancel: self.cancel,
             events,
-            state: std::sync::Mutex::new(ShardState::Disconnected),
-            resume: std::sync::Mutex::new(self.resume),
-            latency: std::sync::Mutex::new(Latency::new()),
-            last_ack: std::sync::Mutex::new(None),
+            state: parking_lot::Mutex::new(ShardState::Disconnected),
+            resume: parking_lot::Mutex::new(self.resume),
+            latency: parking_lot::Mutex::new(Latency::new()),
+            last_ack: parking_lot::Mutex::new(None),
             guild_count: std::sync::atomic::AtomicU32::new(0),
             reconnects: std::sync::atomic::AtomicU32::new(0),
             manager_tx: self.manager_tx,
         });
         let runner = Arc::clone(&shared);
-        tokio::spawn(async move {
-            session::run_forever(runner, rx).await;
-        });
-        Shard {
+        self.spawner.spawn(
+            shared.shard,
+            Box::pin(async move {
+                session::run_forever(runner, rx).await;
+            }),
+        )?;
+        Ok(Shard {
             shared,
             commands: tx,
             owner: true,
-        }
+        })
     }
 }
 

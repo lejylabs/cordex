@@ -44,7 +44,10 @@ impl MockConnector {
 impl Connector for MockConnector {
     type Connection = impl_conn::Handle;
 
-    #[allow(clippy::unused_async_trait_impl)]
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "trait signature is async; the mock completes immediately"
+    )]
     async fn connect(&self, url: &str) -> Result<impl_conn::Handle, GatewayError> {
         let (to_client, from_server) = mpsc::unbounded_channel();
         let (to_server, from_client) = mpsc::unbounded_channel();
@@ -77,7 +80,10 @@ mod impl_conn {
             Ok(self.0.rx.recv().await)
         }
 
-        #[allow(clippy::unused_async_trait_impl)]
+        #[allow(
+            clippy::unused_async_trait_impl,
+            reason = "trait signature is async; the mock completes immediately"
+        )]
         async fn send(&mut self, msg: Outgoing) -> Result<(), GatewayError> {
             self.0
                 .tx

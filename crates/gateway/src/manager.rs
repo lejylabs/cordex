@@ -3,8 +3,10 @@
 
 use std::ops::Range;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+
+use parking_lot::{Mutex, MutexGuard};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -20,6 +22,7 @@ use crate::error::GatewayError;
 use crate::event_flags::EventTypeFlags;
 use crate::identify::{IdentifyQueue, LocalIdentifyQueue};
 use crate::shard::{GatewayBotSource, Shard, ShardBuilder};
+use crate::spawn::{CurrentRuntime, Spawner};
 use crate::types::{
     Backpressure, CloseMode, DEFAULT_EVENT_CAPACITY, DEFAULT_LARGE_THRESHOLD,
     DEFAULT_MEMBER_TIMEOUT, ManagerEvent, ShardId, ShardStatus,
@@ -46,6 +49,7 @@ pub struct ShardManagerBuilder<C: Connector = WsConnector> {
     presence: Option<UpdatePresence>,
     member_timeout: Duration,
     cancel: CancellationToken,
+    spawner: Arc<dyn Spawner>,
 }
 
 /// Owns a set of shards, a shared identify queue and a fan-in event stream.
@@ -85,6 +89,7 @@ struct ShardFactory<C: Connector> {
     cancel: CancellationToken,
     events: mpsc::Sender<ManagerEvent>,
     total: u32,
+    spawner: Arc<dyn Spawner>,
 }
 
 impl ShardManagerBuilder<WsConnector> {
@@ -95,7 +100,7 @@ impl ShardManagerBuilder<WsConnector> {
             token: Token::new(token.as_ref()),
             intents,
             spec: ShardSpec::Automatic,
-            connector: WsConnector,
+            connector: WsConnector::new(),
             http: None,
             bot: None,
             identify_queue: None,
@@ -106,6 +111,7 @@ impl ShardManagerBuilder<WsConnector> {
             presence: None,
             member_timeout: DEFAULT_MEMBER_TIMEOUT,
             cancel: CancellationToken::new(),
+            spawner: Arc::new(CurrentRuntime),
         }
     }
 }
@@ -143,6 +149,7 @@ impl<C: Connector> ShardManagerBuilder<C> {
             presence: self.presence,
             member_timeout: self.member_timeout,
             cancel: self.cancel,
+            spawner: self.spawner,
         }
     }
 
@@ -217,6 +224,15 @@ impl<C: Connector> ShardManagerBuilder<C> {
         self
     }
 
+    /// Where shard tasks run (default: [`CurrentRuntime`], the runtime calling
+    /// [`ShardManager::start`]). Pass [`crate::RuntimeHandles`] to spread shards
+    /// over several `current_thread` runtimes (PLAN.md §16.4).
+    #[must_use]
+    pub fn spawn_with(mut self, spawner: Arc<dyn Spawner>) -> Self {
+        self.spawner = spawner;
+        self
+    }
+
     /// Fetch `/gateway/bot` if needed, create shards (not yet started).
     pub async fn build(self) -> Result<ShardManager<C>, GatewayError> {
         let bot = self.resolve_bot().await?;
@@ -268,6 +284,7 @@ impl<C: Connector> ShardManagerBuilder<C> {
                 cancel: self.cancel.clone(),
                 events: tx,
                 total,
+                spawner: self.spawner,
             },
             shards: Mutex::new((0..ids.len()).map(|_| None).collect()),
             ids,
@@ -310,27 +327,32 @@ impl<C: Connector> ShardFactory<C> {
             .large_threshold(self.large_threshold)
             .member_timeout(self.member_timeout)
             .cancellation_token(self.cancel.child_token())
-            .manager_events(self.events.clone());
+            .manager_events(self.events.clone())
+            .spawn_with(Arc::clone(&self.spawner));
         let shard = if let Some(presence) = self.presence.clone() {
             shard.presence(presence)
         } else {
             shard
         }
-        .build();
+        .build()?;
 
         let pipe = shard.event_pipe();
         let tx = self.events.clone();
-        tokio::spawn(async move {
-            while let Some(item) = pipe.pop().await {
-                let event = match item {
-                    Ok(event) => ManagerEvent::Dispatch { shard: id, event },
-                    Err(error) => ManagerEvent::Error { shard: id, error },
-                };
-                if tx.send(event).await.is_err() {
-                    break;
+        // The fan-in forwarder runs on the same runtime as its shard.
+        self.spawner.spawn(
+            id,
+            Box::pin(async move {
+                while let Some(item) = pipe.pop().await {
+                    let event = match item {
+                        Ok(event) => ManagerEvent::Dispatch { shard: id, event },
+                        Err(error) => ManagerEvent::Error { shard: id, error },
+                    };
+                    if tx.send(event).await.is_err() {
+                        break;
+                    }
                 }
-            }
-        });
+            }),
+        )?;
         Ok(shard)
     }
 }
@@ -496,8 +518,8 @@ impl Stream for ManagerEvents {
     }
 }
 
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock()
 }
 
 impl<C: Connector> Drop for ShardManager<C> {

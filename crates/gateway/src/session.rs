@@ -1,8 +1,8 @@
 //! One connection lifetime: hello, identify/resume, heartbeat, dispatch.
 
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -10,6 +10,7 @@ use drs_model::gateway::command::{Command, ConnectionProperties, Heartbeat, Iden
 use drs_model::gateway::event::{Event, GuildMembersChunk};
 use drs_model::gateway::{CloseAction, CloseCode, Envelope, Hello, Intents, OpCode};
 use drs_model::guild::Member;
+use parking_lot::{Mutex, MutexGuard};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{Instant, timeout};
 use tokio_util::sync::CancellationToken;
@@ -118,8 +119,8 @@ impl<C> Shared<C> {
     }
 }
 
-pub(crate) fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock()
 }
 
 enum SessionEnd {
@@ -177,6 +178,10 @@ pub(crate) async fn run_forever<C: Connector>(
 
         let (fwd_tx, fwd_rx) = mpsc::unbounded_channel();
         let shared_task = Arc::clone(&shared);
+        // One task per connection lifetime is the panic guard (PLAN.md §9.5):
+        // a panic surfaces as a `JoinError` instead of unwinding through this
+        // loop. It runs on this task's runtime, i.e. the one the `Spawner`
+        // chose, so no runtime is picked behind the caller's back (§16.4).
         let mut handle =
             tokio::spawn(async move { run_session(shared_task, fwd_rx, try_resume).await });
 
@@ -286,16 +291,27 @@ async fn handle_join<C: Connector>(
                 panics.pop_front();
             }
             if panics.len() > crate::types::PANIC_LIMIT as usize {
-                shared.events.push_error(GatewayError::Panic(msg));
+                tracing::error!(
+                    shard = shared.shard.number(),
+                    "too many panics; stopping the shard"
+                );
                 shared.set_state(ShardState::Disconnected);
+                shared.events.push_error(GatewayError::PanicLimit(msg));
                 return Loop::Stop;
             }
+            shared.events.push_soft_error(GatewayError::Panic(msg));
             *try_resume = shared.resume_info().is_some();
             *failures = failures.saturating_add(1);
             shared.reconnects.fetch_add(1, Ordering::Relaxed);
             shared.set_state(ShardState::Reconnecting);
-            tokio::time::sleep(backoff_delay(failures.saturating_sub(1))).await;
-            Loop::Continue
+            tokio::select! {
+                () = tokio::time::sleep(backoff_delay(failures.saturating_sub(1))) => Loop::Continue,
+                () = shared.cancel.cancelled() => {
+                    shared.set_state(ShardState::Disconnected);
+                    shared.events.close();
+                    Loop::Stop
+                }
+            }
         }
     }
 }
@@ -429,14 +445,6 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
                         return end;
                     }
                 }
-            }
-
-            if self
-                .active_since
-                .is_some_and(|t| Instant::now() >= t + STABLE_ACTIVE)
-            {
-                // Failures are reset by the outer loop when apply_backoff is false
-                // after a long Active period: mark reconnects as no-backoff once stable.
             }
         }
     }
