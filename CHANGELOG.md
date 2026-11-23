@@ -4,6 +4,32 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
+## Unreleased
+
+- **All gateway receive events are typed** (82/82): new `VOICE_CHANNEL_STATUS_UPDATE`,
+  `VOICE_CHANNEL_START_TIME_UPDATE`, `CHANNEL_INFO`, `INTEGRATION_CREATE` /
+  `UPDATE` / `DELETE`, `SUBSCRIPTION_CREATE` / `UPDATE` / `DELETE` and
+  `RATE_LIMITED`, with matching `EventTypeFlags`.
+- `cordex-http`: guild templates, voice regions and voice states (stage
+  moderation), invite target users (CSV upload, bulk add/remove, job status),
+  `search_guild_messages` with filters (returns `SearchResult::NotIndexed`
+  on Discord's 202 answer), `GET /oauth2/applications/@me` and
+  `GET /oauth2/@me`. REST coverage 215/235; everything still missing is the
+  Social SDK (lobbies, identity profiles).
+- `cordex-model`: `GuildTemplate`.
+- Coverage: routes the docs mark as deprecated are no longer counted.
+- Coverage now also measures **object fields** (1203/1223, 196 docs tables
+  mapped to model types) and **bitflags** (141/141), and lists the docs tables
+  not compared yet (only Social SDK lobbies and identity profiles remain).
+  Total measured: 2003/2043 (98.0 %).
+- `cordex-model`: fields the comparison found missing: all `Activity` fields
+  are on `PresenceActivity` already; added `Connection.integrations`,
+  `Identify.capabilities`, `GuildMembersChunk.presences`,
+  `Message.channel_type`, `SkuFlags` (`Sku.flags` is now typed).
+- `cordex-model`: webhook events (`webhook_event`): `WebhookEventPayload`,
+  `WebhookEventBody::parse` into `ApplicationAuthorized`,
+  `ApplicationDeauthorized` and entitlement events.
+
 ## 0.1.0-beta.4 - 2026-11-23
 
 Coverage against the official docs (`discord-api-docs@9b737ec51ee8`, see

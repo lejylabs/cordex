@@ -15,14 +15,17 @@ use crate::command::GuildCommandPermissions;
 use crate::emoji::Emoji;
 use crate::entitlement::Entitlement;
 use crate::gateway::presence::PresenceUpdate;
+use crate::guild::Integration;
 use crate::guild::{Guild, Member, Role, UnavailableGuild};
 use crate::id::Id;
+use crate::id::marker::{ApplicationMarker, IntegrationMarker};
 use crate::id::marker::{ChannelMarker, GuildMarker, MessageMarker, RoleMarker, UserMarker};
 use crate::interaction::Interaction;
 use crate::invite::{InviteCreate, InviteDelete};
 use crate::message::{Message, ReactionType};
 use crate::poll::MessagePollVote;
 use crate::scheduled_event::{GuildScheduledEventUserAdd, ScheduledEvent};
+use crate::sku::Subscription;
 use crate::soundboard::{
     GuildSoundboardSoundDelete, SoundboardSound, SoundboardSounds, VoiceChannelEffectSend,
 };
@@ -178,6 +181,27 @@ pub enum Event {
     MessagePollVoteRemove(MessagePollVote),
     /// `VOICE_CHANNEL_EFFECT_SEND`.
     VoiceChannelEffectSend(Box<VoiceChannelEffectSend>),
+    /// `VOICE_CHANNEL_STATUS_UPDATE`.
+    VoiceChannelStatusUpdate(Box<VoiceChannelStatusUpdate>),
+    /// `VOICE_CHANNEL_START_TIME_UPDATE`.
+    VoiceChannelStartTimeUpdate(VoiceChannelStartTimeUpdate),
+    /// `CHANNEL_INFO` (answer to Request Channel Info, opcode 43).
+    ChannelInfo(Box<ChannelInfo>),
+    /// `INTEGRATION_CREATE`.
+    IntegrationCreate(Box<IntegrationEvent>),
+    /// `INTEGRATION_UPDATE`.
+    IntegrationUpdate(Box<IntegrationEvent>),
+    /// `INTEGRATION_DELETE`.
+    IntegrationDelete(IntegrationDelete),
+    /// `SUBSCRIPTION_CREATE`.
+    SubscriptionCreate(Box<Subscription>),
+    /// `SUBSCRIPTION_UPDATE`.
+    SubscriptionUpdate(Box<Subscription>),
+    /// `SUBSCRIPTION_DELETE`.
+    SubscriptionDelete(Box<Subscription>),
+    /// `RATE_LIMITED`: a gateway request (e.g. Request Guild Members) was
+    /// rate limited.
+    RateLimited(Box<RateLimited>),
     /// An event without a typed variant (yet).
     Unknown(UnknownEvent),
 }
@@ -313,6 +337,105 @@ pub struct GuildStickersUpdate {
     pub stickers: Vec<Sticker>,
 }
 
+/// `VOICE_CHANNEL_STATUS_UPDATE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct VoiceChannelStatusUpdate {
+    /// Channel.
+    pub id: Id<ChannelMarker>,
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// New status (`None` when cleared).
+    pub status: Option<Box<str>>,
+}
+
+/// `VOICE_CHANNEL_START_TIME_UPDATE` payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct VoiceChannelStartTimeUpdate {
+    /// Channel.
+    pub id: Id<ChannelMarker>,
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Unix seconds when the voice session started (`None` when it ended).
+    #[serde(default)]
+    pub voice_start_time: Option<u64>,
+}
+
+/// `CHANNEL_INFO` payload: ephemeral data of a guild's channels.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ChannelInfo {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Channels.
+    #[serde(default)]
+    pub channels: Vec<ChannelInfoChannel>,
+}
+
+/// One channel in [`ChannelInfo`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ChannelInfoChannel {
+    /// Channel.
+    pub id: Id<ChannelMarker>,
+    /// Voice channel status.
+    #[serde(default)]
+    pub status: Option<Box<str>>,
+    /// Unix seconds when the voice session started.
+    #[serde(default)]
+    pub voice_start_time: Option<u64>,
+}
+
+/// `INTEGRATION_CREATE` / `INTEGRATION_UPDATE` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct IntegrationEvent {
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// The integration.
+    #[serde(flatten)]
+    pub integration: Integration,
+}
+
+/// `INTEGRATION_DELETE` payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct IntegrationDelete {
+    /// Integration.
+    pub id: Id<IntegrationMarker>,
+    /// Guild.
+    pub guild_id: Id<GuildMarker>,
+    /// Bot or `OAuth2` application of the integration.
+    #[serde(default)]
+    pub application_id: Option<Id<ApplicationMarker>>,
+}
+
+/// `RATE_LIMITED` payload.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct RateLimited {
+    /// Opcode that was rate limited (8 = Request Guild Members).
+    pub opcode: u8,
+    /// Seconds to wait before retrying.
+    pub retry_after: f64,
+    /// Details of the limited request.
+    #[serde(default)]
+    pub meta: RateLimitedMeta,
+}
+
+/// Details of a rate limited request (for opcode 8: guild and nonce).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct RateLimitedMeta {
+    /// Guild of a Request Guild Members.
+    #[serde(default)]
+    pub guild_id: Option<Id<GuildMarker>>,
+    /// Nonce of the request.
+    #[serde(default)]
+    pub nonce: Option<Box<str>>,
+}
+
 /// `GUILD_INTEGRATIONS_UPDATE` payload.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -385,6 +508,9 @@ pub struct GuildMembersChunk {
     /// Invalid user IDs from `REQUEST_GUILD_MEMBERS`.
     #[serde(default)]
     pub not_found: Vec<Id<UserMarker>>,
+    /// Presences of the members (when requested with `presences: true`).
+    #[serde(default)]
+    pub presences: Vec<PresenceUpdate>,
     /// Nonce from the request.
     pub nonce: Option<Box<str>>,
 }
@@ -608,6 +734,10 @@ impl Event {
     }
 
     /// Typed events; `None` for names without a typed variant.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one match arm per Discord dispatch event"
+    )]
     fn typed(name: &str, data: Option<&RawValue>) -> Option<serde_json::Result<Self>> {
         fn parse<'a, T: Deserialize<'a>>(data: Option<&'a RawValue>) -> serde_json::Result<T> {
             serde_json::from_str(data.map_or("null", RawValue::get))
@@ -704,6 +834,16 @@ impl Event {
             "MESSAGE_POLL_VOTE_ADD" => parse(data).map(Self::MessagePollVoteAdd),
             "MESSAGE_POLL_VOTE_REMOVE" => parse(data).map(Self::MessagePollVoteRemove),
             "VOICE_CHANNEL_EFFECT_SEND" => parse(data).map(Self::VoiceChannelEffectSend),
+            "VOICE_CHANNEL_STATUS_UPDATE" => parse(data).map(Self::VoiceChannelStatusUpdate),
+            "VOICE_CHANNEL_START_TIME_UPDATE" => parse(data).map(Self::VoiceChannelStartTimeUpdate),
+            "CHANNEL_INFO" => parse(data).map(Self::ChannelInfo),
+            "INTEGRATION_CREATE" => parse(data).map(Self::IntegrationCreate),
+            "INTEGRATION_UPDATE" => parse(data).map(Self::IntegrationUpdate),
+            "INTEGRATION_DELETE" => parse(data).map(Self::IntegrationDelete),
+            "SUBSCRIPTION_CREATE" => parse(data).map(Self::SubscriptionCreate),
+            "SUBSCRIPTION_UPDATE" => parse(data).map(Self::SubscriptionUpdate),
+            "SUBSCRIPTION_DELETE" => parse(data).map(Self::SubscriptionDelete),
+            "RATE_LIMITED" => parse(data).map(Self::RateLimited),
             _ => return None,
         };
         Some(event)
@@ -783,6 +923,16 @@ impl Event {
             Self::MessagePollVoteAdd(_) => "MESSAGE_POLL_VOTE_ADD",
             Self::MessagePollVoteRemove(_) => "MESSAGE_POLL_VOTE_REMOVE",
             Self::VoiceChannelEffectSend(_) => "VOICE_CHANNEL_EFFECT_SEND",
+            Self::VoiceChannelStatusUpdate(_) => "VOICE_CHANNEL_STATUS_UPDATE",
+            Self::VoiceChannelStartTimeUpdate(_) => "VOICE_CHANNEL_START_TIME_UPDATE",
+            Self::ChannelInfo(_) => "CHANNEL_INFO",
+            Self::IntegrationCreate(_) => "INTEGRATION_CREATE",
+            Self::IntegrationUpdate(_) => "INTEGRATION_UPDATE",
+            Self::IntegrationDelete(_) => "INTEGRATION_DELETE",
+            Self::SubscriptionCreate(_) => "SUBSCRIPTION_CREATE",
+            Self::SubscriptionUpdate(_) => "SUBSCRIPTION_UPDATE",
+            Self::SubscriptionDelete(_) => "SUBSCRIPTION_DELETE",
+            Self::RateLimited(_) => "RATE_LIMITED",
             Self::Unknown(event) => &event.name,
         }
     }
@@ -919,6 +1069,43 @@ mod tests {
     #[test]
     fn event_enum_stays_small() {
         assert!(size_of::<Event>() <= 48, "{}", size_of::<Event>());
+
+        let cases = [
+            (
+                "VOICE_CHANNEL_STATUS_UPDATE",
+                r#"{"id":"1","guild_id":"2","status":"live"}"#,
+            ),
+            (
+                "VOICE_CHANNEL_START_TIME_UPDATE",
+                r#"{"id":"1","guild_id":"2","voice_start_time":1700000000}"#,
+            ),
+            (
+                "CHANNEL_INFO",
+                r#"{"guild_id":"2","channels":[{"id":"1","status":null}]}"#,
+            ),
+            (
+                "INTEGRATION_CREATE",
+                r#"{"guild_id":"2","id":"3","name":"x","type":"discord","enabled":true,"account":{"id":"4","name":"a"}}"#,
+            ),
+            (
+                "INTEGRATION_DELETE",
+                r#"{"id":"3","guild_id":"2","application_id":"5"}"#,
+            ),
+            (
+                "SUBSCRIPTION_CREATE",
+                r#"{"id":"6","user_id":"7","sku_ids":[],"entitlement_ids":[],"current_period_start":"2026-11-01T00:00:00+00:00","current_period_end":"2026-12-01T00:00:00+00:00","status":0,"canceled_at":null}"#,
+            ),
+            (
+                "RATE_LIMITED",
+                r#"{"opcode":8,"retry_after":12.5,"meta":{"guild_id":"2","nonce":"n"}}"#,
+            ),
+        ];
+        for (name, json) in cases {
+            let raw = serde_json::value::RawValue::from_string(json.to_owned()).unwrap();
+            let event = Event::from_dispatch(name, Some(&raw)).unwrap();
+            assert_eq!(event.name(), name);
+            assert!(!matches!(event, Event::Unknown(_)), "{name}");
+        }
     }
 
     #[test]

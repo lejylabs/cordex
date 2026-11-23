@@ -6,7 +6,7 @@ use crate::id::Id;
 use crate::id::marker::{
     ApplicationMarker, EntitlementMarker, SkuMarker, SubscriptionMarker, UserMarker,
 };
-use crate::serde_util::int_enum;
+use crate::serde_util::{bitflags_serde_int, int_enum};
 use crate::timestamp::Timestamp;
 
 /// A premium offering of an application.
@@ -24,11 +24,25 @@ pub struct Sku {
     pub name: Box<str>,
     /// URL slug.
     pub slug: Box<str>,
-    /// SKU flags (bit 2 available, bit 7 guild subscription, bit 8 user
-    /// subscription).
+    /// SKU flags.
     #[serde(default)]
-    pub flags: u64,
+    pub flags: SkuFlags,
 }
+
+bitflags::bitflags! {
+    /// SKU flags.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    pub struct SkuFlags: u64 {
+        /// The SKU is available for purchase.
+        const AVAILABLE = 1 << 2;
+        /// A subscription purchased by a user and applied to one guild.
+        const GUILD_SUBSCRIPTION = 1 << 7;
+        /// A subscription purchased by a user for themselves.
+        const USER_SUBSCRIPTION = 1 << 8;
+    }
+}
+
+bitflags_serde_int!(SkuFlags, u64);
 
 int_enum! {
     /// SKU type.
@@ -96,6 +110,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(sku.kind, SkuType::Subscription);
+        assert_eq!(sku.flags, SkuFlags::GUILD_SUBSCRIPTION);
         let sub: Subscription = serde_json::from_str(
             r#"{"id":"3","user_id":"4","sku_ids":["1"],"entitlement_ids":[],"renewal_sku_ids":null,
             "current_period_start":"2026-11-01T00:00:00+00:00","current_period_end":"2026-12-01T00:00:00+00:00",

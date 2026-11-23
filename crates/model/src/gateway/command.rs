@@ -77,6 +77,9 @@ pub struct Identify<'a> {
     pub presence: Option<&'a UpdatePresence>,
     /// Intents.
     pub intents: Intents,
+    /// Client capabilities bitfield (bots normally leave it unset).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<u64>,
 }
 
 impl<'a> Identify<'a> {
@@ -94,6 +97,7 @@ impl<'a> Identify<'a> {
             shard: None,
             presence: None,
             intents,
+            capabilities: None,
         }
     }
 }

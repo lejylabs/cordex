@@ -8,9 +8,9 @@
 //!   `` `METHOD /path` `` doc comments in `cordex-http`),
 //! - gateway receive events, gateway opcodes, gateway close codes,
 //! - component types and the value tables of the model enums in
-//!   [`ENUMS`].
-//!
-//! Object fields and bitflags are not measured yet; the report says so.
+//!   [`ENUMS`],
+//! - object fields ([`FIELDS`]) and bitflags ([`FLAGS`]); docs tables that
+//!   are not mapped yet are listed in the report.
 //!
 //! Flags: `--check` fails if `docs/coverage.md` is out of date,
 //! `--rev <sha|latest>` measures another docs commit and writes the report
@@ -40,9 +40,1315 @@ const BOT_PAGES: &[&str] = &[
     "developers/change-log.mdx",
 ];
 
+/// Docs field tables compared with model structs: (file in
+/// `crates/model/src`, struct, docs page, heading). An empty struct means
+/// cordex has no type for it yet (every field counts as missing).
+const FIELDS: &[(&str, &str, &str, &str)] = &[
+    (
+        "component.rs",
+        "RadioGroup",
+        "components/reference.mdx",
+        "Radio Group Structure",
+    ),
+    (
+        "component.rs",
+        "ChoiceOption",
+        "components/reference.mdx",
+        "Radio Group Option Structure",
+    ),
+    (
+        "interaction.rs",
+        "SubmittedComponent",
+        "components/reference.mdx",
+        "Radio Group Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "CheckboxGroup",
+        "components/reference.mdx",
+        "Checkbox Group Structure",
+    ),
+    (
+        "component.rs",
+        "ChoiceOption",
+        "components/reference.mdx",
+        "Checkbox Group Option Structure",
+    ),
+    (
+        "interaction.rs",
+        "SubmittedComponent",
+        "components/reference.mdx",
+        "Checkbox Group Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "Checkbox",
+        "components/reference.mdx",
+        "Checkbox Structure",
+    ),
+    (
+        "interaction.rs",
+        "SubmittedComponent",
+        "components/reference.mdx",
+        "Checkbox Interaction Response Structure",
+    ),
+    (
+        "gateway/payload.rs",
+        "Envelope",
+        "events/gateway-events.mdx",
+        "Payload Structure",
+    ),
+    (
+        "message/mod.rs",
+        "MessageReference",
+        "resources/message.mdx",
+        "Message Reference Structure",
+    ),
+    (
+        "message/mod.rs",
+        "MessageSnapshot",
+        "resources/message.mdx",
+        "Message Snapshot Structure",
+    ),
+    (
+        "webhook_event.rs",
+        "WebhookEventPayload",
+        "events/webhook-events.mdx",
+        "Payload Structure",
+    ),
+    (
+        "webhook_event.rs",
+        "WebhookEventBody",
+        "events/webhook-events.mdx",
+        "Event Body Object",
+    ),
+    (
+        "component.rs",
+        "ActionRow",
+        "components/reference.mdx",
+        "Action Row Structure",
+    ),
+    (
+        "component.rs",
+        "Button",
+        "components/reference.mdx",
+        "Button Structure",
+    ),
+    (
+        "component.rs",
+        "StringSelect",
+        "components/reference.mdx",
+        "String Select Structure",
+    ),
+    (
+        "component.rs",
+        "SelectOption",
+        "components/reference.mdx",
+        "Select Option Structure",
+    ),
+    (
+        "interaction.rs",
+        "MessageComponentData+SubmittedComponent",
+        "components/reference.mdx",
+        "String Select Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "TextInput",
+        "components/reference.mdx",
+        "Text Input Structure",
+    ),
+    (
+        "interaction.rs",
+        "SubmittedComponent",
+        "components/reference.mdx",
+        "Text Input Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "SelectMenu",
+        "components/reference.mdx",
+        "User Select Structure",
+    ),
+    (
+        "component.rs",
+        "SelectDefaultValue",
+        "components/reference.mdx",
+        "Select Default Value Structure",
+    ),
+    (
+        "interaction.rs",
+        "MessageComponentData+SubmittedComponent",
+        "components/reference.mdx",
+        "User Select Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "SelectMenu",
+        "components/reference.mdx",
+        "Role Select Structure",
+    ),
+    (
+        "interaction.rs",
+        "MessageComponentData+SubmittedComponent",
+        "components/reference.mdx",
+        "Role Select Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "SelectMenu",
+        "components/reference.mdx",
+        "Mentionable Select Structure",
+    ),
+    (
+        "interaction.rs",
+        "MessageComponentData+SubmittedComponent",
+        "components/reference.mdx",
+        "Mentionable Select Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "SelectMenu",
+        "components/reference.mdx",
+        "Channel Select Structure",
+    ),
+    (
+        "interaction.rs",
+        "MessageComponentData+SubmittedComponent",
+        "components/reference.mdx",
+        "Channel Select Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "Section",
+        "components/reference.mdx",
+        "Section Structure",
+    ),
+    (
+        "component.rs",
+        "TextDisplay",
+        "components/reference.mdx",
+        "Text Display Structure",
+    ),
+    (
+        "interaction.rs",
+        "SubmittedComponent",
+        "components/reference.mdx",
+        "Text Display Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "Thumbnail",
+        "components/reference.mdx",
+        "Thumbnail Structure",
+    ),
+    (
+        "component.rs",
+        "MediaGallery",
+        "components/reference.mdx",
+        "Media Gallery Structure",
+    ),
+    (
+        "component.rs",
+        "MediaGalleryItem",
+        "components/reference.mdx",
+        "Media Gallery Item Structure",
+    ),
+    (
+        "component.rs",
+        "FileComponent",
+        "components/reference.mdx",
+        "File Structure",
+    ),
+    (
+        "component.rs",
+        "Separator",
+        "components/reference.mdx",
+        "Separator Structure",
+    ),
+    (
+        "component.rs",
+        "Container",
+        "components/reference.mdx",
+        "Container Structure",
+    ),
+    (
+        "component.rs",
+        "Label",
+        "components/reference.mdx",
+        "Label Structure",
+    ),
+    (
+        "interaction.rs",
+        "SubmittedComponent",
+        "components/reference.mdx",
+        "Label Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "FileUpload",
+        "components/reference.mdx",
+        "File Upload Structure",
+    ),
+    (
+        "interaction.rs",
+        "SubmittedComponent",
+        "components/reference.mdx",
+        "File Upload Interaction Response Structure",
+    ),
+    (
+        "component.rs",
+        "UnfurledMediaItem",
+        "components/reference.mdx",
+        "Unfurled Media Item Structure",
+    ),
+    (
+        "component.rs",
+        "ContentScanMetadata",
+        "components/reference.mdx",
+        "Content Scan Metadata Structure",
+    ),
+    (
+        "gateway/event.rs",
+        "Ready",
+        "events/gateway-events.mdx",
+        "Ready Event Fields",
+    ),
+    (
+        "auto_moderation.rs",
+        "AutoModerationActionExecution",
+        "events/gateway-events.mdx",
+        "Auto Moderation Action Execution Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "ThreadListSync",
+        "events/gateway-events.mdx",
+        "Thread List Sync Event Fields",
+    ),
+    (
+        "channel.rs",
+        "ThreadMember",
+        "events/gateway-events.mdx",
+        "Thread Member Update Event Extra Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "ThreadMembersUpdate",
+        "events/gateway-events.mdx",
+        "Thread Members Update Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "ChannelPinsUpdate",
+        "events/gateway-events.mdx",
+        "Channel Pins Update Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "AvailableGuild",
+        "events/gateway-events.mdx",
+        "Guild Create Extra Fields",
+    ),
+    (
+        "audit_log.rs",
+        "AuditLogEntry",
+        "events/gateway-events.mdx",
+        "Guild Audit Log Entry Create Event Extra Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildBanAdd",
+        "events/gateway-events.mdx",
+        "Guild Ban Add Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildBanAdd",
+        "events/gateway-events.mdx",
+        "Guild Ban Remove Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildEmojisUpdate",
+        "events/gateway-events.mdx",
+        "Guild Emojis Update Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildStickersUpdate",
+        "events/gateway-events.mdx",
+        "Guild Stickers Update Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildIntegrationsUpdate",
+        "events/gateway-events.mdx",
+        "Guild Integrations Update Event Fields",
+    ),
+    (
+        "guild/member.rs",
+        "Member",
+        "events/gateway-events.mdx",
+        "Guild Member Add Extra Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildMemberRemove",
+        "events/gateway-events.mdx",
+        "Guild Member Remove Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildMemberUpdate",
+        "events/gateway-events.mdx",
+        "Guild Member Update Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildMembersChunk",
+        "events/gateway-events.mdx",
+        "Guild Members Chunk Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildRoleCreate",
+        "events/gateway-events.mdx",
+        "Guild Role Create Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildRoleCreate",
+        "events/gateway-events.mdx",
+        "Guild Role Update Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "GuildRoleDelete",
+        "events/gateway-events.mdx",
+        "Guild Role Delete Event Fields",
+    ),
+    (
+        "scheduled_event.rs",
+        "GuildScheduledEventUserAdd",
+        "events/gateway-events.mdx",
+        "Guild Scheduled Event User Add Event Fields",
+    ),
+    (
+        "scheduled_event.rs",
+        "GuildScheduledEventUserAdd",
+        "events/gateway-events.mdx",
+        "Guild Scheduled Event User Remove Event Fields",
+    ),
+    (
+        "soundboard.rs",
+        "GuildSoundboardSoundDelete",
+        "events/gateway-events.mdx",
+        "Guild Soundboard Sound Delete Event Fields",
+    ),
+    (
+        "soundboard.rs",
+        "SoundboardSounds",
+        "events/gateway-events.mdx",
+        "Guild Soundboard Sounds Update Event Fields",
+    ),
+    (
+        "soundboard.rs",
+        "SoundboardSounds",
+        "events/gateway-events.mdx",
+        "Soundboard Sounds Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "IntegrationEvent",
+        "events/gateway-events.mdx",
+        "Integration Create Event Additional Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "IntegrationEvent",
+        "events/gateway-events.mdx",
+        "Integration Update Event Additional Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "IntegrationDelete",
+        "events/gateway-events.mdx",
+        "Integration Delete Event Fields",
+    ),
+    (
+        "invite.rs",
+        "InviteCreate",
+        "events/gateway-events.mdx",
+        "Invite Create Event Fields",
+    ),
+    (
+        "invite.rs",
+        "InviteDelete",
+        "events/gateway-events.mdx",
+        "Invite Delete Event Fields",
+    ),
+    (
+        "message/mod.rs",
+        "Message",
+        "events/gateway-events.mdx",
+        "Message Create Extra Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "MessageDelete",
+        "events/gateway-events.mdx",
+        "Message Delete Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "MessageDeleteBulk",
+        "events/gateway-events.mdx",
+        "Message Delete Bulk Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "MessageReactionAdd",
+        "events/gateway-events.mdx",
+        "Message Reaction Add Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "MessageReactionRemove",
+        "events/gateway-events.mdx",
+        "Message Reaction Remove Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "MessageReactionRemoveAll",
+        "events/gateway-events.mdx",
+        "Message Reaction Remove All Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "MessageReactionRemoveEmoji",
+        "events/gateway-events.mdx",
+        "Message Reaction Remove Emoji Event Fields",
+    ),
+    (
+        "gateway/presence.rs",
+        "PresenceUpdate",
+        "events/gateway-events.mdx",
+        "Presence Update Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "TypingStart",
+        "events/gateway-events.mdx",
+        "Typing Start Event Fields",
+    ),
+    (
+        "soundboard.rs",
+        "VoiceChannelEffectSend",
+        "events/gateway-events.mdx",
+        "Voice Channel Effect Send Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "VoiceServerUpdate",
+        "events/gateway-events.mdx",
+        "Voice Server Update Event Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "WebhooksUpdate",
+        "events/gateway-events.mdx",
+        "Webhooks Update Event Fields",
+    ),
+    (
+        "poll.rs",
+        "MessagePollVote",
+        "events/gateway-events.mdx",
+        "Message Poll Vote Add Fields",
+    ),
+    (
+        "poll.rs",
+        "MessagePollVote",
+        "events/gateway-events.mdx",
+        "Message Poll Vote Remove Fields",
+    ),
+    (
+        "gateway/event.rs",
+        "RateLimited",
+        "events/gateway-events.mdx",
+        "Rate Limited Fields",
+    ),
+    (
+        "webhook_event.rs",
+        "ApplicationAuthorized",
+        "events/webhook-events.mdx",
+        "Application Authorized Structure",
+    ),
+    (
+        "webhook_event.rs",
+        "ApplicationDeauthorized",
+        "events/webhook-events.mdx",
+        "Application Deauthorized Structure",
+    ),
+    (
+        "",
+        "",
+        "events/webhook-events.mdx",
+        "Lobby Message Delete Structure",
+    ),
+    (
+        "",
+        "",
+        "events/webhook-events.mdx",
+        "Lobby Message Structure",
+    ),
+    (
+        "",
+        "",
+        "events/webhook-events.mdx",
+        "SDK DM Message Structure",
+    ),
+    (
+        "gateway/bot.rs",
+        "SessionStartLimit",
+        "events/gateway.mdx",
+        "Session Start Limit Structure",
+    ),
+    (
+        "application.rs",
+        "RoleConnectionMetadata",
+        "resources/application-role-connection-metadata.mdx",
+        "Application Role Connection Metadata Structure",
+    ),
+    ("user.rs", "User", "resources/user.mdx", "User Structure"),
+    (
+        "user.rs",
+        "AvatarDecorationData",
+        "resources/user.mdx",
+        "Avatar Decoration Data Structure",
+    ),
+    (
+        "user.rs",
+        "Collectibles",
+        "resources/user.mdx",
+        "Collectible Structure",
+    ),
+    (
+        "user.rs",
+        "Nameplate",
+        "resources/user.mdx",
+        "Nameplate Structure",
+    ),
+    (
+        "user.rs",
+        "Connection",
+        "resources/user.mdx",
+        "Connection Structure",
+    ),
+    (
+        "user.rs",
+        "ApplicationRoleConnection",
+        "resources/user.mdx",
+        "Application Role Connection Structure",
+    ),
+    (
+        "guild/mod.rs",
+        "Guild",
+        "resources/guild.mdx",
+        "Guild Structure",
+    ),
+    (
+        "guild/extra.rs",
+        "GuildPreview",
+        "resources/guild.mdx",
+        "Guild Preview Structure",
+    ),
+    (
+        "guild/extra.rs",
+        "GuildWidgetSettings",
+        "resources/guild.mdx",
+        "Guild Widget Settings Structure",
+    ),
+    (
+        "guild/extra.rs",
+        "GuildWidget",
+        "resources/guild.mdx",
+        "Guild Widget Structure",
+    ),
+    (
+        "guild/member.rs",
+        "Member",
+        "resources/guild.mdx",
+        "Guild Member Structure",
+    ),
+    (
+        "guild/integration.rs",
+        "Integration",
+        "resources/guild.mdx",
+        "Integration Structure",
+    ),
+    (
+        "guild/integration.rs",
+        "IntegrationAccount",
+        "resources/guild.mdx",
+        "Integration Account Structure",
+    ),
+    (
+        "application.rs",
+        "Application",
+        "resources/guild.mdx",
+        "Integration Application Structure",
+    ),
+    (
+        "guild/member.rs",
+        "Ban",
+        "resources/guild.mdx",
+        "Ban Structure",
+    ),
+    (
+        "guild/mod.rs",
+        "WelcomeScreen",
+        "resources/guild.mdx",
+        "Welcome Screen Structure",
+    ),
+    (
+        "guild/mod.rs",
+        "WelcomeScreenChannel",
+        "resources/guild.mdx",
+        "Welcome Screen Channel Structure",
+    ),
+    (
+        "guild/extra.rs",
+        "Onboarding",
+        "resources/guild.mdx",
+        "Guild Onboarding Structure",
+    ),
+    (
+        "guild/extra.rs",
+        "OnboardingPrompt",
+        "resources/guild.mdx",
+        "Onboarding Prompt Structure",
+    ),
+    (
+        "guild/extra.rs",
+        "OnboardingPromptOption",
+        "resources/guild.mdx",
+        "Prompt Option Structure",
+    ),
+    (
+        "guild/mod.rs",
+        "IncidentsData",
+        "resources/guild.mdx",
+        "Incidents Data Structure",
+    ),
+    (
+        "channel.rs",
+        "Channel",
+        "resources/channel.mdx",
+        "Channel Structure",
+    ),
+    (
+        "channel.rs",
+        "FollowedChannel",
+        "resources/channel.mdx",
+        "Followed Channel Structure",
+    ),
+    (
+        "channel.rs",
+        "PermissionOverwrite",
+        "resources/channel.mdx",
+        "Overwrite Structure",
+    ),
+    (
+        "channel.rs",
+        "ThreadMetadata",
+        "resources/channel.mdx",
+        "Thread Metadata Structure",
+    ),
+    (
+        "channel.rs",
+        "ThreadMember",
+        "resources/channel.mdx",
+        "Thread Member Structure",
+    ),
+    (
+        "channel.rs",
+        "DefaultReaction",
+        "resources/channel.mdx",
+        "Default Reaction Structure",
+    ),
+    (
+        "channel.rs",
+        "ForumTag",
+        "resources/channel.mdx",
+        "Forum Tag Structure",
+    ),
+    (
+        "message/mod.rs",
+        "Message",
+        "resources/message.mdx",
+        "Message Structure",
+    ),
+    (
+        "message/mod.rs",
+        "MessageActivity",
+        "resources/message.mdx",
+        "Message Activity Structure",
+    ),
+    (
+        "interaction.rs",
+        "InteractionMetadata",
+        "resources/message.mdx",
+        "Application Command Interaction Metadata Structure",
+    ),
+    (
+        "interaction.rs",
+        "InteractionMetadata",
+        "resources/message.mdx",
+        "Message Component Interaction Metadata Structure",
+    ),
+    (
+        "interaction.rs",
+        "InteractionMetadata",
+        "resources/message.mdx",
+        "Modal Submit Interaction Metadata Structure",
+    ),
+    (
+        "message/mod.rs",
+        "MessageCall",
+        "resources/message.mdx",
+        "Message Call Object Structure",
+    ),
+    (
+        "message/mod.rs",
+        "Reaction",
+        "resources/message.mdx",
+        "Reaction Structure",
+    ),
+    (
+        "message/mod.rs",
+        "ReactionCountDetails",
+        "resources/message.mdx",
+        "Reaction Count Details Structure",
+    ),
+    (
+        "message/embed.rs",
+        "Embed",
+        "resources/message.mdx",
+        "Embed Structure",
+    ),
+    (
+        "message/embed.rs",
+        "EmbedVideo",
+        "resources/message.mdx",
+        "Embed Video Structure",
+    ),
+    (
+        "message/embed.rs",
+        "EmbedMedia",
+        "resources/message.mdx",
+        "Embed Image Structure",
+    ),
+    (
+        "message/embed.rs",
+        "EmbedProvider",
+        "resources/message.mdx",
+        "Embed Provider Structure",
+    ),
+    (
+        "message/embed.rs",
+        "EmbedAuthor",
+        "resources/message.mdx",
+        "Embed Author Structure",
+    ),
+    (
+        "message/embed.rs",
+        "EmbedFooter",
+        "resources/message.mdx",
+        "Embed Footer Structure",
+    ),
+    (
+        "message/embed.rs",
+        "EmbedField",
+        "resources/message.mdx",
+        "Embed Field Structure",
+    ),
+    (
+        "message/attachment.rs",
+        "Attachment",
+        "resources/message.mdx",
+        "Attachment Structure",
+    ),
+    (
+        "message/mod.rs",
+        "ChannelMention",
+        "resources/message.mdx",
+        "Channel Mention Structure",
+    ),
+    (
+        "message/mod.rs",
+        "RoleSubscriptionData",
+        "resources/message.mdx",
+        "Role Subscription Data Object Structure",
+    ),
+    (
+        "message/mod.rs",
+        "MessagePin",
+        "resources/message.mdx",
+        "Message Pin Object Structure",
+    ),
+    (
+        "message/mod.rs",
+        "SharedClientTheme",
+        "resources/message.mdx",
+        "Shared Client Theme Object Structure",
+    ),
+    (
+        "emoji.rs",
+        "Emoji",
+        "resources/emoji.mdx",
+        "Emoji Structure",
+    ),
+    (
+        "sticker.rs",
+        "Sticker",
+        "resources/sticker.mdx",
+        "Sticker Structure",
+    ),
+    (
+        "sticker.rs",
+        "StickerItem",
+        "resources/sticker.mdx",
+        "Sticker Item Structure",
+    ),
+    (
+        "sticker.rs",
+        "StickerPack",
+        "resources/sticker.mdx",
+        "Sticker Pack Structure",
+    ),
+    (
+        "invite.rs",
+        "Invite",
+        "resources/invite.mdx",
+        "Invite Structure",
+    ),
+    (
+        "invite.rs",
+        "Invite",
+        "resources/invite.mdx",
+        "Invite Metadata Structure",
+    ),
+    (
+        "webhook.rs",
+        "Webhook",
+        "resources/webhook.mdx",
+        "Webhook Structure",
+    ),
+    (
+        "voice.rs",
+        "VoiceState",
+        "resources/voice.mdx",
+        "Voice State Structure",
+    ),
+    (
+        "voice.rs",
+        "VoiceRegion",
+        "resources/voice.mdx",
+        "Voice Region Structure",
+    ),
+    (
+        "application.rs",
+        "Application",
+        "resources/application.mdx",
+        "Application Structure",
+    ),
+    (
+        "application.rs",
+        "InstallParams",
+        "resources/application.mdx",
+        "Install Params Structure",
+    ),
+    (
+        "auto_moderation.rs",
+        "AutoModerationRule",
+        "resources/auto-moderation.mdx",
+        "Auto Moderation Rule Structure",
+    ),
+    (
+        "auto_moderation.rs",
+        "AutoModerationAction",
+        "resources/auto-moderation.mdx",
+        "Auto Moderation Action Structure",
+    ),
+    (
+        "audit_log.rs",
+        "AuditLog",
+        "resources/audit-log.mdx",
+        "Audit Log Structure",
+    ),
+    (
+        "audit_log.rs",
+        "AuditLogEntry",
+        "resources/audit-log.mdx",
+        "Audit Log Entry Structure",
+    ),
+    (
+        "audit_log.rs",
+        "AuditLogChange",
+        "resources/audit-log.mdx",
+        "Audit Log Change Structure",
+    ),
+    (
+        "scheduled_event.rs",
+        "ScheduledEvent",
+        "resources/guild-scheduled-event.mdx",
+        "Guild Scheduled Event Structure",
+    ),
+    (
+        "scheduled_event.rs",
+        "ScheduledEventUser",
+        "resources/guild-scheduled-event.mdx",
+        "Guild Scheduled Event User Structure",
+    ),
+    (
+        "scheduled_event.rs",
+        "RecurrenceRule",
+        "resources/guild-scheduled-event.mdx",
+        "Guild Scheduled Event Recurrence Rule Structure",
+    ),
+    (
+        "scheduled_event.rs",
+        "RecurrenceNWeekday",
+        "resources/guild-scheduled-event.mdx",
+        "Guild Scheduled Event Recurrence Rule - N_Weekday Structure",
+    ),
+    (
+        "stage.rs",
+        "StageInstance",
+        "resources/stage-instance.mdx",
+        "Stage Instance Structure",
+    ),
+    (
+        "entitlement.rs",
+        "Entitlement",
+        "resources/entitlement.mdx",
+        "Entitlement Structure",
+    ),
+    ("sku.rs", "Sku", "resources/sku.mdx", "SKU Structure"),
+    (
+        "soundboard.rs",
+        "SoundboardSound",
+        "resources/soundboard.mdx",
+        "Soundboard Sound Structure",
+    ),
+    (
+        "poll.rs",
+        "Poll",
+        "resources/poll.mdx",
+        "Poll Object Structure",
+    ),
+    (
+        "poll.rs",
+        "PollCreate",
+        "resources/poll.mdx",
+        "Poll Create Request Object Structure",
+    ),
+    (
+        "poll.rs",
+        "PollMedia",
+        "resources/poll.mdx",
+        "Poll Media Object Structure",
+    ),
+    (
+        "poll.rs",
+        "PollAnswer",
+        "resources/poll.mdx",
+        "Poll Answer Object Structure",
+    ),
+    (
+        "poll.rs",
+        "PollResults",
+        "resources/poll.mdx",
+        "Poll Results Object Structure",
+    ),
+    (
+        "poll.rs",
+        "PollAnswerCount",
+        "resources/poll.mdx",
+        "Poll Answer Count Object Structure",
+    ),
+    (
+        "guild/template.rs",
+        "GuildTemplate",
+        "resources/guild-template.mdx",
+        "Guild Template Structure",
+    ),
+    (
+        "command.rs",
+        "ApplicationCommand",
+        "interactions/application-commands.mdx",
+        "Application Command Structure",
+    ),
+    (
+        "command.rs",
+        "CommandOption",
+        "interactions/application-commands.mdx",
+        "Application Command Option Structure",
+    ),
+    (
+        "command.rs",
+        "CommandOptionChoice",
+        "interactions/application-commands.mdx",
+        "Application Command Option Choice Structure",
+    ),
+    (
+        "command.rs",
+        "GuildCommandPermissions",
+        "interactions/application-commands.mdx",
+        "Guild Application Command Permissions Structure",
+    ),
+    (
+        "command.rs",
+        "CommandPermission",
+        "interactions/application-commands.mdx",
+        "Application Command Permissions Structure",
+    ),
+    (
+        "interaction.rs",
+        "Interaction",
+        "interactions/receiving-and-responding.mdx",
+        "Interaction Structure",
+    ),
+    (
+        "interaction.rs",
+        "CommandData",
+        "interactions/receiving-and-responding.mdx",
+        "Application Command Data Structure",
+    ),
+    (
+        "interaction.rs",
+        "MessageComponentData+SubmittedComponent",
+        "interactions/receiving-and-responding.mdx",
+        "Message Component Data Structure",
+    ),
+    (
+        "interaction.rs",
+        "ModalSubmitData",
+        "interactions/receiving-and-responding.mdx",
+        "Modal Submit Data Structure",
+    ),
+    (
+        "interaction.rs",
+        "Resolved",
+        "interactions/receiving-and-responding.mdx",
+        "Resolved Data Structure",
+    ),
+    (
+        "interaction.rs",
+        "CommandDataOption",
+        "interactions/receiving-and-responding.mdx",
+        "Application Command Interaction Data Option Structure",
+    ),
+    (
+        "interaction.rs",
+        "MessageInteraction",
+        "interactions/receiving-and-responding.mdx",
+        "Message Interaction Structure",
+    ),
+    (
+        "interaction.rs",
+        "InteractionResponse",
+        "interactions/receiving-and-responding.mdx",
+        "Interaction Response Structure",
+    ),
+    (
+        "gateway/command.rs",
+        "Identify",
+        "events/gateway-events.mdx",
+        "Identify Structure",
+    ),
+    (
+        "gateway/command.rs",
+        "Resume",
+        "events/gateway-events.mdx",
+        "Resume Structure",
+    ),
+    (
+        "gateway/command.rs",
+        "RequestGuildMembers",
+        "events/gateway-events.mdx",
+        "Request Guild Members Structure",
+    ),
+    (
+        "gateway/command.rs",
+        "RequestSoundboardSounds",
+        "events/gateway-events.mdx",
+        "Request Soundboard Sounds Structure",
+    ),
+    (
+        "gateway/command.rs",
+        "RequestChannelInfo",
+        "events/gateway-events.mdx",
+        "Request Channel Info Structure",
+    ),
+    (
+        "gateway/command.rs",
+        "UpdateVoiceState",
+        "events/gateway-events.mdx",
+        "Gateway Voice State Update Structure",
+    ),
+    (
+        "gateway/presence.rs",
+        "UpdatePresence",
+        "events/gateway-events.mdx",
+        "Gateway Presence Update Structure",
+    ),
+    (
+        "gateway/payload.rs",
+        "Hello",
+        "events/gateway-events.mdx",
+        "Hello Structure",
+    ),
+    (
+        "gateway/event.rs",
+        "ChannelInfo",
+        "events/gateway-events.mdx",
+        "Channel Info Structure",
+    ),
+    (
+        "gateway/event.rs",
+        "ChannelInfoChannel",
+        "events/gateway-events.mdx",
+        "Channel Info Channel Structure",
+    ),
+    (
+        "gateway/presence.rs",
+        "PresenceActivity",
+        "events/gateway-events.mdx",
+        "Activity Structure",
+    ),
+    (
+        "gateway/event.rs",
+        "RateLimitedMeta",
+        "events/gateway-events.mdx",
+        "Request Guild Member Rate Limit Metadata Structure",
+    ),
+    (
+        "guild/role.rs",
+        "Role",
+        "topics/permissions.mdx",
+        "Role Structure",
+    ),
+    (
+        "guild/role.rs",
+        "RoleTags",
+        "topics/permissions.mdx",
+        "Role Tags Structure",
+    ),
+];
+
+/// Docs flag tables compared with model bitflags: (file in
+/// `crates/model/src`, bitflags type, docs page, heading). An empty type
+/// means cordex has no bitflags type for it yet.
+const FLAGS: &[(&str, &str, &str, &str)] = &[
+    (
+        "application.rs",
+        "ApplicationFlags",
+        "resources/application.mdx",
+        "Application Flags",
+    ),
+    (
+        "channel.rs",
+        "ChannelFlags",
+        "resources/channel.mdx",
+        "Channel Flags",
+    ),
+    (
+        "guild/mod.rs",
+        "SystemChannelFlags",
+        "resources/guild.mdx",
+        "System Channel Flags",
+    ),
+    (
+        "guild/member.rs",
+        "MemberFlags",
+        "resources/guild.mdx",
+        "Guild Member Flags",
+    ),
+    (
+        "invite.rs",
+        "GuildInviteFlags",
+        "resources/invite.mdx",
+        "Guild Invite Flags",
+    ),
+    (
+        "message/mod.rs",
+        "MessageFlags",
+        "resources/message.mdx",
+        "Message Flags",
+    ),
+    (
+        "message/embed.rs",
+        "EmbedFlags",
+        "resources/message.mdx",
+        "Embed Flags",
+    ),
+    (
+        "message/embed.rs",
+        "EmbedMediaFlags",
+        "resources/message.mdx",
+        "Embed Media Flags",
+    ),
+    (
+        "message/attachment.rs",
+        "AttachmentFlags",
+        "resources/message.mdx",
+        "Attachment Flags",
+    ),
+    ("sku.rs", "SkuFlags", "resources/sku.mdx", "SKU Flags"),
+    ("user.rs", "UserFlags", "resources/user.mdx", "User Flags"),
+    (
+        "permissions.rs",
+        "Permissions",
+        "topics/permissions.mdx",
+        "Bitwise Permission Flags",
+    ),
+    (
+        "guild/role.rs",
+        "RoleFlags",
+        "topics/permissions.mdx",
+        "Role Flags",
+    ),
+    (
+        "gateway/presence.rs",
+        "ActivityFlags",
+        "events/gateway-events.mdx",
+        "Activity Flags",
+    ),
+    (
+        "component.rs",
+        "UnfurledMediaItemFlags",
+        "components/reference.mdx",
+        "Unfurled Media Item Flags",
+    ),
+    (
+        "component.rs",
+        "ContentScanFlags",
+        "components/reference.mdx",
+        "Content Scan Metadata Flags",
+    ),
+];
+
 /// Model enums whose values are compared with a docs table:
 /// (file in `crates/model/src`, enum, docs page in `developers/`, heading).
 const ENUMS: &[(&str, &str, &str, &str)] = &[
+    (
+        "webhook_event.rs",
+        "WebhookEventType",
+        "events/webhook-events.mdx",
+        "Webhook Types",
+    ),
     ("sku.rs", "SkuType", "resources/sku.mdx", "SKU Types"),
     (
         "sku.rs",
@@ -397,8 +1703,10 @@ pub(crate) fn coverage(args: &[String]) -> Result<(), String> {
     };
     let docs = fetch_docs(&cache, &rev)?;
     let areas = measure(&root, &docs.join("developers"))?;
-    let report = render(&rev, &areas);
+    let unmapped = unmapped_tables(&docs)?;
+    let report = render(&rev, &areas, &unmapped);
     print_summary(&rev, &areas);
+    println!("  docs tables not compared yet: {}", unmapped.len());
 
     if check {
         let current = read(&root.join(REPORT)).unwrap_or_default();
@@ -571,6 +1879,8 @@ fn measure(root: &Path, docs: &Path) -> Result<Vec<Area>, String> {
             &match_arm_numbers(&read(&model.join("component.rs"))?),
         )?,
         enums(&model, docs)?,
+        fields(&model, docs)?,
+        flags(&model, docs)?,
     ])
 }
 
@@ -709,6 +2019,10 @@ fn endpoints(root: &Path, docs: &Path) -> Result<Area, String> {
             let Some((path, _)) = rest.split_once("</Route>") else {
                 continue;
             };
+            // Routes the docs mark as deprecated are not counted.
+            if heading.to_ascii_lowercase().contains("(deprecated)") {
+                continue;
+            }
             let key = format!("{method} {}", normalize_doc_path(path));
             if seen.insert(key.clone()) {
                 items.push(Item {
@@ -787,7 +2101,12 @@ fn events(model: &Path, docs: &Path) -> Result<Area, String> {
     let ours: BTreeSet<String> = event_rs
         .lines()
         .filter_map(|l| {
-            let (_, rhs) = l.split_once("=> \"")?;
+            // `Self::X(_) => "NAME",` or a lone `"NAME"` line when rustfmt
+            // wrapped the arm.
+            let rhs = l
+                .split_once("=> \"")
+                .map(|(_, rhs)| rhs)
+                .or_else(|| l.trim().strip_prefix('"'))?;
             let name = rhs.split('"').next()?;
             name.chars()
                 .all(|c| c.is_ascii_uppercase() || c == '_')
@@ -884,7 +2203,214 @@ fn enums(model: &Path, docs: &Path) -> Result<Area, String> {
     })
 }
 
+fn fields(model: &Path, docs: &Path) -> Result<Area, String> {
+    let mut items = Vec::new();
+    for (file, name, page, heading) in FIELDS {
+        let ours = if name.is_empty() {
+            BTreeSet::new()
+        } else {
+            // `A+B`: the table describes several cordex types together.
+            let mut found = BTreeSet::new();
+            for part in name.split('+') {
+                let fields = struct_fields(model, &read(&model.join(file))?, part, 0)?
+                    .ok_or_else(|| format!("struct {part} not found in {file}"))?;
+                found.extend(fields);
+            }
+            if *file == "component.rs" {
+                // `component_struct!` adds `id`; `type` comes from the
+                // `Component` enum's serializer.
+                found.extend(["id".to_owned(), "type".to_owned()]);
+            }
+            found
+        };
+        let text = read_doc(docs, page)?;
+        let rows = table_after(&text, heading).ok_or_else(|| {
+            format!("heading '{heading}' not found in {page} (docs restructured?)")
+        })?;
+        for row in rows {
+            let Some(field) = row.first().map(|c| doc_field_name(c)) else {
+                continue;
+            };
+            let deprecated = row
+                .iter()
+                .skip(1)
+                .any(|c| c.to_ascii_lowercase().contains("deprecated"));
+            if field.is_empty() || deprecated {
+                continue;
+            }
+            let label = if name.is_empty() {
+                heading.trim_end_matches(" Structure")
+            } else {
+                name
+            };
+            items.push(Item {
+                key: format!("{heading}.{field}"),
+                covered: ours.contains(&field),
+                name: format!("{label}.{field}"),
+                detail: format!("({page}, {heading})"),
+            });
+        }
+    }
+    Ok(Area {
+        title: "Object fields",
+        items,
+    })
+}
+
+/// `` `nick?` `` / `id \[1\]` / `**field**` → `nick` / `id` / `field`.
+fn doc_field_name(cell: &str) -> String {
+    let text = strip_cell(cell);
+    let first = text.split_whitespace().next().unwrap_or("");
+    let first = first.split('[').next().unwrap_or("");
+    first
+        .trim_end_matches('?')
+        .trim_matches(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .to_owned()
+}
+
+fn flags(model: &Path, docs: &Path) -> Result<Area, String> {
+    let mut items = Vec::new();
+    for (file, name, page, heading) in FLAGS {
+        let ours = if name.is_empty() {
+            BTreeSet::new()
+        } else {
+            let bits = flag_bits(&read(&model.join(file))?, name);
+            if bits.is_empty() {
+                return Err(format!("bitflags {name} not found in {file}"));
+            }
+            bits
+        };
+        let text = read_doc(docs, page)?;
+        let rows = table_after(&text, heading).ok_or_else(|| {
+            format!("heading '{heading}' not found in {page} (docs restructured?)")
+        })?;
+        for row in rows {
+            let Some(bit) = row.iter().find_map(|c| shift_value(c)) else {
+                continue;
+            };
+            let flag = row.first().map(|c| doc_field_name(c)).unwrap_or_default();
+            let label = if name.is_empty() { heading } else { name };
+            items.push(Item {
+                key: format!("{heading}={bit}"),
+                covered: ours.contains(&bit),
+                name: format!("{label}: {flag}"),
+                detail: format!("`1 << {bit}`"),
+            });
+        }
+    }
+    Ok(Area {
+        title: "Bitflags",
+        items,
+    })
+}
+
+/// `1 << 12` inside a cell (also `` `(1 << 12)` ``).
+fn shift_value(cell: &str) -> Option<u32> {
+    let (_, rest) = cell.split_once("1 << ")?;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
 // ---- source parsing -------------------------------------------------------
+
+/// Serialized field names of `pub struct NAME` (renames applied, flattened
+/// structs expanded). `None` when the struct is not in `text`.
+fn struct_fields(
+    model: &Path,
+    text: &str,
+    name: &str,
+    depth: u8,
+) -> Result<Option<BTreeSet<String>>, String> {
+    let plain = format!("pub struct {name} {{");
+    let generic = format!("pub struct {name}<");
+    let mut lines = text.lines();
+    if !lines.any(|l| {
+        let l = l.trim_start();
+        l.starts_with(&plain) || (l.starts_with(&generic) && l.ends_with('{'))
+    }) {
+        return Ok(None);
+    }
+    let mut out = BTreeSet::new();
+    let mut attrs = String::new();
+    for line in lines {
+        let line = line.trim();
+        if line == "}" {
+            break;
+        }
+        if line.starts_with("#[serde(") {
+            attrs.push_str(line);
+            continue;
+        }
+        let Some(rest) = line.strip_prefix("pub ") else {
+            continue;
+        };
+        let Some((field, ty)) = rest.split_once(':') else {
+            continue;
+        };
+        let field = field.trim().trim_start_matches("r#");
+        if attrs.contains("flatten") && depth < 3 {
+            let inner = ty
+                .trim()
+                .trim_end_matches(',')
+                .trim_start_matches("Option<")
+                .trim_start_matches("Box<")
+                .trim_end_matches('>');
+            let inner = inner.rsplit("::").next().unwrap_or(inner);
+            if let Some(found) = find_struct(model, inner, depth + 1)? {
+                out.extend(found);
+            }
+        } else if let Some(renamed) = attrs
+            .split("rename = \"")
+            .nth(1)
+            .and_then(|r| r.split('"').next())
+        {
+            out.insert(renamed.to_owned());
+        } else if field == "kind" {
+            // Rust has no `type` field; manual Deserialize impls map it.
+            out.insert("type".to_owned());
+        } else {
+            out.insert(field.to_owned());
+        }
+        attrs.clear();
+    }
+    Ok(Some(out))
+}
+
+/// Fields of a struct anywhere in `crates/model/src`.
+fn find_struct(model: &Path, name: &str, depth: u8) -> Result<Option<BTreeSet<String>>, String> {
+    let mut files = Vec::new();
+    rs_files(model, &mut files)?;
+    for file in files {
+        if let Some(found) = struct_fields(model, &read(&file)?, name, depth)? {
+            return Ok(Some(found));
+        }
+    }
+    Ok(None)
+}
+
+fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries = fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            rs_files(&path, out)?;
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Bit numbers of `const X = 1 << N;` in `pub struct NAME: u64 {`.
+fn flag_bits(text: &str, name: &str) -> BTreeSet<u32> {
+    let header = format!("pub struct {name}:");
+    text.lines()
+        .skip_while(|l| !l.trim_start().starts_with(&header))
+        .skip(1)
+        .take_while(|l| l.trim() != "}")
+        .filter_map(shift_value)
+        .collect()
+}
 
 /// Lines of `enum NAME … {` up to the closing `}`.
 fn enum_block<'a>(text: &'a str, name: &str) -> impl Iterator<Item = &'a str> {
@@ -961,7 +2487,128 @@ fn print_summary(rev: &str, areas: &[Area]) {
     );
 }
 
-fn render(rev: &str, areas: &[Area]) -> String {
+/// Docs tables deliberately not compared, with the reason.
+const SKIPPED_TABLES: &[(&str, &str)] = &[
+    (
+        "Thread Fields",
+        "prose list of channel fields (channel object is compared)",
+    ),
+    (
+        "Forum and Media Channel Fields",
+        "prose list of channel fields (channel object is compared)",
+    ),
+    (
+        "Forum and Media Channel Thread Fields",
+        "prose list of channel fields (channel object is compared)",
+    ),
+    (
+        "Entitlement Create Structure",
+        "no own table: the entitlement object",
+    ),
+    (
+        "Entitlement Update Structure",
+        "no own table: the entitlement object",
+    ),
+    (
+        "Entitlement Delete Structure",
+        "no own table: the entitlement object",
+    ),
+    (
+        "Lobby Message Create Structure",
+        "no own table: the lobby message object",
+    ),
+    (
+        "Lobby Message Update Structure",
+        "no own table: the lobby message object",
+    ),
+    (
+        "Game Direct Message Create Structure",
+        "no own table: the SDK DM message object",
+    ),
+    (
+        "Game Direct Message Update Structure",
+        "no own table: the SDK DM message object",
+    ),
+    (
+        "Game Direct Message Delete Structure",
+        "no own table: the SDK DM message object",
+    ),
+    (
+        "Response Structure",
+        "list wrappers, unwrapped by the REST methods",
+    ),
+    (
+        "Attachment Request Structure",
+        "request side, built by the upload builders",
+    ),
+    ("Invite Stage Instance Structure", "deprecated"),
+    (
+        "Rate Limit Metadata for Opcode Structure",
+        "index of the per-opcode tables",
+    ),
+    (
+        "Rate Limit Response Structure",
+        "REST error body, handled by the client",
+    ),
+    (
+        "Additional Fields",
+        "generic heading of the Social SDK message events",
+    ),
+    (
+        "Poll Result Embed Fields",
+        "embed field names, not an object",
+    ),
+    (
+        "Interaction Callback Data Structure",
+        "split into sub-tables per callback type",
+    ),
+];
+
+/// Pages outside the bot API scope (non-goals): RPC and voice connections.
+const OUT_OF_SCOPE_PAGES: &[&str] = &[
+    "developers/topics/rpc.mdx",
+    "developers/topics/voice-connections.mdx",
+];
+
+/// `Structure` / `Fields` tables on bot API pages that are neither mapped in
+/// [`FIELDS`] nor in [`SKIPPED_TABLES`]: work still to do for the field
+/// coverage.
+fn unmapped_tables(root: &Path) -> Result<Vec<String>, String> {
+    let mut files = Vec::new();
+    mdx_files(&root.join("developers"), &mut files)?;
+    files.sort();
+    let mut out = Vec::new();
+    for file in files {
+        let page = file
+            .strip_prefix(root)
+            .map_or_else(|_| file.display().to_string(), |p| p.display().to_string())
+            .replace('\\', "/");
+        if !BOT_PAGES.iter().any(|p| page.starts_with(p))
+            || OUT_OF_SCOPE_PAGES.contains(&page.as_str())
+        {
+            continue;
+        }
+        let short_page = page.trim_start_matches("developers/");
+        for line in read(&file)?.lines() {
+            let Some(heading) = heading_text(line) else {
+                continue;
+            };
+            if !(heading.ends_with(" Structure") || heading.ends_with(" Fields")) {
+                continue;
+            }
+            let mapped = FIELDS
+                .iter()
+                .any(|(_, _, p, h)| *p == short_page && *h == heading);
+            let skipped = SKIPPED_TABLES.iter().any(|(h, _)| *h == heading);
+            if !mapped && !skipped {
+                out.push(format!("{heading} ({short_page})"));
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn render(rev: &str, areas: &[Area], unmapped: &[String]) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
@@ -969,8 +2616,8 @@ fn render(rev: &str, areas: &[Area]) -> String {
          Generated by `cargo xtask coverage` against \
          [`discord-api-docs@{short}`]({DOCS_REPO}/tree/{rev}). Do not edit by hand.\n\n\
          Measured: REST endpoints, gateway receive events, opcodes and close codes, \
-         component types and the value tables of the model enums. **Not measured yet:** \
-         object fields and bitflags, so the total below is not the full API.\n\n\
+         component types, the value tables of the model enums, object fields and bitflags \
+         (for the mapped docs tables).\n\n\
          | Area | Covered | Total | % |\n|---|---:|---:|---:|",
         short = short(rev)
     );
@@ -1002,6 +2649,26 @@ fn render(rev: &str, areas: &[Area]) -> String {
         let _ = writeln!(out, "Missing:\n");
         for item in missing {
             let _ = writeln!(out, "- {} {}", item.name, item.detail);
+        }
+    }
+    let _ = writeln!(
+        out,
+        "\n## Docs tables not compared yet ({})\n",
+        unmapped.len()
+    );
+    if unmapped.is_empty() {
+        let _ = writeln!(
+            out,
+            "Every object and field table of the bot API pages is compared."
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "These field tables are not mapped to a cordex type yet, so their fields are not \
+             in the numbers above:\n"
+        );
+        for table in unmapped {
+            let _ = writeln!(out, "- {table}");
         }
     }
     out
@@ -1159,5 +2826,44 @@ mod tests {
         assert!(text.contains("developers/resources/x.mdx"), "{text}");
         assert!(!text.contains("y.png"), "{text}");
         assert!(!text.contains("GET /a "), "{text}");
+    }
+
+    #[test]
+    fn doc_cells_parse() {
+        assert_eq!(doc_field_name("nick?"), "nick");
+        assert_eq!(doc_field_name("`guild_id`"), "guild_id");
+        assert_eq!(doc_field_name(r"type\* \[1\]"), "type");
+        assert_eq!(doc_field_name("**id**"), "id");
+        assert_eq!(shift_value("`0x0000000000000002` `(1 << 1)`"), Some(1));
+        assert_eq!(shift_value("`1 << 18`"), Some(18));
+        assert_eq!(shift_value("none"), None);
+    }
+
+    #[test]
+    fn struct_fields_apply_serde_attributes() {
+        let src = "pub struct Inner {\n    pub extra: u8,\n}\n\
+                   pub struct Outer<'a> {\n    /// doc\n    pub id: u64,\n    \
+                   #[serde(rename = \"type\")]\n    pub kind: u8,\n    \
+                   #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    \
+                   pub nick: Option<&'a str>,\n    pub kind2: u8,\n}\n\
+                   pub struct Other {\n    pub kind: u8,\n}\n";
+        let dir = std::env::temp_dir().join(format!("cordex-xtask-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("a.rs"), src).unwrap();
+        let fields = struct_fields(&dir, src, "Outer", 0).unwrap().unwrap();
+        let expected: BTreeSet<String> = ["id", "type", "nick", "kind2"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert_eq!(fields, expected);
+        // A field called `kind` without rename counts as `type`.
+        let other = struct_fields(&dir, src, "Other", 0).unwrap().unwrap();
+        assert!(other.contains("type"));
+        assert!(struct_fields(&dir, src, "Missing", 0).unwrap().is_none());
+        let _ = fs::remove_dir_all(&dir);
+
+        let flags = "bitflags::bitflags! {\n    pub struct F: u64 {\n        const A = 1 << 0;\n        \
+                     const B = 1 << 7;\n    }\n}\n";
+        assert_eq!(flag_bits(flags, "F"), BTreeSet::from([0, 7]));
     }
 }

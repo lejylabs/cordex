@@ -122,6 +122,9 @@ pub struct Message {
     pub stickers: Vec<Sticker>,
     /// Approximate position in a thread.
     pub position: Option<u32>,
+    /// Type of the channel the message was sent in (`MESSAGE_CREATE` only).
+    #[serde(default)]
+    pub channel_type: Option<crate::channel::ChannelType>,
     /// Role subscription purchase/renewal data.
     pub role_subscription_data: Option<RoleSubscriptionData>,
     /// Users, members, channels and roles referenced in components.

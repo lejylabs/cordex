@@ -167,6 +167,7 @@ mod interaction;
 mod invite;
 mod member;
 mod message;
+mod misc;
 mod permissions;
 mod reaction;
 mod role;
@@ -192,6 +193,10 @@ pub use guild_admin::{
 };
 pub use message::GetReactions;
 pub use message::{CreateMessage, EditMessage, GetChannelMessages};
+pub use misc::{
+    AuthorizationInfo, MAX_TARGET_USERS_BULK, SearchGuildMessages, SearchResult, SearchResults,
+    TargetUsersJob, UpdateCurrentVoiceState, UpdateGuildTemplate, UpdateVoiceState,
+};
 pub use permissions::{GetPermissions, PermissionsOnly};
 pub use scheduled_event::{GetScheduledEvent, GetScheduledEventUsers, GetScheduledEvents};
 pub use thread::{GetArchivedThreads, GetThreadMember, GetThreadMembers, ThreadList};

@@ -4,6 +4,7 @@ mod extra;
 pub mod integration;
 pub mod member;
 pub mod role;
+mod template;
 
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +18,7 @@ pub use integration::{
 };
 pub use member::{Ban, Member, MemberFlags};
 pub use role::{Role, RoleColors, RoleFlags, RoleTags};
+pub use template::GuildTemplate;
 
 use crate::emoji::Emoji;
 use crate::id::Id;

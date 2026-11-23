@@ -30,7 +30,8 @@ All three must pass before a pull request is merged; CI runs the same commands.
 When you add or remove an endpoint, event or enum value, run
 `cargo xtask coverage` and commit the updated `docs/coverage.md`. Every REST
 method in `cordex-http` needs a doc comment with its route, e.g.
-`` /// `GET /channels/{channel_id}` ``; the coverage tool reads these.
+`` /// `GET /channels/{channel_id}` ``; the coverage tool reads these. New model types for a docs table go into the
+`FIELDS` / `FLAGS` / `ENUMS` lists in `xtask/src/coverage.rs`.
 
 ## Rules for code
 

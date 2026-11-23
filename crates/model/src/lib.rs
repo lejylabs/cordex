@@ -34,6 +34,7 @@ pub mod token;
 pub mod user;
 pub mod voice;
 pub mod webhook;
+pub mod webhook_event;
 
 mod serde_util;
 

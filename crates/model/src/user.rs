@@ -200,6 +200,10 @@ pub struct Connection {
     /// Visibility (0 = only you, 1 = everyone).
     #[serde(default)]
     pub visibility: u8,
+    /// Server integrations of this connection (partial integrations, kept
+    /// as JSON).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub integrations: Vec<serde_json::Value>,
 }
 
 /// The current user's role connection for one application.

@@ -146,6 +146,26 @@ bitflags::bitflags! {
         const VOICE_CHANNEL_EFFECT_SEND = 1 << 68;
         /// Events without a typed variant (`Event::Unknown`).
         const UNKNOWN = 1 << 69;
+        /// `VOICE_CHANNEL_STATUS_UPDATE`.
+        const VOICE_CHANNEL_STATUS_UPDATE = 1 << 70;
+        /// `VOICE_CHANNEL_START_TIME_UPDATE`.
+        const VOICE_CHANNEL_START_TIME_UPDATE = 1 << 71;
+        /// `CHANNEL_INFO`.
+        const CHANNEL_INFO = 1 << 72;
+        /// `INTEGRATION_CREATE`.
+        const INTEGRATION_CREATE = 1 << 73;
+        /// `INTEGRATION_UPDATE`.
+        const INTEGRATION_UPDATE = 1 << 74;
+        /// `INTEGRATION_DELETE`.
+        const INTEGRATION_DELETE = 1 << 75;
+        /// `SUBSCRIPTION_CREATE`.
+        const SUBSCRIPTION_CREATE = 1 << 76;
+        /// `SUBSCRIPTION_UPDATE`.
+        const SUBSCRIPTION_UPDATE = 1 << 77;
+        /// `SUBSCRIPTION_DELETE`.
+        const SUBSCRIPTION_DELETE = 1 << 78;
+        /// `RATE_LIMITED`.
+        const RATE_LIMITED = 1 << 79;
     }
 }
 
@@ -226,6 +246,16 @@ impl EventTypeFlags {
             "MESSAGE_POLL_VOTE_ADD" => Self::MESSAGE_POLL_VOTE_ADD,
             "MESSAGE_POLL_VOTE_REMOVE" => Self::MESSAGE_POLL_VOTE_REMOVE,
             "VOICE_CHANNEL_EFFECT_SEND" => Self::VOICE_CHANNEL_EFFECT_SEND,
+            "VOICE_CHANNEL_STATUS_UPDATE" => Self::VOICE_CHANNEL_STATUS_UPDATE,
+            "VOICE_CHANNEL_START_TIME_UPDATE" => Self::VOICE_CHANNEL_START_TIME_UPDATE,
+            "CHANNEL_INFO" => Self::CHANNEL_INFO,
+            "INTEGRATION_CREATE" => Self::INTEGRATION_CREATE,
+            "INTEGRATION_UPDATE" => Self::INTEGRATION_UPDATE,
+            "INTEGRATION_DELETE" => Self::INTEGRATION_DELETE,
+            "SUBSCRIPTION_CREATE" => Self::SUBSCRIPTION_CREATE,
+            "SUBSCRIPTION_UPDATE" => Self::SUBSCRIPTION_UPDATE,
+            "SUBSCRIPTION_DELETE" => Self::SUBSCRIPTION_DELETE,
+            "RATE_LIMITED" => Self::RATE_LIMITED,
             _ => Self::UNKNOWN,
         }
     }

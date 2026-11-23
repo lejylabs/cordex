@@ -1046,3 +1046,78 @@ async fn auto_moderation_rule_body() {
         json!({"name": "no spam", "event_type": 1, "trigger_type": 3, "actions": [], "enabled": true})
     );
 }
+
+#[tokio::test]
+async fn search_reports_not_indexed_202() {
+    let client = client_with(|_| {
+        RawResponse {
+        status: StatusCode::ACCEPTED,
+        headers: HeaderMap::new(),
+        body: Bytes::from_static(
+            br#"{"message":"Index not yet available. Try again later","code":110000,"documents_indexed":0,"retry_after":2}"#,
+        ),
+    }
+    });
+    let result = client
+        .search_guild_messages(id(1))
+        .content("hi")
+        .await
+        .unwrap();
+    assert_eq!(
+        result,
+        crate::endpoint::SearchResult::NotIndexed {
+            retry_after: 2.0,
+            documents_indexed: 0
+        }
+    );
+}
+
+#[tokio::test]
+async fn search_sends_filters_and_parses_hits() {
+    let (client, seen) = recording(
+        r#"{"doing_deep_historical_index":false,"total_results":0,"messages":[],"threads":[]}"#,
+    );
+    let result = client
+        .search_guild_messages(id(1))
+        .content("a b")
+        .channel_id(id(2))
+        .channel_id(id(3))
+        .limit(5)
+        .await
+        .unwrap();
+    assert!(matches!(result, crate::endpoint::SearchResult::Found(r) if r.total_results == 0));
+    assert_eq!(
+        seen.lock()[0].0,
+        "GET /api/v10/guilds/1/messages/search?content=a%20b&channel_id=2&channel_id=3&limit=5"
+    );
+}
+
+#[tokio::test]
+async fn invite_target_users_csv_and_bulk_limits() {
+    let (client, seen) = recording("");
+    client
+        .update_invite_target_users("abc", &[id(1), id(2)])
+        .await
+        .unwrap();
+    let (line, body) = seen.lock()[0].clone();
+    assert_eq!(line, "PUT /api/v10/invites/abc/target-users");
+    assert!(
+        body.contains("name=\"target_users_file\"; filename=\"target_users.csv\""),
+        "{body}"
+    );
+    assert!(body.contains("user_id\n1\n2\n"), "{body}");
+    let too_many: Vec<_> = (1..=1001).map(id).collect();
+    assert!(
+        client
+            .bulk_add_invite_target_users("abc", &too_many)
+            .await
+            .is_err()
+    );
+    assert!(
+        client
+            .bulk_remove_invite_target_users("abc", &[])
+            .await
+            .is_err()
+    );
+    assert_eq!(seen.lock().len(), 1);
+}
