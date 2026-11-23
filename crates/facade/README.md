@@ -3,7 +3,9 @@
 Independent, fast Discord bot API library for Rust on Tokio. No voice.
 
 > **Beta.** The API can still change between `0.x` releases. See
-> `CHANGELOG.md` for what is in each release.
+> `CHANGELOG.md` for what is in each release. The goal for 1.0 is 100 %
+> of the official bot API; the current state is measured against the docs in
+> [`docs/coverage.md`](https://github.com/lejylabs/cordex/blob/master/docs/coverage.md).
 
 Questions, feedback or help: join the [cordex Discord server](https://discord.gg/Xj9nRKyKNV).
 
@@ -27,7 +29,7 @@ Questions, feedback or help: join the [cordex Discord server](https://discord.gg
 
 ```toml
 [dependencies]
-cordex = "0.1.0-beta.2"
+cordex = "0.1.0-beta.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

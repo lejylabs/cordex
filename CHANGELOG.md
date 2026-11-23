@@ -4,7 +4,12 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
-## Unreleased
+## 0.1.0-beta.3 - 2026-11-23
+
+Coverage against the official docs (`discord-api-docs@9b737ec51ee8`, see
+`docs/coverage.md`): REST endpoints 77/238, gateway receive events 71/82,
+gateway opcodes, close codes, component types and enum values 100 %; object
+fields and bitflags are not measured yet.
 
 - Simple layer (`cordex::bot`, facade feature `bot`, default on): `Bot`
   with plain async closures as handlers (`command`, `autocomplete`,
@@ -25,6 +30,12 @@ All notable changes are listed here. The project follows
   (`ActionRow::new`, `Button::primary`/`secondary`/`success`/`danger`/`link`,
   `StringSelect::new`, `SelectOption::new`, `TextInput::short`/`paragraph`,
   `Label::new`) and `From<…> for Component`.
+- `cordex::bot`: only the events a handler or the cache reads are parsed
+  (gateway event filter from the handlers); no intents by default (a command
+  bot needs none); handlers run in one task each, panics are caught in place.
+- `cargo xtask coverage` and `docs/coverage.md`: API coverage against a pinned
+  commit of the official docs; CI checks the report and a daily workflow opens
+  an issue when the docs change.
 
 ## 0.1.0-beta.2 - 2026-11-23
 
