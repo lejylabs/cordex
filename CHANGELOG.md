@@ -4,6 +4,26 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
+## Unreleased
+
+- `cordex-http`: 43 more REST endpoints (REST coverage 77 → 120 of 238):
+  channel invites, typing, followers, voice channel status, group DM
+  recipients; thread members and archived threads; crosspost and reaction
+  users; single commands and command permissions; original interaction
+  response; scheduled event list/get/users; audit log with filters; computed
+  member/role permissions (guild and channel); current user update, guilds,
+  guild member, connections and role connections; `GET /gateway`; guild
+  webhooks, webhook updates, Slack/GitHub-compatible execution.
+- `cordex-http`: 26 guild endpoints: update guild, channel positions, list
+  and search members, add member (`OAuth2`), current member profile, bulk
+  ban (limits checked locally), single role, role member counts, prune count
+  and prune, voice regions, integrations, widget settings/data/image, vanity
+  URL, welcome screen, onboarding, incident actions.
+- `cordex-model`: `FollowedChannel`, `UserGuild`, `Connection`,
+  `ApplicationRoleConnection`, `GuildPreview`, `GuildWidget(Settings)`,
+  `Onboarding` (+ prompts, options, mode and prompt type), `PruneCount`,
+  `VanityUrl`, `BulkBan`, `RoleMemberCounts`.
+
 ## 0.1.0-beta.3 - 2026-11-23
 
 Coverage against the official docs (`discord-api-docs@9b737ec51ee8`, see

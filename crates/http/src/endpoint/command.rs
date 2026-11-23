@@ -296,3 +296,99 @@ impl Client {
         .send_empty()
     }
 }
+
+impl Client {
+    simple! {
+        /// `GET /applications/{application_id}/commands/{command_id}`.
+        fn get_global_command(application_id: Id<ApplicationMarker>, command_id: Id<cordex_model::id::marker::CommandMarker>)
+            -> ApplicationCommand = get "/applications/{application_id}/commands/{command_id}" => send_json
+    }
+
+    simple! {
+        /// `GET /applications/{application_id}/guilds/{guild_id}/commands/{command_id}`.
+        fn get_guild_command(
+            application_id: Id<ApplicationMarker>,
+            guild_id: Id<GuildMarker>,
+            command_id: Id<cordex_model::id::marker::CommandMarker>,
+        ) -> ApplicationCommand = get "/applications/{application_id}/guilds/{guild_id}/commands/{command_id}" => send_json
+    }
+
+    simple! {
+        /// `GET /applications/{application_id}/guilds/{guild_id}/commands/permissions`:
+        /// permissions of all commands in the guild.
+        fn get_guild_command_permissions(application_id: Id<ApplicationMarker>, guild_id: Id<GuildMarker>)
+            -> Vec<cordex_model::command::GuildCommandPermissions>
+            = get "/applications/{application_id}/guilds/{guild_id}/commands/permissions" => send_json
+    }
+
+    simple! {
+        /// `GET /applications/{application_id}/guilds/{guild_id}/commands/{command_id}/permissions`.
+        fn get_command_permissions(
+            application_id: Id<ApplicationMarker>,
+            guild_id: Id<GuildMarker>,
+            command_id: Id<cordex_model::id::marker::CommandMarker>,
+        ) -> cordex_model::command::GuildCommandPermissions
+            = get "/applications/{application_id}/guilds/{guild_id}/commands/{command_id}/permissions" => send_json
+    }
+
+    /// `PUT /applications/{application_id}/guilds/{guild_id}/commands/{command_id}/permissions`.
+    ///
+    /// Discord only accepts this with the Bearer token of a user who can
+    /// manage the guild (`applications.commands.permissions.update`), not
+    /// with a bot token. Max. 100 overwrites.
+    pub fn edit_command_permissions(
+        &self,
+        application_id: Id<ApplicationMarker>,
+        guild_id: Id<GuildMarker>,
+        command_id: Id<cordex_model::id::marker::CommandMarker>,
+        permissions: Vec<cordex_model::command::CommandPermission>,
+    ) -> impl std::future::Future<
+        Output = Result<cordex_model::command::GuildCommandPermissions, crate::error::HttpError>,
+    > + Send
+    + 'static {
+        let client = self.clone();
+        async move {
+            if permissions.len() > 100 {
+                return Err(HttpError::Validation(
+                    "more than 100 command permission overwrites".into(),
+                ));
+            }
+            client
+                .put(Route::raw(
+                    "/applications/{application_id}/guilds/{guild_id}/commands/{command_id}/permissions",
+                    (application_id, guild_id, command_id),
+                ))
+                .json(&serde_json::json!({ "permissions": permissions }))?
+                .send_json()
+                .await
+        }
+    }
+
+    /// `PUT /applications/{application_id}/guilds/{guild_id}/commands/permissions`:
+    /// replace the permissions of several commands at once (Bearer token
+    /// only, like [`Self::edit_command_permissions`]).
+    pub fn batch_edit_command_permissions(
+        &self,
+        application_id: Id<ApplicationMarker>,
+        guild_id: Id<GuildMarker>,
+        permissions: Vec<cordex_model::command::GuildCommandPermissions>,
+    ) -> impl std::future::Future<
+        Output = Result<
+            Vec<cordex_model::command::GuildCommandPermissions>,
+            crate::error::HttpError,
+        >,
+    > + Send
+    + 'static {
+        let client = self.clone();
+        async move {
+            client
+                .put(Route::raw(
+                    "/applications/{application_id}/guilds/{guild_id}/commands/permissions",
+                    (application_id, guild_id),
+                ))
+                .json(&permissions)?
+                .send_json()
+                .await
+        }
+    }
+}

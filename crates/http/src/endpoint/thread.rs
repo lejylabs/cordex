@@ -344,3 +344,103 @@ fn thread_name_len(name: &str) -> Result<(), HttpError> {
         ))
     }
 }
+
+query_request! {
+    /// Archived threads, newest first.
+    GetArchivedThreads -> ThreadList {
+        /// Threads archived before this ISO 8601 timestamp (for joined
+        /// private threads: before this thread ID).
+        before: String,
+        /// Max. threads to return.
+        limit: u8,
+    }
+}
+
+query_request! {
+    /// `GET /channels/{channel_id}/thread-members`.
+    GetThreadMembers -> Vec<ThreadMember> {
+        /// Include the guild member in each entry.
+        with_member: bool,
+        /// Members after this user ID (paging, needs `with_member`).
+        after: Id<cordex_model::id::marker::UserMarker>,
+        /// Max. members (1-100, default 100).
+        limit: u8,
+    }
+}
+
+query_request! {
+    /// `GET /channels/{channel_id}/thread-members/{user_id}`.
+    GetThreadMember -> ThreadMember {
+        /// Include the guild member.
+        with_member: bool,
+    }
+}
+
+impl Client {
+    simple! {
+        /// `DELETE /channels/{channel_id}/thread-members/{user_id}`.
+        fn remove_thread_member(channel_id: Id<ChannelMarker>, user_id: Id<cordex_model::id::marker::UserMarker>)
+            -> () = delete "/channels/{channel_id}/thread-members/{user_id}" => send_empty
+    }
+
+    /// `GET /channels/{channel_id}/thread-members/{user_id}`.
+    pub fn get_thread_member(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        user_id: Id<cordex_model::id::marker::UserMarker>,
+    ) -> GetThreadMember {
+        GetThreadMember::new(
+            self,
+            Route::raw(
+                "/channels/{channel_id}/thread-members/{user_id}",
+                (channel_id, user_id),
+            ),
+        )
+    }
+
+    /// `GET /channels/{channel_id}/thread-members`.
+    pub fn get_thread_members(&self, channel_id: Id<ChannelMarker>) -> GetThreadMembers {
+        GetThreadMembers::new(
+            self,
+            Route::raw("/channels/{channel_id}/thread-members", channel_id),
+        )
+    }
+
+    /// `GET /channels/{channel_id}/threads/archived/public`.
+    pub fn get_public_archived_threads(&self, channel_id: Id<ChannelMarker>) -> GetArchivedThreads {
+        GetArchivedThreads::new(
+            self,
+            Route::raw("/channels/{channel_id}/threads/archived/public", channel_id),
+        )
+    }
+
+    /// `GET /channels/{channel_id}/threads/archived/private`. Needs
+    /// `MANAGE_THREADS`.
+    pub fn get_private_archived_threads(
+        &self,
+        channel_id: Id<ChannelMarker>,
+    ) -> GetArchivedThreads {
+        GetArchivedThreads::new(
+            self,
+            Route::raw(
+                "/channels/{channel_id}/threads/archived/private",
+                channel_id,
+            ),
+        )
+    }
+
+    /// `GET /channels/{channel_id}/users/@me/threads/archived/private`:
+    /// private archived threads the bot has joined.
+    pub fn get_joined_private_archived_threads(
+        &self,
+        channel_id: Id<ChannelMarker>,
+    ) -> GetArchivedThreads {
+        GetArchivedThreads::new(
+            self,
+            Route::raw(
+                "/channels/{channel_id}/users/@me/threads/archived/private",
+                channel_id,
+            ),
+        )
+    }
+}

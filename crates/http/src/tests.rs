@@ -817,3 +817,158 @@ fn builds_real_tls_client() {
     let debug = format!("{:?}", client.unwrap());
     assert!(!debug.contains("not-a-real-token"));
 }
+
+/// `(METHOD path?query, body)` of every request.
+type RequestLog = Arc<Mutex<Vec<(String, String)>>>;
+
+/// Records `METHOD path?query` and the body of every request.
+fn recording(body: &'static str) -> (Client, RequestLog) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let log = Arc::clone(&seen);
+    let client = client_with(move |req| {
+        let line = format!(
+            "{} {}",
+            req.method(),
+            req.uri().path_and_query().map_or("", |p| p.as_str())
+        );
+        let sent = String::from_utf8_lossy(req.body()).into_owned();
+        log.lock().push((line, sent));
+        ok_json(body)
+    });
+    (client, seen)
+}
+
+fn id<T>(n: u64) -> cordex_model::id::Id<T> {
+    cordex_model::id::Id::new(n).unwrap()
+}
+
+#[tokio::test]
+async fn query_requests_send_their_options() {
+    let (client, seen) = recording(r#"{"threads":[],"members":[],"has_more":true}"#);
+    let list = client
+        .get_public_archived_threads(id(7))
+        .limit(5)
+        .before("2026-11-23T00:00:00Z".to_owned())
+        .await
+        .unwrap();
+    assert!(list.has_more);
+    let line = seen.lock()[0].0.clone();
+    assert!(
+        line.starts_with("GET /api/v10/channels/7/threads/archived/public?"),
+        "{line}"
+    );
+    assert!(line.contains("limit=5"), "{line}");
+    assert!(
+        line.contains("before=2026%2D11%2D23T00%3A00%3A00Z"),
+        "{line}"
+    );
+}
+
+#[tokio::test]
+async fn permissions_endpoint_returns_plain_permissions() {
+    let (client, seen) = recording(r#"{"permissions":"1024"}"#);
+    let perms = client
+        .get_channel_member_permissions(id(1), id(2))
+        .implicit(false)
+        .await
+        .unwrap();
+    assert_eq!(
+        perms.0,
+        cordex_model::permissions::Permissions::VIEW_CHANNEL
+    );
+    assert_eq!(
+        seen.lock()[0].0,
+        "GET /api/v10/channels/1/permissions/member/2?implicit=false"
+    );
+}
+
+#[tokio::test]
+async fn simple_endpoints_use_the_documented_route() {
+    let (client, seen) = recording("{}");
+    client.trigger_typing(id(3)).await.unwrap();
+    client.remove_thread_member(id(4), id(5)).await.unwrap();
+    client
+        .follow_announcement_channel(id(6), id(8))
+        .await
+        .unwrap_err(); // `{}` is not a FollowedChannel
+    let log = seen.lock();
+    assert_eq!(log[0].0, "POST /api/v10/channels/3/typing");
+    assert_eq!(log[1].0, "DELETE /api/v10/channels/4/thread-members/5");
+    assert_eq!(log[2].0, "POST /api/v10/channels/6/followers");
+    assert_eq!(log[2].1, r#"{"webhook_channel_id":"8"}"#);
+}
+
+#[tokio::test]
+async fn local_checks_run_before_sending() {
+    let (client, seen) = recording("{}");
+    let err = client
+        .set_voice_channel_status(id(1), Some("x".repeat(501)))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, HttpError::Validation(_)), "{err}");
+    let token = cordex_model::token::WebhookToken::new("tok");
+    let err = client
+        .update_webhook_with_token(id(2), &token)
+        .channel_id(id(3))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, HttpError::Validation(_)), "{err}");
+    assert!(seen.lock().is_empty());
+}
+
+#[tokio::test]
+async fn json_requests_send_only_set_fields() {
+    let (client, seen) = recording(r#"{"pruned":3}"#);
+    let result = client
+        .begin_guild_prune(id(9))
+        .days(14)
+        .compute_prune_count(true)
+        .reason("cleanup")
+        .unwrap()
+        .await
+        .unwrap();
+    assert_eq!(result.pruned, Some(3));
+    let (line, body) = seen.lock()[0].clone();
+    assert_eq!(line, "POST /api/v10/guilds/9/prune");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body, json!({"days": 14, "compute_prune_count": true}));
+}
+
+#[tokio::test]
+async fn nullable_fields_send_null() {
+    let (client, seen) = recording("{}");
+    let _ = client.update_current_member(id(1)).nick(None).await;
+    assert_eq!(seen.lock()[0].1, r#"{"nick":null}"#);
+}
+
+#[tokio::test]
+async fn guild_member_endpoints() {
+    let (client, seen) = recording("[]");
+    client
+        .search_guild_members(id(2), "ze ny")
+        .limit(5)
+        .await
+        .unwrap();
+    let _ = client
+        .add_guild_member(id(2), id(3), "oauth-token")
+        .nick("n")
+        .await;
+    let log = seen.lock();
+    assert_eq!(
+        log[0].0,
+        "GET /api/v10/guilds/2/members/search?query=ze%20ny&limit=5"
+    );
+    assert_eq!(log[1].0, "PUT /api/v10/guilds/2/members/3");
+    let body: serde_json::Value = serde_json::from_str(&log[1].1).unwrap();
+    assert_eq!(body, json!({"access_token": "oauth-token", "nick": "n"}));
+}
+
+#[tokio::test]
+async fn bulk_ban_checks_limits_locally() {
+    let (client, seen) = recording("{}");
+    assert!(client.bulk_ban(id(1), vec![], 0).await.is_err());
+    assert!(client.bulk_ban(id(1), vec![id(2)], 604_801).await.is_err());
+    let users: Vec<_> = (1..=201).map(id).collect();
+    assert!(client.bulk_ban(id(1), users, 0).await.is_err());
+    assert!(seen.lock().is_empty());
+}

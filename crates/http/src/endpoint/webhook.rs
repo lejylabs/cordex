@@ -56,7 +56,7 @@ struct WebhookAttachment {
 }
 
 impl Client {
-    /// Execute a webhook. `wait` defaults to `true` so Discord returns the message.
+    /// Execute a webhook (`POST /webhooks/{webhook_id}/{webhook_token}`). `wait` defaults to `true` so Discord returns the message.
     pub fn execute_webhook(
         &self,
         webhook_id: Id<WebhookMarker>,
@@ -507,5 +507,146 @@ fn with_body(
             payload_json: payload.into(),
             files,
         })
+    }
+}
+
+/// `PATCH /webhooks/{webhook_id}` (or with its token): change a webhook.
+#[must_use = "send the request with `.await`"]
+pub struct UpdateWebhook {
+    client: Client,
+    route: Route,
+    body: serde_json::Map<String, serde_json::Value>,
+    reason: Option<String>,
+    with_token: bool,
+}
+
+impl UpdateWebhook {
+    /// New default name.
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.body.insert("name".into(), name.into().into());
+        self
+    }
+
+    /// New avatar as a data URI; `None` removes it.
+    pub fn avatar(mut self, data_uri: Option<String>) -> Self {
+        self.body.insert("avatar".into(), data_uri.into());
+        self
+    }
+
+    /// Move to another channel (not possible with the token variant).
+    pub fn channel_id(mut self, channel_id: Id<ChannelMarker>) -> Self {
+        self.body
+            .insert("channel_id".into(), channel_id.to_string().into());
+        self
+    }
+
+    /// Audit-log reason.
+    pub fn reason(mut self, reason: impl Into<String>) -> Result<Self, HttpError> {
+        super::set_reason(&mut self.reason, reason)?;
+        Ok(self)
+    }
+}
+
+impl std::future::IntoFuture for UpdateWebhook {
+    type Output = Result<Webhook, HttpError>;
+    type IntoFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(async move {
+            if self.with_token && self.body.contains_key("channel_id") {
+                return Err(HttpError::Validation(
+                    "a webhook cannot change its channel with the token variant".into(),
+                ));
+            }
+            let mut req = self.client.patch(self.route).json(&self.body)?;
+            if let Some(reason) = &self.reason {
+                req = req.reason(reason)?;
+            }
+            req.send_json().await
+        })
+    }
+}
+
+impl Client {
+    simple! {
+        /// `GET /guilds/{guild_id}/webhooks`. Needs `MANAGE_WEBHOOKS`.
+        fn get_guild_webhooks(guild_id: Id<cordex_model::id::marker::GuildMarker>)
+            -> Vec<Webhook> = get "/guilds/{guild_id}/webhooks" => send_json
+    }
+
+    /// `PATCH /webhooks/{webhook_id}`.
+    pub fn update_webhook(&self, webhook_id: Id<WebhookMarker>) -> UpdateWebhook {
+        UpdateWebhook {
+            client: self.clone(),
+            route: Route::raw("/webhooks/{webhook_id}", webhook_id),
+            body: serde_json::Map::new(),
+            reason: None,
+            with_token: false,
+        }
+    }
+
+    /// `PATCH /webhooks/{webhook_id}/{webhook_token}` (no bot token needed).
+    pub fn update_webhook_with_token(
+        &self,
+        webhook_id: Id<WebhookMarker>,
+        token: &cordex_model::token::WebhookToken,
+    ) -> UpdateWebhook {
+        UpdateWebhook {
+            client: self.clone(),
+            route: Route::raw(
+                "/webhooks/{webhook_id}/{webhook_token}",
+                (webhook_id, token.expose().to_owned()),
+            ),
+            body: serde_json::Map::new(),
+            reason: None,
+            with_token: true,
+        }
+    }
+
+    /// `POST /webhooks/{webhook_id}/{webhook_token}/slack`: execute with a
+    /// Slack-formatted body (sent as is).
+    pub fn execute_slack_webhook(
+        &self,
+        webhook_id: Id<WebhookMarker>,
+        token: &cordex_model::token::WebhookToken,
+        body: serde_json::Value,
+    ) -> impl std::future::Future<Output = Result<(), crate::error::HttpError>> + Send + 'static
+    {
+        self.execute_compat(
+            webhook_id,
+            token,
+            "/webhooks/{webhook_id}/{webhook_token}/slack",
+            body,
+        )
+    }
+
+    /// `POST /webhooks/{webhook_id}/{webhook_token}/github`: execute with a
+    /// GitHub event body (sent as is).
+    pub fn execute_github_webhook(
+        &self,
+        webhook_id: Id<WebhookMarker>,
+        token: &cordex_model::token::WebhookToken,
+        body: serde_json::Value,
+    ) -> impl std::future::Future<Output = Result<(), crate::error::HttpError>> + Send + 'static
+    {
+        self.execute_compat(
+            webhook_id,
+            token,
+            "/webhooks/{webhook_id}/{webhook_token}/github",
+            body,
+        )
+    }
+
+    fn execute_compat(
+        &self,
+        webhook_id: Id<WebhookMarker>,
+        token: &cordex_model::token::WebhookToken,
+        template: &'static str,
+        body: serde_json::Value,
+    ) -> impl std::future::Future<Output = Result<(), crate::error::HttpError>> + Send + 'static
+    {
+        let client = self.clone();
+        let route = Route::raw(template, (webhook_id, token.expose().to_owned()));
+        async move { client.post(route).json(&body)?.send_empty().await }
     }
 }

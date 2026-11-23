@@ -44,6 +44,7 @@ impl Client {
 
     /// Like [`Self::create_interaction_response`] with `?with_response=true`;
     /// returns the callback object (e.g. the created message).
+    /// `POST /interactions/{interaction_id}/{interaction_token}/callback`.
     pub fn create_interaction_response_with_response(
         &self,
         interaction_id: Id<InteractionMarker>,
@@ -259,5 +260,33 @@ impl IntoFuture for CreateFollowupMessage {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(self.send())
+    }
+}
+
+impl Client {
+    /// `GET /webhooks/{application_id}/{interaction_token}/messages/@original`:
+    /// the original interaction response.
+    pub fn get_original_interaction_response(
+        &self,
+        application_id: cordex_model::id::Id<cordex_model::id::marker::ApplicationMarker>,
+        token: &cordex_model::token::InteractionToken,
+    ) -> impl std::future::Future<
+        Output = Result<cordex_model::message::Message, crate::error::HttpError>,
+    > + Send
+    + 'static {
+        let client = self.clone();
+        let token = token.expose().to_owned();
+        async move {
+            client
+                .get(
+                    crate::route::Route::raw(
+                        "/webhooks/{application_id}/{interaction_token}/messages/@original",
+                        (application_id, token),
+                    )
+                    .interaction(),
+                )
+                .send_json()
+                .await
+        }
     }
 }

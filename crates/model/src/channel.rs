@@ -309,3 +309,13 @@ pub struct DefaultReaction {
     /// Unicode emoji.
     pub emoji_name: Option<Box<str>>,
 }
+
+/// Result of following an announcement channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct FollowedChannel {
+    /// Source channel ID.
+    pub channel_id: Id<crate::id::marker::ChannelMarker>,
+    /// Created target webhook ID.
+    pub webhook_id: Id<crate::id::marker::WebhookMarker>,
+}

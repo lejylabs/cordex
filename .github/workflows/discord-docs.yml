@@ -1,7 +1,9 @@
 # Watches discord/discord-api-docs. When the docs move past the commit
-# pinned in docs/discord-api-docs.rev, this measures the coverage against
-# the new docs and opens (or updates) one issue labelled
-# `discord-api-docs` with the compare link and the new numbers.
+# pinned in docs/discord-api-docs.rev, this compares both docs versions and
+# opens (or updates and comments on) one issue labelled `discord-api-docs`:
+# a checklist of new and removed endpoints, events, opcodes, close codes,
+# component types and enum values, the changed bot API pages, and the
+# coverage before and after.
 #
 # To take the new docs: `cargo xtask coverage --rev latest --pin`, review
 # docs/coverage.md, close the gaps, commit.
@@ -57,49 +59,40 @@ jobs:
         with:
           shared-key: coverage
 
-      - name: Measure coverage against the latest docs
+      - name: Measure coverage and diff against the latest docs
         if: steps.rev.outputs.changed == 'true'
         env:
-          PINNED: ${{ steps.rev.outputs.pinned }}
           LATEST: ${{ steps.rev.outputs.latest }}
         run: |
-          cargo xtask coverage --rev "$LATEST" | tee summary.txt
+          cargo xtask coverage --rev "$LATEST"
           {
-            echo "The official API docs changed since the pinned commit."
+            cat target/docs-changes.md
             echo
-            echo "- Pinned: \`${PINNED:0:12}\`"
-            echo "- Latest: \`${LATEST:0:12}\`"
-            echo "- Changes: https://github.com/discord/discord-api-docs/compare/${PINNED}...${LATEST}"
-            echo
-            echo "Coverage against the latest docs:"
-            echo
-            echo '```'
-            grep -A8 '^discord-api-docs' summary.txt
-            echo '```'
-            echo
-            echo "Take the new docs with \`cargo xtask coverage --rev latest --pin\`, review \`docs/coverage.md\`, close the gaps and commit."
-            echo
-            echo "<details><summary>Full report</summary>"
+            echo "<details><summary>Full coverage report against the new docs</summary>"
             echo
             cat "target/coverage-${LATEST:0:12}.md"
             echo
             echo "</details>"
           } > issue.md
+          # GitHub caps issue bodies at 65536 characters.
+          head -c 65000 issue.md > body.md
 
       - name: Open or update the issue
         if: steps.rev.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          LATEST: ${{ steps.rev.outputs.latest }}
         run: |
           gh label create discord-api-docs --color 5865F2 \
             --description "Upstream Discord API docs changed" --force
+          title="Discord API docs changed (${LATEST:0:12})"
           number="$(gh issue list --label discord-api-docs --state open --json number --jq '.[0].number')"
-          # GitHub caps issue bodies at 65536 characters.
-          head -c 65000 issue.md > body.md
-          if [ -n "$number" ]; then
-            gh issue edit "$number" --body-file body.md
-          else
-            gh issue create --title "Discord API docs changed" \
-              --label discord-api-docs --body-file body.md
+          if [ -z "$number" ]; then
+            gh issue create --title "$title" --label discord-api-docs --body-file body.md
+          elif ! gh issue view "$number" --json title --jq .title | grep -q "${LATEST:0:12}"; then
+            # New docs commit since the issue was opened: refresh it and
+            # comment, because edits alone send no notification.
+            gh issue edit "$number" --title "$title" --body-file body.md
+            gh issue comment "$number" --body "The docs moved again, now at \`${LATEST:0:12}\`. The checklist above is updated."
           fi

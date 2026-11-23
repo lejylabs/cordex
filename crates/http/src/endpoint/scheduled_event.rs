@@ -253,3 +253,76 @@ impl IntoFuture for UpdateScheduledEvent {
         Box::pin(self.send())
     }
 }
+
+query_request! {
+    /// `GET /guilds/{guild_id}/scheduled-events`.
+    GetScheduledEvents -> Vec<cordex_model::scheduled_event::ScheduledEvent> {
+        /// Include the number of interested users.
+        with_user_count: bool,
+    }
+}
+
+query_request! {
+    /// `GET /guilds/{guild_id}/scheduled-events/{event_id}`.
+    GetScheduledEvent -> cordex_model::scheduled_event::ScheduledEvent {
+        /// Include the number of interested users.
+        with_user_count: bool,
+    }
+}
+
+query_request! {
+    /// `GET /guilds/{guild_id}/scheduled-events/{event_id}/users`.
+    GetScheduledEventUsers -> Vec<cordex_model::scheduled_event::ScheduledEventUser> {
+        /// Max. users (1-100, default 100).
+        limit: u8,
+        /// Include the guild member.
+        with_member: bool,
+        /// Users before this user ID.
+        before: cordex_model::id::Id<cordex_model::id::marker::UserMarker>,
+        /// Users after this user ID.
+        after: cordex_model::id::Id<cordex_model::id::marker::UserMarker>,
+    }
+}
+
+impl crate::client::Client {
+    /// `GET /guilds/{guild_id}/scheduled-events`.
+    pub fn get_scheduled_events(
+        &self,
+        guild_id: cordex_model::id::Id<cordex_model::id::marker::GuildMarker>,
+    ) -> GetScheduledEvents {
+        GetScheduledEvents::new(
+            self,
+            crate::route::Route::raw("/guilds/{guild_id}/scheduled-events", guild_id),
+        )
+    }
+
+    /// `GET /guilds/{guild_id}/scheduled-events/{event_id}`.
+    pub fn get_scheduled_event(
+        &self,
+        guild_id: cordex_model::id::Id<cordex_model::id::marker::GuildMarker>,
+        event_id: cordex_model::id::Id<cordex_model::id::marker::ScheduledEventMarker>,
+    ) -> GetScheduledEvent {
+        GetScheduledEvent::new(
+            self,
+            crate::route::Route::raw(
+                "/guilds/{guild_id}/scheduled-events/{event_id}",
+                (guild_id, event_id),
+            ),
+        )
+    }
+
+    /// `GET /guilds/{guild_id}/scheduled-events/{event_id}/users`.
+    pub fn get_scheduled_event_users(
+        &self,
+        guild_id: cordex_model::id::Id<cordex_model::id::marker::GuildMarker>,
+        event_id: cordex_model::id::Id<cordex_model::id::marker::ScheduledEventMarker>,
+    ) -> GetScheduledEventUsers {
+        GetScheduledEventUsers::new(
+            self,
+            crate::route::Route::raw(
+                "/guilds/{guild_id}/scheduled-events/{event_id}/users",
+                (guild_id, event_id),
+            ),
+        )
+    }
+}

@@ -166,6 +166,58 @@ pub struct PrimaryGuild {
     pub badge: Option<ImageHash>,
 }
 
+/// A connected account (`GET /users/@me/connections`, needs the
+/// `connections` `OAuth2` scope).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the flags of Discord's connection object"
+)]
+pub struct Connection {
+    /// Account ID on the service.
+    pub id: Box<str>,
+    /// Account name.
+    pub name: Box<str>,
+    /// Service (`"github"`, `"twitch"`, …).
+    #[serde(rename = "type")]
+    pub kind: Box<str>,
+    /// Whether the connection is revoked.
+    #[serde(default)]
+    pub revoked: bool,
+    /// Whether the connection is verified.
+    #[serde(default)]
+    pub verified: bool,
+    /// Whether friend sync is on.
+    #[serde(default)]
+    pub friend_sync: bool,
+    /// Whether activities of this connection show in presence updates.
+    #[serde(default)]
+    pub show_activity: bool,
+    /// Whether the connection has a Discord-linked `OAuth2` token.
+    #[serde(default)]
+    pub two_way_link: bool,
+    /// Visibility (0 = only you, 1 = everyone).
+    #[serde(default)]
+    pub visibility: u8,
+}
+
+/// The current user's role connection for one application.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ApplicationRoleConnection {
+    /// Vanity name of the platform (max. 50 characters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_name: Option<Box<str>>,
+    /// Username on the platform (max. 100 characters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_username: Option<Box<str>>,
+    /// Metadata values (keys from the application's role connection
+    /// metadata, values as strings).
+    #[serde(default)]
+    pub metadata: std::collections::BTreeMap<Box<str>, Box<str>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

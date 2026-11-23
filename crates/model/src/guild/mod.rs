@@ -1,11 +1,17 @@
 //! Guilds (resources/guild.mdx, "Guild Object").
 
+mod extra;
 pub mod integration;
 pub mod member;
 pub mod role;
 
 use serde::{Deserialize, Serialize};
 
+pub use extra::{
+    BulkBan, GuildPreview, GuildWidget, GuildWidgetChannel, GuildWidgetMember, GuildWidgetSettings,
+    Onboarding, OnboardingMode, OnboardingPrompt, OnboardingPromptOption, OnboardingPromptType,
+    PruneCount, RoleMemberCounts, VanityUrl,
+};
 pub use integration::{
     Integration, IntegrationAccount, IntegrationExpireBehavior, IntegrationType,
 };
@@ -380,4 +386,30 @@ pub struct IncidentsData {
     pub dm_spam_detected_at: Option<Timestamp>,
     /// When a raid was detected.
     pub raid_detected_at: Option<Timestamp>,
+}
+
+/// A guild in `GET /users/@me/guilds` (partial guild).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct UserGuild {
+    /// Guild ID.
+    pub id: Id<GuildMarker>,
+    /// Guild name.
+    pub name: Box<str>,
+    /// Icon hash.
+    pub icon: Option<ImageHash>,
+    /// Banner hash.
+    pub banner: Option<ImageHash>,
+    /// Whether the current user owns the guild.
+    #[serde(default)]
+    pub owner: bool,
+    /// The current user's permissions in the guild.
+    pub permissions: Option<Permissions>,
+    /// Enabled guild features.
+    #[serde(default)]
+    pub features: Vec<GuildFeature>,
+    /// Approximate member count (`with_counts=true`).
+    pub approximate_member_count: Option<u64>,
+    /// Approximate online count (`with_counts=true`).
+    pub approximate_presence_count: Option<u64>,
 }

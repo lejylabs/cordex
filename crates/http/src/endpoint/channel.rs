@@ -528,3 +528,99 @@ fn channel_name_len(name: &str) -> Result<(), HttpError> {
         ))
     }
 }
+
+impl crate::client::Client {
+    simple! {
+        /// `GET /channels/{channel_id}/invites`. Needs `MANAGE_CHANNELS`.
+        fn get_channel_invites(channel_id: cordex_model::id::Id<cordex_model::id::marker::ChannelMarker>)
+            -> Vec<cordex_model::invite::Invite> = get "/channels/{channel_id}/invites" => send_json
+    }
+
+    simple! {
+        /// `POST /channels/{channel_id}/typing`: show "is typing" for about 10 s.
+        fn trigger_typing(channel_id: cordex_model::id::Id<cordex_model::id::marker::ChannelMarker>)
+            -> () = post "/channels/{channel_id}/typing" => send_empty
+    }
+
+    simple! {
+        /// `DELETE /channels/{channel_id}/recipients/{user_id}`: remove a user
+        /// from a group DM.
+        fn remove_group_dm_recipient(
+            channel_id: cordex_model::id::Id<cordex_model::id::marker::ChannelMarker>,
+            user_id: cordex_model::id::Id<cordex_model::id::marker::UserMarker>,
+        ) -> () = delete "/channels/{channel_id}/recipients/{user_id}" => send_empty
+    }
+
+    /// `PUT /channels/{channel_id}/recipients/{user_id}`: add a user to a
+    /// group DM with their `OAuth2` access token (`gdm.join` scope).
+    pub fn add_group_dm_recipient(
+        &self,
+        channel_id: cordex_model::id::Id<cordex_model::id::marker::ChannelMarker>,
+        user_id: cordex_model::id::Id<cordex_model::id::marker::UserMarker>,
+        access_token: impl Into<String>,
+        nick: Option<&str>,
+    ) -> impl std::future::Future<Output = Result<(), crate::error::HttpError>> + Send + 'static
+    {
+        let client = self.clone();
+        let body = serde_json::json!({ "access_token": access_token.into(), "nick": nick });
+        async move {
+            client
+                .put(crate::route::Route::raw(
+                    "/channels/{channel_id}/recipients/{user_id}",
+                    (channel_id, user_id),
+                ))
+                .json(&body)?
+                .send_empty()
+                .await
+        }
+    }
+
+    /// `PUT /channels/{channel_id}/voice-status`: set (or with `None`
+    /// clear) a voice channel's status, max. 500 characters.
+    pub fn set_voice_channel_status(
+        &self,
+        channel_id: cordex_model::id::Id<cordex_model::id::marker::ChannelMarker>,
+        status: Option<String>,
+    ) -> impl std::future::Future<Output = Result<(), crate::error::HttpError>> + Send + 'static
+    {
+        let client = self.clone();
+        async move {
+            if status.as_ref().is_some_and(|s| s.chars().count() > 500) {
+                return Err(crate::error::HttpError::Validation(
+                    "voice channel status is longer than 500 characters".into(),
+                ));
+            }
+            client
+                .put(crate::route::Route::raw(
+                    "/channels/{channel_id}/voice-status",
+                    channel_id,
+                ))
+                .json(&serde_json::json!({ "status": status }))?
+                .send_empty()
+                .await
+        }
+    }
+
+    /// `POST /channels/{channel_id}/followers`: follow an announcement
+    /// channel into `target` (needs `MANAGE_WEBHOOKS` there).
+    pub fn follow_announcement_channel(
+        &self,
+        channel_id: cordex_model::id::Id<cordex_model::id::marker::ChannelMarker>,
+        target: cordex_model::id::Id<cordex_model::id::marker::ChannelMarker>,
+    ) -> impl std::future::Future<
+        Output = Result<cordex_model::channel::FollowedChannel, crate::error::HttpError>,
+    > + Send
+    + 'static {
+        let client = self.clone();
+        async move {
+            client
+                .post(crate::route::Route::raw(
+                    "/channels/{channel_id}/followers",
+                    channel_id,
+                ))
+                .json(&serde_json::json!({ "webhook_channel_id": target }))?
+                .send_json()
+                .await
+        }
+    }
+}

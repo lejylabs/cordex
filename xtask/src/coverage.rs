@@ -29,9 +29,32 @@ const DOCS_REPO: &str = "https://github.com/discord/discord-api-docs";
 const REV_FILE: &str = "docs/discord-api-docs.rev";
 const REPORT: &str = "docs/coverage.md";
 
+/// Docs folders that describe the bot API (changes there go into the
+/// issue checklist).
+const BOT_PAGES: &[&str] = &[
+    "developers/resources/",
+    "developers/events/",
+    "developers/interactions/",
+    "developers/components/",
+    "developers/topics/",
+    "developers/change-log.mdx",
+];
+
 /// Model enums whose values are compared with a docs table:
 /// (file in `crates/model/src`, enum, docs page in `developers/`, heading).
 const ENUMS: &[(&str, &str, &str, &str)] = &[
+    (
+        "guild/extra.rs",
+        "OnboardingMode",
+        "resources/guild.mdx",
+        "Onboarding Mode",
+    ),
+    (
+        "guild/extra.rs",
+        "OnboardingPromptType",
+        "resources/guild.mdx",
+        "Prompt Types",
+    ),
     (
         "interaction.rs",
         "InteractionType",
@@ -329,6 +352,8 @@ const ENUMS: &[(&str, &str, &str, &str)] = &[
 ];
 
 struct Item {
+    /// Stable identity across docs versions (route, event name, value).
+    key: String,
     covered: bool,
     name: String,
     detail: String,
@@ -374,6 +399,18 @@ pub(crate) fn coverage(args: &[String]) -> Result<(), String> {
         println!("report: {}", out.display());
         if rev != pinned {
             println!("docs changed: {DOCS_REPO}/compare/{pinned}...{rev}");
+            // Measure the pinned docs too and describe the difference.
+            let old_rev = fetch_docs(&docs, &pinned)?;
+            let old = measure(&root, &docs.join("developers"))?;
+            let pages = git(
+                &docs,
+                &["diff", "--name-only", &old_rev, &rev, "--", "developers"],
+            )
+            .unwrap_or_default();
+            let changes = render_changes(&old_rev, &rev, &old, &areas, &pages);
+            let out = root.join("target").join("docs-changes.md");
+            write(&out, &changes)?;
+            println!("changes: {}", out.display());
         }
         return Ok(());
     }
@@ -418,10 +455,26 @@ fn fetch_docs(dir: &Path, rev: &str) -> Result<String, String> {
         git(dir, &["remote", "add", "origin", DOCS_REPO])?;
     }
     let have = git(dir, &["rev-parse", "HEAD"]).unwrap_or_default();
-    if have != rev {
-        git(dir, &["fetch", "-q", "--depth", "1", "origin", rev])?;
-        git(dir, &["checkout", "-q", "--detach", "FETCH_HEAD"])?;
+    if have == rev {
+        return Ok(have);
     }
+    // Fetching a commit by hash is not allowed by every server/client
+    // setup ("not our ref"), so fall back to the branch tip and then to
+    // the full history without file contents.
+    if git(dir, &["fetch", "-q", "--depth", "1", "origin", rev]).is_err() {
+        git(dir, &["fetch", "-q", "--depth", "1", "origin", "HEAD"])?;
+        let tip = git(dir, &["rev-parse", "FETCH_HEAD"])?;
+        if rev != "HEAD" && tip != rev {
+            git(
+                dir,
+                &["fetch", "-q", "--filter=blob:none", "--unshallow", "origin"],
+            )
+            .or_else(|_| git(dir, &["fetch", "-q", "--filter=blob:none", "origin"]))?;
+            git(dir, &["checkout", "-q", "--detach", rev])?;
+            return git(dir, &["rev-parse", "HEAD"]);
+        }
+    }
+    git(dir, &["checkout", "-q", "--detach", "FETCH_HEAD"])?;
     git(dir, &["rev-parse", "HEAD"])
 }
 
@@ -596,6 +649,7 @@ fn endpoints(root: &Path, docs: &Path) -> Result<Area, String> {
                     covered: ours.contains(&key),
                     name: heading.clone(),
                     detail: format!("`{key}` ({page})"),
+                    key,
                 });
             }
         }
@@ -690,6 +744,7 @@ fn events(model: &Path, docs: &Path) -> Result<Area, String> {
             Item {
                 covered,
                 detail: format!("`{dispatch}`"),
+                key: dispatch,
                 name,
             }
         })
@@ -712,6 +767,7 @@ fn number_table(
         items: table_numbers(docs, page, heading)?
             .into_iter()
             .map(|(value, name)| Item {
+                key: value.to_string(),
                 covered: ours.contains(&value),
                 name,
                 detail: format!("`{value}`"),
@@ -749,6 +805,7 @@ fn enums(model: &Path, docs: &Path) -> Result<Area, String> {
         }
         for (value, label) in table_numbers(docs, page, heading)? {
             items.push(Item {
+                key: format!("{name}={value}"),
                 covered: ours.contains(&value),
                 name: format!("{name}: {label}"),
                 detail: format!("`{value}`"),
@@ -884,6 +941,102 @@ fn render(rev: &str, areas: &[Area]) -> String {
     out
 }
 
+/// Markdown issue body: what the new docs add or remove compared to the
+/// pinned ones, as a checklist.
+fn render_changes(old_rev: &str, new_rev: &str, old: &[Area], new: &[Area], pages: &str) -> String {
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "The official API docs changed: [`{}...{}`]({DOCS_REPO}/compare/{old_rev}...{new_rev}).\n",
+        short(old_rev),
+        short(new_rev)
+    );
+    let mut any = false;
+    for (old_area, new_area) in old.iter().zip(new) {
+        let before: BTreeSet<&str> = old_area.items.iter().map(|i| i.key.as_str()).collect();
+        let after: BTreeSet<&str> = new_area.items.iter().map(|i| i.key.as_str()).collect();
+        let added: Vec<&Item> = new_area
+            .items
+            .iter()
+            .filter(|i| !before.contains(i.key.as_str()))
+            .collect();
+        let removed: Vec<&Item> = old_area
+            .items
+            .iter()
+            .filter(|i| !after.contains(i.key.as_str()))
+            .collect();
+        if added.is_empty() && removed.is_empty() {
+            continue;
+        }
+        any = true;
+        let _ = writeln!(out, "### {}\n", new_area.title);
+        for item in added {
+            let mark = if item.covered { "x" } else { " " };
+            let _ = writeln!(out, "- [{mark}] **new:** {} {}", item.name, item.detail);
+        }
+        for item in removed {
+            let _ = writeln!(
+                out,
+                "- [ ] **removed:** {} {} (deprecate or drop it in cordex)",
+                item.name, item.detail
+            );
+        }
+        out.push('\n');
+    }
+    if !any {
+        let _ = writeln!(
+            out,
+            "No endpoint, event, opcode, close code, component type or enum value was added or \
+             removed. Check the changed pages for new fields, flags or behaviour.\n"
+        );
+    }
+    let (bot, other): (Vec<&str>, Vec<&str>) = pages
+        .lines()
+        .filter(|l| {
+            Path::new(l)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("mdx"))
+        })
+        // Pages that describe the bot API; the rest (Social SDK,
+        // activities, guides) is listed folded.
+        .partition(|p| BOT_PAGES.iter().any(|prefix| p.starts_with(prefix)));
+    if !bot.is_empty() {
+        let _ = writeln!(out, "### Changed bot API pages\n");
+        for page in bot {
+            let _ = writeln!(out, "- [ ] [`{page}`]({DOCS_REPO}/blob/{new_rev}/{page})");
+        }
+        out.push('\n');
+    }
+    if !other.is_empty() {
+        let _ = writeln!(
+            out,
+            "<details><summary>{} other changed pages (Social SDK, activities, guides)</summary>\n",
+            other.len()
+        );
+        for page in other {
+            let _ = writeln!(out, "- [`{page}`]({DOCS_REPO}/blob/{new_rev}/{page})");
+        }
+        let _ = writeln!(out, "\n</details>\n");
+    }
+    let total = |areas: &[Area]| {
+        areas.iter().fold((0, 0), |(c, t), a| {
+            let (ac, at) = counts(&a.items);
+            (c + ac, t + at)
+        })
+    };
+    let (oc, ot) = total(old);
+    let (nc, nt) = total(new);
+    let _ = writeln!(
+        out,
+        "Coverage (measured): {oc}/{ot} ({}) before, {nc}/{nt} ({}) with the new docs.\n\n\
+         When done: `cargo xtask coverage --rev latest --pin`, commit `docs/coverage.md` and \
+         `docs/discord-api-docs.rev`, close this issue.",
+        percent(oc, ot),
+        percent(nc, nt)
+    );
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -915,5 +1068,30 @@ mod tests {
             match_arm_numbers("  1 => a,\n  17 => b,\n x => c"),
             BTreeSet::from([1, 17])
         );
+    }
+
+    #[test]
+    fn changes_list_new_and_removed_items() {
+        let item = |key: &str, covered| Item {
+            key: key.to_owned(),
+            covered,
+            name: key.to_owned(),
+            detail: String::new(),
+        };
+        let old = [Area {
+            title: "REST endpoints",
+            items: vec![item("GET /a", true), item("GET /gone", true)],
+        }];
+        let new = [Area {
+            title: "REST endpoints",
+            items: vec![item("GET /a", true), item("POST /b", false)],
+        }];
+        let pages = "developers/resources/x.mdx\nimages/y.png\n";
+        let text = render_changes("aaaa", "bbbb", &old, &new, pages);
+        assert!(text.contains("- [ ] **new:** POST /b"), "{text}");
+        assert!(text.contains("**removed:** GET /gone"), "{text}");
+        assert!(text.contains("developers/resources/x.mdx"), "{text}");
+        assert!(!text.contains("y.png"), "{text}");
+        assert!(!text.contains("GET /a "), "{text}");
     }
 }

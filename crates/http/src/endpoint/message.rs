@@ -83,7 +83,7 @@ pub struct GetChannelMessages {
 }
 
 impl Client {
-    /// Create a message in a channel.
+    /// Create a message in a channel: `POST /channels/{channel_id}/messages`.
     pub fn create_message(&self, channel_id: Id<ChannelMarker>) -> CreateMessage {
         CreateMessage {
             client: self.clone(),
@@ -94,7 +94,7 @@ impl Client {
         }
     }
 
-    /// Fetch a single message.
+    /// Fetch a single message: `GET /channels/{channel_id}/messages/{message_id}`.
     pub fn get_message(
         &self,
         channel_id: Id<ChannelMarker>,
@@ -112,7 +112,7 @@ impl Client {
         }
     }
 
-    /// List messages in a channel.
+    /// List messages in a channel: `GET /channels/{channel_id}/messages`.
     pub fn get_channel_messages(&self, channel_id: Id<ChannelMarker>) -> GetChannelMessages {
         GetChannelMessages {
             client: self.clone(),
@@ -124,7 +124,7 @@ impl Client {
         }
     }
 
-    /// Edit a message the bot sent.
+    /// Edit a message the bot sent: `PATCH /channels/{channel_id}/messages/{message_id}`.
     pub fn update_message(
         &self,
         channel_id: Id<ChannelMarker>,
@@ -140,7 +140,7 @@ impl Client {
         }
     }
 
-    /// Delete a message.
+    /// Delete a message: `DELETE /channels/{channel_id}/messages/{message_id}`.
     pub fn delete_message(
         &self,
         channel_id: Id<ChannelMarker>,
@@ -154,7 +154,7 @@ impl Client {
         }
     }
 
-    /// Bulk-delete 2–100 messages.
+    /// Bulk-delete 2–100 messages: `POST /channels/{channel_id}/messages/bulk-delete`.
     pub fn delete_messages(
         &self,
         channel_id: Id<ChannelMarker>,
@@ -182,7 +182,7 @@ impl Client {
         }
     }
 
-    /// Unpin a message.
+    /// Unpin a message: `DELETE /channels/{channel_id}/messages/pins/{message_id}`.
     pub fn unpin_message(
         &self,
         channel_id: Id<ChannelMarker>,
@@ -701,5 +701,49 @@ impl IntoFuture for GetChannelPins {
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(self.send())
+    }
+}
+
+query_request! {
+    /// `GET /channels/{channel_id}/messages/{message_id}/reactions/{emoji}`.
+    GetReactions -> Vec<cordex_model::user::User> {
+        /// Users after this user ID.
+        after: Id<cordex_model::id::marker::UserMarker>,
+        /// Max. users (1-100, default 25).
+        limit: u8,
+    }
+}
+
+impl GetReactions {
+    /// Only super-reactions (burst) instead of normal ones.
+    pub fn burst(mut self) -> Self {
+        self.query.push(("type", "1".to_owned()));
+        self
+    }
+}
+
+impl Client {
+    simple! {
+        /// `POST /channels/{channel_id}/messages/{message_id}/crosspost`: publish
+        /// a message in an announcement channel to its followers.
+        fn crosspost_message(channel_id: Id<ChannelMarker>, message_id: Id<MessageMarker>)
+            -> Message = post "/channels/{channel_id}/messages/{message_id}/crosspost" => send_json
+    }
+
+    /// `GET /channels/{channel_id}/messages/{message_id}/reactions/{emoji}`:
+    /// users who reacted with `emoji` (Unicode or `name:id`).
+    pub fn get_reactions(
+        &self,
+        channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+        emoji: impl Into<String>,
+    ) -> GetReactions {
+        GetReactions::new(
+            self,
+            Route::raw(
+                "/channels/{channel_id}/messages/{message_id}/reactions/{emoji}",
+                (channel_id, message_id, emoji.into()),
+            ),
+        )
     }
 }
