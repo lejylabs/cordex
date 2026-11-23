@@ -58,6 +58,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::task::{Context as TaskContext, Poll};
+use std::time::Duration;
 
 use cordex_gateway::{CloseMode, EventTypeFlags, ManagerEvent, ShardId, ShardManager, Standby};
 use cordex_http::{Client, Route};
@@ -72,8 +73,8 @@ use cordex_model::interaction::{Interaction, InteractionData, InteractionType};
 use cordex_model::message::AllowedMentions;
 
 pub use context::{
-    AutocompleteContext, CommandContext, ComponentContext, Context, EventContext, MessageContext,
-    ModalContext, ReadyContext,
+    AutocompleteContext, ButtonClicks, CommandContext, ComponentContext, Context, EventContext,
+    MessageContext, ModalContext, ReadyContext,
 };
 
 use crate::{Error, Result};
@@ -88,6 +89,9 @@ where
 {
     Arc::new(move |ctx| Box::pin(f(ctx)))
 }
+
+/// Default interval of the reshard check ([`Bot::reshard_interval`]).
+pub const DEFAULT_RESHARD_INTERVAL: Duration = Duration::from_hours(8);
 
 /// Default ephemeral answer when a handler fails before answering.
 pub const DEFAULT_ERROR_MESSAGE: &str = "Something went wrong while handling this.";
@@ -106,7 +110,8 @@ struct Handlers {
 /// State every context points to.
 struct Shared {
     http: Client,
-    manager: ShardManager,
+    /// Current shard manager; replaced when the bot reshards.
+    manager: std::sync::Mutex<Arc<ShardManager>>,
     #[cfg(feature = "cache")]
     cache: Option<Arc<cordex_cache::InMemoryCache>>,
     me: OnceLock<Id<UserMarker>>,
@@ -114,6 +119,17 @@ struct Shared {
     error_message: Option<Box<str>>,
     auto_defer: bool,
     standby: Standby,
+}
+
+impl Shared {
+    fn manager(&self) -> Arc<ShardManager> {
+        Arc::clone(
+            &self
+                .manager
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
 }
 
 /// Builder and runner of a bot; see the [module docs](self).
@@ -129,6 +145,7 @@ pub struct Bot {
     auto_defer: bool,
     default_allowed_mentions: Option<AllowedMentions>,
     extra_events: EventTypeFlags,
+    reshard_interval: Option<Duration>,
     #[cfg(feature = "cache")]
     cache: Option<cordex_cache::CacheConfig>,
 }
@@ -157,6 +174,7 @@ impl Bot {
             auto_defer: true,
             default_allowed_mentions: None,
             extra_events: EventTypeFlags::empty(),
+            reshard_interval: Some(DEFAULT_RESHARD_INTERVAL),
             #[cfg(feature = "cache")]
             cache: None,
         }
@@ -187,7 +205,22 @@ impl Bot {
         self.intents(Intents::MESSAGE_CONTENT)
     }
 
-    /// Fixed shard count instead of Discord's recommendation.
+    /// How often to check whether Discord recommends more shards and, if
+    /// so, reshard while running (default every 8 hours; `None` turns it
+    /// off). Only with automatic sharding: a fixed [`shards`](Self::shards)
+    /// count is kept.
+    ///
+    /// Resharding starts a second set of shards with the new count, waits
+    /// until all of them are `READY`, switches over and closes the old ones,
+    /// so the bot stays online. It needs enough identifies left in the
+    /// session start limit, otherwise it waits for the next check.
+    pub fn reshard_interval(mut self, interval: Option<Duration>) -> Self {
+        self.reshard_interval = interval;
+        self
+    }
+
+    /// Fixed shard count instead of Discord's recommendation (turns off
+    /// resharding).
     pub fn shards(mut self, count: u32) -> Self {
         self.shards = Some(count.max(1));
         self
@@ -373,19 +406,15 @@ impl Bot {
             http = http.default_allowed_mentions(mentions);
         }
         let http = http.build()?;
-        let builder = ShardManager::builder(&self.token, self.intents)
-            .http(http.clone())
-            .event_types(self.event_types());
-        let builder = match self.shards {
-            Some(n) => builder.shards(0..n, n),
-            None => builder.automatic(),
-        };
-        let mut manager = builder.build().await?;
+        let event_types = self.event_types();
+        let fixed_shards = self.shards;
+        let mut manager =
+            build_manager(&self.token, self.intents, &http, event_types, fixed_shards).await?;
         let mut events = manager.events();
 
         let shared = Arc::new(Shared {
             http,
-            manager,
+            manager: std::sync::Mutex::new(Arc::new(manager)),
             #[cfg(feature = "cache")]
             cache: self
                 .cache
@@ -400,43 +429,213 @@ impl Bot {
         let guild_commands = self.guild_commands;
         let registered = AtomicBool::new(false);
 
-        shared.manager.start().await?;
+        shared.manager().start().await?;
 
+        // Resharding: a task prepares a new manager and hands it over here.
+        let (switch_tx, mut switch_rx) = tokio::sync::mpsc::channel::<Reshard>(1);
+        if fixed_shards.is_none()
+            && let Some(interval) = self.reshard_interval
+        {
+            tokio::spawn(reshard_loop(
+                Arc::clone(&shared),
+                self.token.clone(),
+                self.intents,
+                event_types,
+                interval,
+                switch_tx,
+            ));
+        }
+
+        loop {
+            let item = tokio::select! {
+                item = events.recv() => item,
+                Some(next) = switch_rx.recv() => {
+                    let old = std::mem::replace(
+                        &mut *shared.manager.lock().unwrap_or_else(std::sync::PoisonError::into_inner),
+                        Arc::new(next.manager),
+                    );
+                    events = next.events;
+                    tracing::info!(
+                        shards = shared.manager().total_shards(),
+                        "resharded; closing the old shards"
+                    );
+                    tokio::spawn(async move {
+                        old.shutdown(CloseMode::Terminate).await;
+                    });
+                    continue;
+                }
+            };
+            let Some(item) = item else { break };
+            on_manager_event(&shared, item, &registered, guild_commands, &commands).await?;
+        }
+        Ok(())
+    }
+}
+
+/// Handle one item of the shard manager stream; a fatal shard error stops
+/// the bot.
+async fn on_manager_event(
+    shared: &Arc<Shared>,
+    item: ManagerEvent,
+    registered: &AtomicBool,
+    guild_commands: Option<Id<GuildMarker>>,
+    commands: &Arc<[Command]>,
+) -> Result<()> {
+    match item {
+        ManagerEvent::Dispatch { shard, event } => {
+            if !registered.load(Ordering::Relaxed)
+                && let Event::Ready(ready) = &event
+                && !registered.swap(true, Ordering::Relaxed)
+            {
+                tokio::spawn(register_commands(
+                    shared.http.clone(),
+                    ready.application.id,
+                    guild_commands,
+                    Arc::clone(commands),
+                ));
+            }
+            dispatch(shared, shard, event);
+        }
+        ManagerEvent::Error { shard, error } => {
+            tracing::error!(shard = shard.number(), %error, "shard failed, stopping the bot");
+            shared.manager().shutdown(CloseMode::Terminate).await;
+            return Err(Error::Gateway(error));
+        }
+        ManagerEvent::RecommendedShardCount {
+            running,
+            recommended,
+        } => {
+            tracing::info!(
+                running,
+                recommended,
+                "Discord recommends more shards; the reshard check picks it up"
+            );
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+async fn build_manager(
+    token: &str,
+    intents: Intents,
+    http: &Client,
+    event_types: EventTypeFlags,
+    fixed_shards: Option<u32>,
+) -> Result<ShardManager> {
+    let builder = ShardManager::builder(token, intents)
+        .http(http.clone())
+        .event_types(event_types);
+    let builder = match fixed_shards {
+        Some(n) => builder.shards(0..n, n),
+        None => builder.automatic(),
+    };
+    Ok(builder.build().await?)
+}
+
+/// A started manager whose shards are all `READY`, ready to take over.
+struct Reshard {
+    manager: ShardManager,
+    events: cordex_gateway::ManagerEvents,
+}
+
+/// Every `interval`: if Discord recommends more shards than running and
+/// enough identifies are left, start a new manager, wait for all its
+/// shards to be `READY` (dropping their events, the old shards still
+/// deliver), then hand it to the run loop.
+async fn reshard_loop(
+    shared: Arc<Shared>,
+    token: String,
+    intents: Intents,
+    event_types: EventTypeFlags,
+    interval: Duration,
+    switch: tokio::sync::mpsc::Sender<Reshard>,
+) {
+    loop {
+        tokio::time::sleep(interval).await;
+        let running = shared.manager().total_shards();
+        let info = match shared.http.gateway_bot().await {
+            Ok(info) => info,
+            Err(error) => {
+                tracing::warn!(%error, "reshard check: GET /gateway/bot failed");
+                continue;
+            }
+        };
+        if !needs_reshard(running, info.shards, info.session_start_limit.remaining) {
+            continue;
+        }
+        tracing::info!(running, recommended = info.shards, "resharding");
+        match prepare_reshard(&shared.http, &token, intents, event_types).await {
+            Ok(next) => {
+                if switch.send(next).await.is_err() {
+                    return; // the bot stopped
+                }
+            }
+            Err(error) => tracing::warn!(%error, "resharding failed; keeping the current shards"),
+        }
+    }
+}
+
+/// More shards recommended and enough identifies left for all of them.
+fn needs_reshard(running: u32, recommended: u32, identifies_left: u32) -> bool {
+    if recommended <= running {
+        return false;
+    }
+    if identifies_left < recommended {
+        tracing::warn!(
+            recommended,
+            identifies_left,
+            "Discord recommends more shards, but too few identifies are left; retrying later"
+        );
+        return false;
+    }
+    true
+}
+
+async fn prepare_reshard(
+    http: &Client,
+    token: &str,
+    intents: Intents,
+    event_types: EventTypeFlags,
+) -> Result<Reshard> {
+    let mut manager = build_manager(token, intents, http, event_types, None).await?;
+    let mut events = manager.events();
+    manager.start().await?;
+    let total = manager.total_shards();
+    // Identify pacing: ~5 s per bucket; allow generous time for large bots.
+    let deadline = Duration::from_secs(60 + u64::from(total) * 6);
+    let mut ready = std::collections::HashSet::new();
+    let waited = tokio::time::timeout(deadline, async {
         while let Some(item) = events.recv().await {
             match item {
-                ManagerEvent::Dispatch { shard, event } => {
-                    if !registered.load(Ordering::Relaxed)
-                        && let Event::Ready(ready) = &event
-                        && !registered.swap(true, Ordering::Relaxed)
-                    {
-                        tokio::spawn(register_commands(
-                            shared.http.clone(),
-                            ready.application.id,
-                            guild_commands,
-                            Arc::clone(&commands),
-                        ));
-                    }
-                    dispatch(&shared, shard, event);
-                }
-                ManagerEvent::Error { shard, error } => {
-                    tracing::error!(shard = shard.number(), %error, "shard failed, stopping the bot");
-                    shared.manager.shutdown(CloseMode::Terminate).await;
-                    return Err(Error::Gateway(error));
-                }
-                ManagerEvent::RecommendedShardCount {
-                    running,
-                    recommended,
+                ManagerEvent::Dispatch {
+                    shard,
+                    event: Event::Ready(_),
                 } => {
-                    tracing::warn!(
-                        running,
-                        recommended,
-                        "Discord recommends more shards; restart the bot to use them"
-                    );
+                    ready.insert(shard.number());
+                    if ready.len() == total as usize {
+                        return Ok(());
+                    }
                 }
+                ManagerEvent::Error { error, .. } => return Err(error),
                 _ => {}
             }
         }
         Ok(())
+    })
+    .await;
+    match waited {
+        Ok(Ok(())) if ready.len() == total as usize => Ok(Reshard { manager, events }),
+        Ok(Err(error)) => {
+            manager.shutdown(CloseMode::Terminate).await;
+            Err(Error::Gateway(error))
+        }
+        _ => {
+            manager.shutdown(CloseMode::Terminate).await;
+            Err(Error::Gateway(cordex_gateway::GatewayError::Validation(
+                "new shards did not become ready in time".into(),
+            )))
+        }
     }
 }
 

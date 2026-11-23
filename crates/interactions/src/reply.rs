@@ -38,6 +38,16 @@ impl Reply {
         }
     }
 
+    /// Reply made only of Components V2 (container, section, text display,
+    /// …). Discord allows no `content` or embeds next to them; the
+    /// `IS_COMPONENTS_V2` flag is set automatically on send.
+    pub fn layout(components: Vec<Component>) -> Self {
+        Self {
+            components: Some(components),
+            ..Self::default()
+        }
+    }
+
     /// Set or replace the text content.
     #[must_use]
     pub fn content(mut self, content: impl Into<String>) -> Self {

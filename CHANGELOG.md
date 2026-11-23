@@ -6,6 +6,25 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+- **Builders for every component**, including Components V2 (`Container`,
+  `Section`, `TextDisplay`, `Thumbnail`, `MediaGallery`, `FileComponent`,
+  `Separator`), user/role/mentionable/channel selects (`SelectMenu::users(..)`
+  etc.), modal radio groups, checkbox groups, checkboxes and file uploads.
+- **`IS_COMPONENTS_V2` is set automatically** for messages, follow-ups,
+  interaction responses and webhooks that contain V2 components;
+  `Reply::layout(..)` for V2-only replies, and a local error when V2
+  components are combined with content or embeds. Webhook executions can
+  send components now (`ExecuteWebhook::components`).
+- **`ctx.button_clicks(message, timeout)`**: collect all clicks on a message
+  (polls, paging); each is a `ComponentContext`.
+- **Live resharding in `Bot`**: with automatic sharding the bot checks every
+  8 hours (`Bot::reshard_interval`) whether Discord recommends more shards,
+  starts the new shard set, waits until all shards are ready, switches over
+  and closes the old shards. `Context::shards()` now returns
+  `Arc<ShardManager>`.
+- **Examples per task**: `buttons_and_waiting`, `components_v2`,
+  `embeds_and_modals`, `cache_and_permissions`, `manual_sharding`,
+  `http_only`, `interactions_http`.
 - **Smaller and faster model parsing:** `#[serde(flatten)]` and
   `#[serde(untagged)]` are gone from the deserialize side (`GUILD_CREATE` is
   no longer buffered as a value tree and parsed twice; scalar option values

@@ -244,6 +244,9 @@ fn apply_default_mentions(client: &Client, response: &mut InteractionResponse) {
         return;
     }
     client.fill_allowed_mentions(&mut data.allowed_mentions);
+    if cordex_model::component::needs_components_v2(&data.components) {
+        data.flags |= cordex_model::message::MessageFlags::IS_COMPONENTS_V2;
+    }
 }
 
 async fn followup_send(
@@ -253,6 +256,9 @@ async fn followup_send(
     files: Vec<File>,
 ) -> Result<Message, HttpError> {
     client.fill_allowed_mentions(&mut body.allowed_mentions);
+    if let Some(components) = &body.components {
+        super::mark_components_v2(&mut body.flags, components);
+    }
     let req = if files.is_empty() {
         req.json(&body)?
     } else {

@@ -1153,3 +1153,26 @@ async fn invite_target_users_csv_and_bulk_limits() {
     );
     assert_eq!(seen.lock().len(), 1);
 }
+
+#[tokio::test]
+async fn components_v2_flag_is_set_automatically() {
+    use cordex_model::component::{ActionRow, Button, Container, TextDisplay};
+    let (client, seen) = recording(
+        r#"{"id":"1","channel_id":"2","author":{"id":"3","username":"a","discriminator":"0","global_name":null,"avatar":null},"content":"","timestamp":"2026-11-23T00:00:00+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mentions":[],"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0}"#,
+    );
+    let _ = client
+        .create_message(id(2))
+        .components(vec![Container::new([TextDisplay::new("hi")]).into()])
+        .send()
+        .await;
+    let _ = client
+        .create_message(id(2))
+        .components(vec![ActionRow::new([Button::primary("a", "A")]).into()])
+        .send()
+        .await;
+    let log = seen.lock();
+    let v2: serde_json::Value = serde_json::from_str(&log[0].1).unwrap();
+    assert_eq!(v2["flags"], 1 << 15);
+    let classic: serde_json::Value = serde_json::from_str(&log[1].1).unwrap();
+    assert!(classic.get("flags").is_none(), "{classic}");
+}

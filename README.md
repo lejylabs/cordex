@@ -111,14 +111,28 @@ async fn run(token: String) -> cordex::Result<()> {
 }
 ```
 
-More in [`examples/bot.rs`][example]: autocomplete, select menus, modals and
-text commands.
+## Examples
+
+One small file per task in [`crates/facade/examples`][examples]:
+
+| Example | Shows |
+|---|---|
+| [`bot.rs`][ex-bot] | Commands, options, autocomplete, buttons, modals, text commands |
+| [`buttons_and_waiting.rs`][ex-wait] | `wait_for_button` (confirm dialog) and `button_clicks` (a poll) |
+| [`components_v2.rs`][ex-v2] | Components V2 layout: container, section, thumbnail, gallery |
+| [`embeds_and_modals.rs`][ex-embeds] | Embed builder, CDN avatar, relative timestamps, modal with radio group and checkbox |
+| [`cache_and_permissions.rs`][ex-cache] | Opt-in cache and permissions without a REST call (feature `cache`) |
+| [`manual_sharding.rs`][ex-shard] | Low-level shard range for multi-process bots, raw events, event filter |
+| [`http_only.rs`][ex-http] | REST without a gateway, safe default mentions, webhook URLs |
+| [`interactions_http.rs`][ex-ihttp] | Interactions over HTTP with signature check (feature `interactions-server`) |
 
 ## What is included
 
 - **Simple layer** (`cordex::bot`): `Bot` with plain async closures for
   commands, autocomplete, buttons, select menus, modals, messages and any
-  event; `ctx.wait_for_button` / `wait_for_message` / `wait_for_reaction`.
+  event; `ctx.wait_for_button` / `button_clicks` / `wait_for_message` /
+  `wait_for_reaction`; automatic resharding while running when Discord
+  recommends more shards.
 - **Gateway**: zlib-stream compression, heartbeat with zombie detection,
   resume and reconnect, close codes with fix hints, outbound rate limit,
   event filter (unwanted events are not parsed), backpressure policies,
@@ -136,6 +150,9 @@ text commands.
 - **Cache** (optional, off by default): every resource and every part is its
   own switch, limits per resource, switchable at runtime, permission
   calculation, backfill of old messages and members.
+- **Components**: builders for every component, including the Components V2
+  layout (container, section, text display, thumbnail, media gallery, file,
+  separator); the `IS_COMPONENTS_V2` flag is set automatically.
 - **Helpers**: embed builder with Discord's limits, CDN URLs (avatars, icons,
   emojis, stickers), mentions and timestamp markdown, mention parsing,
   webhook URL parsing, permission calculator, default allowed mentions.
@@ -218,7 +235,15 @@ any additional terms or conditions.
 [rust badge]: https://img.shields.io/badge/rust-1.95+-93450a.svg?style=for-the-badge&logo=rust
 [changelog]: https://github.com/lejylabs/cordex/blob/master/CHANGELOG.md
 [coverage]: https://github.com/lejylabs/cordex/blob/master/docs/coverage.md
-[example]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/bot.rs
+[examples]: https://github.com/lejylabs/cordex/tree/master/crates/facade/examples
+[ex-bot]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/bot.rs
+[ex-wait]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/buttons_and_waiting.rs
+[ex-v2]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/components_v2.rs
+[ex-embeds]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/embeds_and_modals.rs
+[ex-cache]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/cache_and_permissions.rs
+[ex-shard]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/manual_sharding.rs
+[ex-http]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/http_only.rs
+[ex-ihttp]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/interactions_http.rs
 [api docs]: https://github.com/discord/discord-api-docs
 [issues]: https://github.com/lejylabs/cordex/issues
 [contributing]: https://github.com/lejylabs/cordex/blob/master/CONTRIBUTING.md

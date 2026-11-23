@@ -15,6 +15,8 @@ use crate::id::Id;
 use crate::id::marker::{AttachmentMarker, GenericMarker, SkuMarker};
 mod builders;
 
+pub use builders::{EntitySelect, SelectKind, needs_components_v2};
+
 use crate::serde_util::{bitflags_serde_int, int_enum, str_enum};
 
 /// Any component.

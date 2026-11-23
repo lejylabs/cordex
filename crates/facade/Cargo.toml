@@ -52,5 +52,13 @@ serde_json.workspace = true
 name = "testbot"
 required-features = ["cache"]
 
+[[example]]
+name = "cache_and_permissions"
+required-features = ["cache"]
+
+[[example]]
+name = "interactions_http"
+required-features = ["interactions-server"]
+
 [package.metadata.docs.rs]
 all-features = true

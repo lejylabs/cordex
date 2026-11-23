@@ -49,8 +49,8 @@ impl Context {
     }
 
     /// The shard manager (latency, status, restarts).
-    pub fn shards(&self) -> &ShardManager {
-        &self.shared.manager
+    pub fn shards(&self) -> Arc<ShardManager> {
+        self.shared.manager()
     }
 
     /// Shard that received the event.
@@ -92,15 +92,41 @@ impl Context {
         message_id: Id<MessageMarker>,
         timeout: Duration,
     ) -> Option<ComponentContext> {
-        let event = self
-            .wait_for(timeout, move |event| match event {
-                Event::InteractionCreate(i) => {
-                    i.kind == InteractionType::MessageComponent
-                        && i.message.as_ref().is_some_and(|m| m.id == message_id)
-                }
-                _ => false,
-            })
-            .await?;
+        let event = self.wait_for(timeout, component_on(message_id)).await?;
+        self.component_context(event)
+    }
+
+    /// All button presses and selects on `message_id` until `timeout`
+    /// (counted from now) or until the returned value is dropped, e.g. for
+    /// polls or paging. Each click is answerable like in `on_component`
+    /// and is not passed to `on_component` handlers. Buffers up to
+    /// [`STANDBY_STREAM_CAPACITY`](cordex_gateway::STANDBY_STREAM_CAPACITY)
+    /// clicks.
+    ///
+    /// ```no_run
+    /// # use std::time::Duration;
+    /// # use cordex::prelude::*;
+    /// # async fn poll(ctx: CommandContext, message: Message) -> cordex::Result<()> {
+    /// let mut clicks = ctx.button_clicks(message.id, Duration::from_secs(60));
+    /// while let Some(click) = clicks.next().await {
+    ///     click.reply_ephemeral("Vote counted").await?;
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn button_clicks(&self, message_id: Id<MessageMarker>, timeout: Duration) -> ButtonClicks {
+        ButtonClicks {
+            ctx: self.clone(),
+            events: self
+                .shared
+                .standby
+                .wait_for_stream(component_on(message_id)),
+            deadline: tokio::time::Instant::now() + timeout,
+        }
+    }
+
+    /// `ComponentContext` for a component interaction event.
+    fn component_context(&self, event: Event) -> Option<ComponentContext> {
         let Event::InteractionCreate(mut interaction) = event else {
             return None;
         };
@@ -158,6 +184,44 @@ impl Context {
         {
             Some(Event::MessageReactionAdd(r)) => Some(*r),
             _ => None,
+        }
+    }
+}
+
+/// Filter for component interactions on one message.
+fn component_on(message_id: Id<MessageMarker>) -> impl Fn(&Event) -> bool + Send + Sync + 'static {
+    move |event| match event {
+        Event::InteractionCreate(i) => {
+            i.kind == InteractionType::MessageComponent
+                && i.message.as_ref().is_some_and(|m| m.id == message_id)
+        }
+        _ => false,
+    }
+}
+
+/// Clicks on one message, from [`Context::button_clicks`].
+pub struct ButtonClicks {
+    ctx: Context,
+    events: tokio::sync::mpsc::Receiver<Event>,
+    deadline: tokio::time::Instant,
+}
+
+impl fmt::Debug for ButtonClicks {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ButtonClicks").finish_non_exhaustive()
+    }
+}
+
+impl ButtonClicks {
+    /// The next click, or `None` once the timeout has passed.
+    pub async fn next(&mut self) -> Option<ComponentContext> {
+        loop {
+            let event = tokio::time::timeout_at(self.deadline, self.events.recv())
+                .await
+                .ok()??;
+            if let Some(click) = self.ctx.component_context(event) {
+                return Some(click);
+            }
         }
     }
 }

@@ -133,3 +133,21 @@ fn cache_adds_its_events_and_guilds_intent() {
     assert!(flags.wants("CHANNEL_CREATE"));
     assert!(!flags.wants("MESSAGE_CREATE"));
 }
+
+#[test]
+fn reshard_only_with_more_shards_and_enough_identifies() {
+    assert!(!needs_reshard(4, 4, 1000));
+    assert!(!needs_reshard(4, 2, 1000));
+    assert!(needs_reshard(4, 8, 1000));
+    // Not enough identifies left for the new shard set: wait.
+    assert!(!needs_reshard(4, 8, 7));
+    assert!(needs_reshard(4, 8, 8));
+}
+
+#[test]
+fn resharding_defaults() {
+    let bot = Bot::new("t");
+    assert_eq!(bot.reshard_interval, Some(DEFAULT_RESHARD_INTERVAL));
+    let bot = bot.reshard_interval(None);
+    assert_eq!(bot.reshard_interval, None);
+}

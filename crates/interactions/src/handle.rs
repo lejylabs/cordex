@@ -393,6 +393,17 @@ fn check_reply(reply: &Reply) -> Result<(), InteractionError> {
             format!("{} embeds; max. {EMBED_COUNT_LIMIT}", reply.embeds.len()).into(),
         ));
     }
+    let v2 = reply
+        .components
+        .as_deref()
+        .is_some_and(cordex_model::component::needs_components_v2);
+    if v2 && (reply.content.as_deref().is_some_and(|c| !c.is_empty()) || !reply.embeds.is_empty()) {
+        return Err(InteractionError::InvalidResponse(
+            "Components V2 messages cannot have content or embeds; put the text in a \
+             TextDisplay (use Reply::layout)"
+                .into(),
+        ));
+    }
     Ok(())
 }
 
@@ -405,6 +416,15 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
+
+    #[test]
+    fn components_v2_reply_rejects_content() {
+        use cordex_model::component::{Container, TextDisplay};
+        let layout = vec![Container::new([TextDisplay::new("hi")]).into()];
+        assert!(check_reply(&Reply::layout(layout.clone())).is_ok());
+        let err = check_reply(&Reply::new("text").components(layout)).unwrap_err();
+        assert!(err.to_string().contains("TextDisplay"), "{err}");
+    }
 
     const MESSAGE: &str = r#"{"id":"5","channel_id":"6","author":{"id":"2","username":"bot","discriminator":"0","global_name":null,"avatar":null},"content":"x","timestamp":"2024-01-01T00:00:00.000000+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mentions":[],"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0}"#;
 

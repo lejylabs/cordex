@@ -592,6 +592,7 @@ pub(crate) async fn send_message(
     require_body: bool,
 ) -> Result<Message, HttpError> {
     client.fill_allowed_mentions(&mut body.allowed_mentions);
+    super::mark_components_v2(&mut body.flags, &body.components);
 
     if !files.is_empty() {
         body.attachments = files

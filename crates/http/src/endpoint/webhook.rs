@@ -44,6 +44,8 @@ struct WebhookBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     flags: Option<MessageFlags>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    components: Vec<cordex_model::component::Component>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     attachments: Vec<WebhookAttachment>,
 }
 
@@ -260,6 +262,15 @@ impl ExecuteWebhook {
         Ok(self)
     }
 
+    /// Components. Webhooks not owned by an application can only send
+    /// non-interactive ones (link buttons, Components V2 layout); the
+    /// `IS_COMPONENTS_V2` flag is set automatically when needed.
+    #[must_use]
+    pub fn components(mut self, components: Vec<cordex_model::component::Component>) -> Self {
+        self.body.components = components;
+        self
+    }
+
     /// Allowed mentions.
     #[must_use]
     pub fn allowed_mentions(mut self, mentions: AllowedMentions) -> Self {
@@ -285,6 +296,7 @@ impl ExecuteWebhook {
         let mut body = self.body;
         self.client
             .fill_allowed_mentions(&mut body.allowed_mentions);
+        super::mark_components_v2(&mut body.flags, &body.components);
         fill_attachments(&mut body.attachments, &self.files);
 
         let route = Route::raw(
@@ -293,6 +305,10 @@ impl ExecuteWebhook {
         );
         let mut req = self.client.post(route);
         req = req.query("wait", self.wait);
+        if !body.components.is_empty() {
+            // Needed for webhooks that are not owned by an application.
+            req = req.query("with_components", true);
+        }
         if let Some(thread_id) = self.thread_id {
             req = req.query("thread_id", thread_id);
         }

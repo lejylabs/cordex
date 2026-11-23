@@ -213,6 +213,18 @@ pub use webhook::{ExecuteWebhook, UpdateWebhook};
 
 use crate::error::HttpError;
 
+/// Set `IS_COMPONENTS_V2` when the components use the V2 layout; Discord
+/// rejects such messages without the flag.
+pub(crate) fn mark_components_v2(
+    flags: &mut Option<cordex_model::message::MessageFlags>,
+    components: &[cordex_model::component::Component],
+) {
+    if cordex_model::component::needs_components_v2(components) {
+        let current = flags.unwrap_or_default();
+        *flags = Some(current | cordex_model::message::MessageFlags::IS_COMPONENTS_V2);
+    }
+}
+
 pub(crate) fn set_reason(
     slot: &mut Option<String>,
     reason: impl Into<String>,
