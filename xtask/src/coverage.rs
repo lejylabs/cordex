@@ -1878,7 +1878,7 @@ fn fetch_docs(cache: &Path, rev: &str) -> Result<PathBuf, String> {
         ));
     }
     let dir = cache.join(rev);
-    if dir.join("developers").is_dir() {
+    if docs_complete(&dir) {
         return Ok(dir);
     }
     let tmp = cache.join(format!("{rev}.partial"));
@@ -1898,9 +1898,27 @@ fn fetch_docs(cache: &Path, rev: &str) -> Result<PathBuf, String> {
             "{url} has no developers/ folder (docs restructured?)"
         ));
     }
+    write(&tmp.join(COMPLETE_MARKER), rev)?;
     let _ = fs::remove_dir_all(&dir);
     fs::rename(&tmp, &dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     Ok(dir)
+}
+
+/// Written after a full download; CI caches of `target/` (rust-cache) may
+/// restore a docs folder with files pruned, so a bare folder is not enough.
+const COMPLETE_MARKER: &str = ".cordex-complete";
+
+/// Whether a cached docs checkout is complete: the marker and a few pages
+/// every measurement reads must exist.
+fn docs_complete(dir: &Path) -> bool {
+    dir.join(COMPLETE_MARKER).is_file()
+        && [
+            "developers/events/gateway-events.mdx",
+            "developers/resources/channel.mdx",
+            "developers/topics/opcodes-and-status-codes.mdx",
+        ]
+        .iter()
+        .all(|page| dir.join(page).is_file())
 }
 
 /// `developers/…` pages that differ between two unpacked docs commits.
