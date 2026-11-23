@@ -11,7 +11,7 @@ const SHRINK_AFTER: usize = 1024 * 1024;
 const SHRINK_TO: usize = 8 * 1024;
 
 /// One inflate context for the lifetime of a socket.
-pub(crate) struct ZlibStream {
+pub struct ZlibStream {
     inflate: Decompress,
     pending: Vec<u8>,
     output: Vec<u8>,
@@ -26,7 +26,7 @@ impl ZlibStream {
     }
 
     /// New context; every connection (including a resume) starts one.
-    pub(crate) fn with_limit(max_message: usize) -> Self {
+    pub fn with_limit(max_message: usize) -> Self {
         Self {
             inflate: Decompress::new(true),
             pending: Vec::with_capacity(4096),
@@ -37,7 +37,7 @@ impl ZlibStream {
 
     /// Feed a WebSocket binary frame. Completed JSON documents are returned
     /// in order (a frame may contain several, or only part of one).
-    pub(crate) fn push(&mut self, data: &[u8]) -> Result<Vec<Box<str>>, GatewayError> {
+    pub fn push(&mut self, data: &[u8]) -> Result<Vec<Box<str>>, GatewayError> {
         if self.pending.len().saturating_add(data.len()) > self.max_message {
             return Err(GatewayError::zlib("compressed message exceeds size cap"));
         }

@@ -1,0 +1,46 @@
+[package]
+name = "cordex-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Keep fuzzing outside the main workspace so stable builds never pull in libfuzzer-sys.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = { version = "1.0", features = ["raw_value"] }
+cordex-model = { path = "../crates/model" }
+cordex-gateway = { path = "../crates/gateway" }
+cordex-interactions = { path = "../crates/interactions", features = ["verify"] }
+
+[[bin]]
+name = "envelope"
+path = "fuzz_targets/envelope.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "event"
+path = "fuzz_targets/event.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "zlib_inflate"
+path = "fuzz_targets/zlib_inflate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "verify_signature"
+path = "fuzz_targets/verify_signature.rs"
+test = false
+doc = false
+bench = false

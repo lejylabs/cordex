@@ -37,3 +37,11 @@ desktop.ini
 # Local tool settings
 .claude/settings.local.json
 *.code-workspace
+
+# mdBook build output
+/book/book/
+
+# cargo-fuzz outputs
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/

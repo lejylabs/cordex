@@ -24,7 +24,13 @@ cordex = "0.1.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
-Rust 1.95 or newer. No voice support, by design.
+Or scaffold a ready-to-run bot with [`cargo-generate`][template]:
+
+```bash
+cargo generate lejylabs/cordex-template
+```
+
+Rust 1.95 or newer. No voice support, by design. See the [cordex Guide][guide] for walkthroughs and deployment notes.
 
 ## Quick start
 
@@ -124,6 +130,7 @@ One small file per task in [`crates/facade/examples`][examples]:
 | [`embeds_and_modals.rs`][ex-embeds] | Embed builder, CDN avatar, relative timestamps, modal with radio group and checkbox |
 | [`cache_and_permissions.rs`][ex-cache] | Opt-in cache and permissions without a REST call (feature `cache`) |
 | [`manual_sharding.rs`][ex-shard] | Low-level shard range for multi-process bots, raw events, event filter |
+| [`thread_per_core.rs`][ex-tpc] | Pin shards onto dedicated `current_thread` Tokio runtimes (`RuntimeHandles`) |
 | [`http_only.rs`][ex-http] | REST without a gateway, safe default mentions, webhook URLs |
 | [`interactions_http.rs`][ex-ihttp] | Interactions over HTTP with signature check (feature `interactions-server`) |
 
@@ -243,8 +250,11 @@ any additional terms or conditions.
 [ex-embeds]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/embeds_and_modals.rs
 [ex-cache]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/cache_and_permissions.rs
 [ex-shard]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/manual_sharding.rs
+[ex-tpc]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/thread_per_core.rs
 [ex-http]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/http_only.rs
 [ex-ihttp]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/interactions_http.rs
+[template]: https://github.com/lejylabs/cordex-template
+[guide]: https://lejylabs.github.io/cordex/
 [api docs]: https://github.com/discord/discord-api-docs
 [issues]: https://github.com/lejylabs/cordex/issues
 [contributing]: https://github.com/lejylabs/cordex/blob/master/CONTRIBUTING.md

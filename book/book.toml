@@ -1,0 +1,12 @@
+[book]
+title = "cordex Guide"
+description = "Guide for cordex, an independent Discord v10 bot API library for Rust on Tokio."
+authors = ["lejylabs"]
+language = "en"
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/lejylabs/cordex"
+edit-url-template = "https://github.com/lejylabs/cordex/edit/master/book/{path}"
+default-theme = "coal"
+preferred-dark-theme = "coal"

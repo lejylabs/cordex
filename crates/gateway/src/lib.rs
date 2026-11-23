@@ -15,7 +15,8 @@ mod queue;
 mod session;
 mod standby;
 mod types;
-mod zlib;
+#[doc(hidden)]
+pub mod zlib;
 
 pub use connection::{
     Connector, DEFAULT_MAX_FRAME_BYTES, Incoming, Outgoing, WsConnection, WsConnector,
