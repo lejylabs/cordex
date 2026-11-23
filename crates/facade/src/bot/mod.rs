@@ -343,6 +343,38 @@ impl Bot {
         self
     }
 
+    /// Shortcut for registering a slash command without options.
+    pub fn slash<F, Fut>(
+        self,
+        name: impl AsRef<str>,
+        description: impl AsRef<str>,
+        handler: F,
+    ) -> Self
+    where
+        F: Fn(CommandContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.command(Command::slash(name, description), handler)
+    }
+
+    /// Shortcut for registering a user context-menu command.
+    pub fn user_command<F, Fut>(self, name: impl AsRef<str>, handler: F) -> Self
+    where
+        F: Fn(CommandContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.command(Command::user(name), handler)
+    }
+
+    /// Shortcut for registering a message context-menu command.
+    pub fn message_command<F, Fut>(self, name: impl AsRef<str>, handler: F) -> Self
+    where
+        F: Fn(CommandContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.command(Command::message(name), handler)
+    }
+
     /// Autocomplete handler for the options of command `name` (mark the
     /// options with `.autocomplete()`).
     pub fn autocomplete<F, Fut>(mut self, command: &str, handler: F) -> Self

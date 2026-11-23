@@ -57,6 +57,126 @@ pub struct Command {
     contexts: Option<Vec<InteractionContextType>>,
 }
 
+macro_rules! option_helpers {
+    () => {
+        /// Add an optional string option.
+        #[must_use]
+        pub fn string(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::string(name, description))
+        }
+
+        /// Add a required string option.
+        #[must_use]
+        pub fn required_string(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::string(name, description).required())
+        }
+
+        /// Add an optional integer option.
+        #[must_use]
+        pub fn integer(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::integer(name, description))
+        }
+
+        /// Add a required integer option.
+        #[must_use]
+        pub fn required_integer(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::integer(name, description).required())
+        }
+
+        /// Add an optional floating-point number option.
+        #[must_use]
+        pub fn number(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::number(name, description))
+        }
+
+        /// Add a required floating-point number option.
+        #[must_use]
+        pub fn required_number(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::number(name, description).required())
+        }
+
+        /// Add an optional boolean option.
+        #[must_use]
+        pub fn boolean(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::boolean(name, description))
+        }
+
+        /// Add a required boolean option.
+        #[must_use]
+        pub fn required_boolean(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::boolean(name, description).required())
+        }
+
+        /// Add an optional user option.
+        #[must_use]
+        pub fn user_option(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::user(name, description))
+        }
+
+        /// Add a required user option.
+        #[must_use]
+        pub fn required_user(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::user(name, description).required())
+        }
+
+        /// Add an optional role option.
+        #[must_use]
+        pub fn role(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::role(name, description))
+        }
+
+        /// Add a required role option.
+        #[must_use]
+        pub fn required_role(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::role(name, description).required())
+        }
+
+        /// Add an optional channel option.
+        #[must_use]
+        pub fn channel(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::channel(name, description))
+        }
+
+        /// Add a required channel option.
+        #[must_use]
+        pub fn required_channel(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::channel(name, description).required())
+        }
+
+        /// Add an optional mentionable (user or role) option.
+        #[must_use]
+        pub fn mentionable(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::mentionable(name, description))
+        }
+
+        /// Add a required mentionable (user or role) option.
+        #[must_use]
+        pub fn required_mentionable(
+            self,
+            name: impl AsRef<str>,
+            description: impl AsRef<str>,
+        ) -> Self {
+            self.option(CommandOption::mentionable(name, description).required())
+        }
+
+        /// Add an optional attachment option.
+        #[must_use]
+        pub fn attachment(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+            self.option(CommandOption::attachment(name, description))
+        }
+
+        /// Add a required attachment option.
+        #[must_use]
+        pub fn required_attachment(
+            self,
+            name: impl AsRef<str>,
+            description: impl AsRef<str>,
+        ) -> Self {
+            self.option(CommandOption::attachment(name, description).required())
+        }
+    };
+}
+
 impl Command {
     fn new(kind: CommandType, name: &str, description: &str) -> Self {
         Self {
@@ -103,6 +223,30 @@ impl Command {
     pub fn option(mut self, option: CommandOption) -> Self {
         self.options.push(option);
         self
+    }
+
+    option_helpers!();
+
+    /// Add a subcommand configured with `build`.
+    #[must_use]
+    pub fn subcommand(
+        self,
+        name: impl AsRef<str>,
+        description: impl AsRef<str>,
+        build: impl FnOnce(CommandOption) -> CommandOption,
+    ) -> Self {
+        self.option(build(CommandOption::subcommand(name, description)))
+    }
+
+    /// Add a subcommand group configured with `build`.
+    #[must_use]
+    pub fn subcommand_group(
+        self,
+        name: impl AsRef<str>,
+        description: impl AsRef<str>,
+        build: impl FnOnce(CommandOption) -> CommandOption,
+    ) -> Self {
+        self.option(build(CommandOption::group(name, description)))
     }
 
     /// Localized name, e.g. `("de", "grüßen")`.
@@ -382,6 +526,125 @@ impl CommandOption {
     pub fn option(mut self, option: Self) -> Self {
         self.options.push(option);
         self
+    }
+
+    /// Add a nested subcommand (inside a subcommand group), configured with `build`.
+    #[must_use]
+    pub fn add_subcommand(
+        self,
+        name: impl AsRef<str>,
+        description: impl AsRef<str>,
+        build: impl FnOnce(Self) -> Self,
+    ) -> Self {
+        self.option(build(Self::subcommand(name, description)))
+    }
+
+    /// Add an optional string option to this subcommand.
+    #[must_use]
+    pub fn add_string(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::string(name, description))
+    }
+
+    /// Add a required string option to this subcommand.
+    #[must_use]
+    pub fn required_string(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::string(name, description).required())
+    }
+
+    /// Add an optional integer option to this subcommand.
+    #[must_use]
+    pub fn add_integer(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::integer(name, description))
+    }
+
+    /// Add a required integer option to this subcommand.
+    #[must_use]
+    pub fn required_integer(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::integer(name, description).required())
+    }
+
+    /// Add an optional floating-point number option to this subcommand.
+    #[must_use]
+    pub fn add_number(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::number(name, description))
+    }
+
+    /// Add a required floating-point number option to this subcommand.
+    #[must_use]
+    pub fn required_number(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::number(name, description).required())
+    }
+
+    /// Add an optional boolean option to this subcommand.
+    #[must_use]
+    pub fn add_boolean(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::boolean(name, description))
+    }
+
+    /// Add a required boolean option to this subcommand.
+    #[must_use]
+    pub fn required_boolean(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::boolean(name, description).required())
+    }
+
+    /// Add an optional user option to this subcommand.
+    #[must_use]
+    pub fn add_user(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::user(name, description))
+    }
+
+    /// Add a required user option to this subcommand.
+    #[must_use]
+    pub fn required_user(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::user(name, description).required())
+    }
+
+    /// Add an optional role option to this subcommand.
+    #[must_use]
+    pub fn add_role(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::role(name, description))
+    }
+
+    /// Add a required role option to this subcommand.
+    #[must_use]
+    pub fn required_role(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::role(name, description).required())
+    }
+
+    /// Add an optional channel option to this subcommand.
+    #[must_use]
+    pub fn add_channel(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::channel(name, description))
+    }
+
+    /// Add a required channel option to this subcommand.
+    #[must_use]
+    pub fn required_channel(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::channel(name, description).required())
+    }
+
+    /// Add an optional mentionable option to this subcommand.
+    #[must_use]
+    pub fn add_mentionable(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::mentionable(name, description))
+    }
+
+    /// Add a required mentionable option to this subcommand.
+    #[must_use]
+    pub fn required_mentionable(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::mentionable(name, description).required())
+    }
+
+    /// Add an optional attachment option to this subcommand.
+    #[must_use]
+    pub fn add_attachment(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::attachment(name, description))
+    }
+
+    /// Add a required attachment option to this subcommand.
+    #[must_use]
+    pub fn required_attachment(self, name: impl AsRef<str>, description: impl AsRef<str>) -> Self {
+        self.option(Self::attachment(name, description).required())
     }
 
     /// Fixed string choice (string options).

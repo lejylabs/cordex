@@ -514,6 +514,51 @@ impl CommandContext {
         Ok(self.options().attachment(name)?)
     }
 
+    /// Optional string option.
+    pub fn string_opt(&self, name: &str) -> Result<Option<&str>> {
+        Ok(self.options().string_opt(name)?)
+    }
+
+    /// Optional integer option.
+    pub fn integer_opt(&self, name: &str) -> Result<Option<i64>> {
+        Ok(self.options().integer_opt(name)?)
+    }
+
+    /// Optional number option.
+    pub fn number_opt(&self, name: &str) -> Result<Option<f64>> {
+        Ok(self.options().number_opt(name)?)
+    }
+
+    /// Optional boolean option (`None` when not provided).
+    pub fn boolean_opt(&self, name: &str) -> Result<Option<bool>> {
+        Ok(self.options().boolean_opt(name)?)
+    }
+
+    /// Optional user option.
+    pub fn user_opt(&self, name: &str) -> Result<Option<&User>> {
+        Ok(self.options().user_opt(name)?.map(|u| u.user))
+    }
+
+    /// Optional user option with member data (in guilds).
+    pub fn member_opt(&self, name: &str) -> Result<Option<ResolvedUser<'_>>> {
+        Ok(self.options().user_opt(name)?)
+    }
+
+    /// Optional role option.
+    pub fn role_opt(&self, name: &str) -> Result<Option<&Role>> {
+        Ok(self.options().role_opt(name)?)
+    }
+
+    /// Optional channel option.
+    pub fn channel_opt(&self, name: &str) -> Result<Option<&Channel>> {
+        Ok(self.options().channel_opt(name)?)
+    }
+
+    /// Optional attachment option.
+    pub fn attachment_opt(&self, name: &str) -> Result<Option<&Attachment>> {
+        Ok(self.options().attachment_opt(name)?)
+    }
+
     /// Target of a user context-menu command.
     pub fn target_user(&self) -> Result<&User> {
         Ok(self.options().target_user()?.user)
