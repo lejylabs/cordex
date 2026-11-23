@@ -6,6 +6,14 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+- **`cordex-cache`: per-resource `CachePolicy` (`Off`, `Lazy`, `Eager`).**
+  `CacheConfig::lazy(...)` and `CacheConfig::with_policy(..., CachePolicy::Lazy)`
+  skip bulk dumps (`GUILD_CREATE`, `GUILD_MEMBERS_CHUNK`, `THREAD_LIST_SYNC`,
+  `SOUNDBOARD_SOUNDS`) and cache entries only when seen in live events
+  (messages, interactions, member/voice/guild/channel/role updates, etc.).
+  Purely lazy configs omit `GUILD_CREATE` from `wanted_events()`.
+  `GuildMemberUpdate::to_member()` added in `cordex-model`.
+
 ## 0.1.0 - 2026-11-23
 
 First regular release. Covers 100 % of the measured official bot API

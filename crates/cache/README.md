@@ -12,7 +12,9 @@ only pay memory and CPU for what you switch on.
 
 - **14 resources**: guilds, channels, threads, users, members, roles, emojis,
   stickers, soundboard sounds, voice states, presences, stage instances,
-  scheduled events, messages.
+  scheduled events, messages. Each can be `Off`, `Lazy` (cached on first sight
+  in live events, skipping `GUILD_CREATE` / bulk dumps) or `Eager`
+  (`CachePolicy`).
 - **11 parts** such as member roles, message content, channel overwrites.
 - **Limits**: messages per channel (ring buffer), members and presences per
   guild.

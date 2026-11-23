@@ -667,3 +667,175 @@ fn guild_create_replaces_old_channels_and_threads() {
     assert_eq!(cache.guild_channels(g).len(), 1);
     assert_eq!(cache.stats().members, 2);
 }
+
+#[test]
+fn lazy_skips_guild_create_and_caches_on_first_sight() {
+    use crate::CachePolicy;
+
+    let g = Id::new(GUILD).unwrap();
+    let alice = Id::new(ALICE).unwrap();
+    let bob = Id::new(BOB).unwrap();
+    let carol = Id::new(777).unwrap();
+
+    let cfg = CacheConfig::new()
+        .lazy(ResourceType::all())
+        .parts(CacheParts::MEMBER_ROLES | CacheParts::MEMBER_PROFILE)
+        .message_cache_size(5);
+    assert_eq!(cfg.policy(ResourceType::MEMBERS), CachePolicy::Lazy);
+    assert!(cfg.is_lazy(ResourceType::GUILDS));
+    assert!(!cfg.is_eager(ResourceType::GUILDS));
+    assert!(cfg.has(ResourceType::GUILDS));
+
+    let cache = InMemoryCache::new(cfg);
+    // READY and GUILD_CREATE bulk dumps must not populate lazy resources
+    // (only the bot's own current_user is kept from READY).
+    cache.update(&ev("READY", &ready()));
+    cache.update(&ev("GUILD_CREATE", &guild_create()));
+    assert_eq!(cache.stats(), CacheStats::default());
+    assert!(cache.current_user().is_some());
+
+    // Bulk member chunks and thread list syncs are also skipped in lazy mode.
+    cache.update(&ev(
+        "GUILD_MEMBERS_CHUNK",
+        &json!({"guild_id": id(GUILD), "members": [member(ALICE)], "chunk_index": 0, "chunk_count": 1}),
+    ));
+    cache.update(&ev(
+        "THREAD_LIST_SYNC",
+        &json!({"guild_id": id(GUILD), "threads": [fixture("thread")], "members": []}),
+    ));
+    assert_eq!(cache.stats().members, 0);
+    assert_eq!(cache.stats().threads, 0);
+
+    // Live MESSAGE_CREATE with a member object caches the author + member
+    // (and the message itself).
+    let mut msg = message(1, TEXT);
+    let mut msg_member = member(ALICE);
+    msg_member.as_object_mut().unwrap().remove("user");
+    msg["member"] = msg_member;
+    cache.update(&ev("MESSAGE_CREATE", &msg));
+    assert_eq!(cache.stats().messages, 1);
+    assert_eq!(cache.stats().members, 1);
+    assert_eq!(cache.stats().users, 1);
+    assert_eq!(
+        cache.member(g, alice).unwrap().nick.as_deref(),
+        Some("nick")
+    );
+    assert_eq!(cache.user(alice).unwrap().id, alice);
+
+    // Webhook messages must not cache fake webhook authors as members/users.
+    let mut wh = msg.clone();
+    wh["id"] = id(2);
+    wh["author"] = user(888);
+    wh["webhook_id"] = id(888);
+    cache.update(&ev("MESSAGE_CREATE", &wh));
+    assert!(cache.member(g, Id::new(888).unwrap()).is_none());
+    assert!(cache.user(Id::new(888).unwrap()).is_none());
+
+    // Live GUILD_MEMBER_UPDATE inserts an unseen member in lazy mode.
+    let update = json!({"guild_id": id(GUILD), "roles": [id(10)], "user": user(BOB), "nick": "bobby",
+        "joined_at": "2024-01-01T00:00:00.000000+00:00", "flags": 0});
+    cache.update(&ev("GUILD_MEMBER_UPDATE", &update));
+    assert_eq!(cache.member(g, bob).unwrap().nick.as_deref(), Some("bobby"));
+    assert!(cache.user(bob).is_some());
+
+    // Live VOICE_STATE_UPDATE with member caches both voice state and member.
+    cache.update(&ev(
+        "VOICE_STATE_UPDATE",
+        &json!({
+            "guild_id": id(GUILD), "user_id": id(777), "channel_id": id(TEXT), "session_id": "s",
+            "deaf": false, "mute": false, "self_deaf": false, "self_mute": false,
+            "self_video": false, "suppress": false, "member": member(777)
+        }),
+    ));
+    assert!(cache.voice_state(g, carol).is_some());
+    assert!(cache.member(g, carol).is_some());
+    assert!(cache.user(carol).is_some());
+
+    // Live GUILD_UPDATE / CHANNEL_UPDATE / GUILD_ROLE_UPDATE cache on sight.
+    let mut guild_upd = fixture("guild");
+    guild_upd["id"] = id(GUILD);
+    cache.update(&ev("GUILD_UPDATE", &guild_upd));
+    let mut ch = fixture("text");
+    ch["id"] = id(TEXT);
+    ch["guild_id"] = id(GUILD);
+    cache.update(&ev("CHANNEL_UPDATE", &ch));
+    let mut role = fixture("role");
+    role["id"] = id(10);
+    cache.update(&ev(
+        "GUILD_ROLE_UPDATE",
+        &json!({"guild_id": id(GUILD), "role": role}),
+    ));
+    assert!(cache.guild(g).is_some());
+    assert!(cache.channel(Id::new(TEXT).unwrap()).is_some());
+    assert!(cache.role(g, Id::new(10).unwrap()).is_some());
+
+    // GUILD_DELETE still cleans everything up.
+    cache.update(&ev("GUILD_DELETE", &json!({"id": id(GUILD)})));
+    assert_eq!(cache.stats(), CacheStats::default());
+}
+
+#[test]
+fn lazy_users_with_eager_members_skips_bulk_users() {
+    let g = Id::new(GUILD).unwrap();
+    let alice = Id::new(ALICE).unwrap();
+    let cfg = CacheConfig::new()
+        .resources(ResourceType::MEMBERS)
+        .lazy(ResourceType::USERS);
+    let cache = InMemoryCache::new(cfg);
+
+    cache.update(&ev("GUILD_CREATE", &guild_create()));
+    assert_eq!(cache.stats().members, 2, "members are eager");
+    assert_eq!(
+        cache.stats().users,
+        0,
+        "users are lazy, skipped in GUILD_CREATE"
+    );
+
+    // Once Alice sends a message with member info, Alice's user is cached.
+    let mut msg = message(1, TEXT);
+    let mut msg_member = member(ALICE);
+    msg_member.as_object_mut().unwrap().remove("user");
+    msg["member"] = msg_member;
+    cache.update(&ev("MESSAGE_CREATE", &msg));
+    assert_eq!(cache.stats().users, 1);
+    assert!(cache.user(alice).is_some());
+    assert!(cache.member(g, alice).is_some());
+}
+
+#[test]
+fn policy_transitions_and_lazy_wanted_events() {
+    use crate::CachePolicy;
+
+    let cfg = CacheConfig::new()
+        .resources(ResourceType::GUILDS | ResourceType::MEMBERS)
+        .lazy(ResourceType::MEMBERS)
+        .with_policy(ResourceType::ROLES, CachePolicy::Lazy);
+    assert_eq!(cfg.policy(ResourceType::GUILDS), CachePolicy::Eager);
+    assert_eq!(cfg.policy(ResourceType::MEMBERS), CachePolicy::Lazy);
+    assert_eq!(cfg.policy(ResourceType::ROLES), CachePolicy::Lazy);
+    assert_eq!(cfg.policy(ResourceType::CHANNELS), CachePolicy::Off);
+    assert_eq!(cfg.eager_resources(), ResourceType::GUILDS);
+    assert_eq!(
+        cfg.lazy_resources(),
+        ResourceType::MEMBERS | ResourceType::ROLES
+    );
+
+    // Pure lazy config omits bulk events (GUILD_CREATE, GUILD_MEMBERS_CHUNK, THREAD_LIST_SYNC).
+    let lazy_only = CacheConfig::new().lazy(ResourceType::MEMBERS | ResourceType::THREADS);
+    let events = lazy_only.wanted_events();
+    assert!(!events.contains(&"GUILD_CREATE"));
+    assert!(!events.contains(&"GUILD_MEMBERS_CHUNK"));
+    assert!(!events.contains(&"THREAD_LIST_SYNC"));
+    assert!(events.contains(&"GUILD_DELETE"));
+    assert!(events.contains(&"MESSAGE_CREATE"));
+    assert!(events.contains(&"INTERACTION_CREATE"));
+    assert!(events.contains(&"THREAD_CREATE"));
+
+    // Runtime downgrade Eager -> Lazy keeps existing entries; -> Off drops them.
+    let cache = replay(all());
+    assert_eq!(cache.stats().members, 2);
+    cache.set_config(all().lazy(ResourceType::MEMBERS));
+    assert_eq!(cache.stats().members, 2);
+    cache.set_config(all().with_policy(ResourceType::MEMBERS, CachePolicy::Off));
+    assert_eq!(cache.stats().members, 0);
+}

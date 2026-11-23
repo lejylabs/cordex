@@ -132,7 +132,7 @@ pub mod prelude {
         MessageContext, ModalContext, ReadyContext,
     };
     #[cfg(feature = "cache")]
-    pub use cordex_cache::{CacheConfig, CacheParts, InMemoryCache, ResourceType};
+    pub use cordex_cache::{CacheConfig, CacheParts, CachePolicy, InMemoryCache, ResourceType};
     #[cfg(feature = "gateway")]
     pub use cordex_gateway::{CloseMode, EventTypeFlags, Shard, ShardId, ShardManager, Standby};
     #[cfg(feature = "http")]

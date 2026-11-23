@@ -71,21 +71,41 @@ bitflags::bitflags! {
     }
 }
 
+/// How a [`ResourceType`] is populated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum CachePolicy {
+    /// Do not cache this resource (default).
+    #[default]
+    Off,
+    /// Cache entries only when seen in live events (messages, interactions,
+    /// updates, voice states, ...); skip bulk dumps such as `GUILD_CREATE`
+    /// and `GUILD_MEMBERS_CHUNK`.
+    Lazy,
+    /// Cache everything, including bulk dumps on `GUILD_CREATE`, `READY`,
+    /// `GUILD_MEMBERS_CHUNK` and `THREAD_LIST_SYNC`.
+    Eager,
+}
+
 /// Cache configuration. [`CacheConfig::default`] caches nothing.
 ///
 /// ```
-/// use cordex_cache::{CacheConfig, CacheParts, ResourceType};
+/// use cordex_cache::{CacheConfig, CacheParts, CachePolicy, ResourceType};
 ///
 /// let config = CacheConfig::new()
 ///     .resources(ResourceType::GUILDS | ResourceType::CHANNELS | ResourceType::MESSAGES)
+///     .lazy(ResourceType::MEMBERS | ResourceType::USERS)
 ///     .parts(CacheParts::MESSAGE_CONTENT)
 ///     .message_cache_size(50);
 /// assert!(config.validate().is_empty());
+/// assert_eq!(config.policy(ResourceType::MEMBERS), CachePolicy::Lazy);
 /// assert!(CacheConfig::default().wanted_events().is_empty());
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CacheConfig {
-    resources: ResourceType,
+    /// Resources cached eagerly (disjoint from `lazy`).
+    eager: ResourceType,
+    /// Resources cached lazily on first sight (disjoint from `eager`).
+    lazy: ResourceType,
     parts: CacheParts,
     message_cache_size: usize,
     max_members_per_guild: Option<usize>,
@@ -98,22 +118,45 @@ impl CacheConfig {
         Self::default()
     }
 
-    /// Preset: guilds and channels, no parts.
+    /// Preset: guilds and channels (eager), no parts.
     pub fn guilds_and_channels() -> Self {
         Self::new().resources(ResourceType::GUILDS | ResourceType::CHANNELS)
     }
 
-    /// Switch resources on (adds to what is already on).
+    /// Switch resources on eagerly (adds to what is already on, upgrades
+    /// lazy resources to eager).
     #[must_use]
     pub fn resources(mut self, resources: ResourceType) -> Self {
-        self.resources |= resources;
+        self.eager |= resources;
+        self.lazy.remove(resources);
         self
     }
 
-    /// Switch resources off.
+    /// Switch resources on lazily: skip bulk dumps (`GUILD_CREATE`,
+    /// `GUILD_MEMBERS_CHUNK`, `THREAD_LIST_SYNC`) and cache entries only
+    /// when seen in live events. Downgrades eager resources to lazy.
+    #[must_use]
+    pub fn lazy(mut self, resources: ResourceType) -> Self {
+        self.lazy |= resources;
+        self.eager.remove(resources);
+        self
+    }
+
+    /// Set the [`CachePolicy`] for one or more resources.
+    #[must_use]
+    pub fn with_policy(self, resources: ResourceType, policy: CachePolicy) -> Self {
+        match policy {
+            CachePolicy::Off => self.without_resources(resources),
+            CachePolicy::Lazy => self.lazy(resources),
+            CachePolicy::Eager => self.resources(resources),
+        }
+    }
+
+    /// Switch resources off (both eager and lazy).
     #[must_use]
     pub fn without_resources(mut self, resources: ResourceType) -> Self {
-        self.resources.remove(resources);
+        self.eager.remove(resources);
+        self.lazy.remove(resources);
         self
     }
 
@@ -154,9 +197,19 @@ impl CacheConfig {
         self
     }
 
-    /// Enabled resources.
+    /// All enabled resources (eager and lazy combined).
     pub fn enabled_resources(&self) -> ResourceType {
-        self.resources
+        self.eager | self.lazy
+    }
+
+    /// Resources with [`CachePolicy::Eager`].
+    pub fn eager_resources(&self) -> ResourceType {
+        self.eager
+    }
+
+    /// Resources with [`CachePolicy::Lazy`].
+    pub fn lazy_resources(&self) -> ResourceType {
+        self.lazy
     }
 
     /// Enabled parts.
@@ -164,9 +217,35 @@ impl CacheConfig {
         self.parts
     }
 
-    /// Whether `resource` is on.
+    /// Policy of a single `resource`. For a combined bitmask, returns
+    /// [`CachePolicy::Eager`] if all bits are eager, [`CachePolicy::Lazy`]
+    /// if all bits are lazy, else [`CachePolicy::Off`].
+    pub fn policy(&self, resource: ResourceType) -> CachePolicy {
+        if resource.is_empty() {
+            CachePolicy::Off
+        } else if self.eager.contains(resource) {
+            CachePolicy::Eager
+        } else if self.lazy.contains(resource) {
+            CachePolicy::Lazy
+        } else {
+            CachePolicy::Off
+        }
+    }
+
+    /// Whether `resource` is enabled (either [`CachePolicy::Eager`] or
+    /// [`CachePolicy::Lazy`]).
     pub fn has(&self, resource: ResourceType) -> bool {
-        self.resources.contains(resource)
+        self.enabled_resources().contains(resource)
+    }
+
+    /// Whether `resource` is enabled with [`CachePolicy::Eager`].
+    pub fn is_eager(&self, resource: ResourceType) -> bool {
+        self.eager.contains(resource)
+    }
+
+    /// Whether `resource` is enabled with [`CachePolicy::Lazy`].
+    pub fn is_lazy(&self, resource: ResourceType) -> bool {
+        self.lazy.contains(resource)
     }
 
     /// Whether `part` is on.
@@ -195,6 +274,7 @@ impl CacheConfig {
         use CacheParts as P;
         use ResourceType as R;
         let mut out = Vec::new();
+        let enabled = self.enabled_resources();
         if self.has(R::MEMBERS) && !self.has(R::USERS) {
             out.push(ConfigWarning::MembersWithoutUsers);
         }
@@ -218,7 +298,7 @@ impl CacheConfig {
         ];
         for (parts, resources) in needs {
             let on = self.parts & parts;
-            if !on.is_empty() && !self.resources.intersects(resources) {
+            if !on.is_empty() && !enabled.intersects(resources) {
                 out.push(ConfigWarning::PartWithoutResource {
                     parts: on,
                     needs: resources,
@@ -233,33 +313,48 @@ impl CacheConfig {
     /// other events are not parsed for the cache.
     pub fn wanted_events(&self) -> Vec<&'static str> {
         use ResourceType as R;
-        if self.resources.is_empty() {
+        if self.enabled_resources().is_empty() {
             return Vec::new();
         }
-        // Guild lifecycle events feed every guild-scoped resource.
-        let mut out = vec!["READY", "GUILD_CREATE", "GUILD_DELETE"];
+        let mut out = Vec::new();
+        let mut push = |name: &'static str| {
+            if !out.contains(&name) {
+                out.push(name);
+            }
+        };
+        if self.has(R::USERS) || self.is_eager(R::GUILDS) {
+            push("READY");
+        }
+        // Only eager resources read the bulk `GUILD_CREATE` payload.
+        if !self.eager.is_empty() {
+            push("GUILD_CREATE");
+        }
+        // Leaving a guild always cleans up every guild-scoped store.
+        push("GUILD_DELETE");
         for (resource, names) in EVENTS_BY_RESOURCE {
             if self.has(resource) {
                 for name in names {
-                    if !out.contains(name) {
-                        out.push(name);
-                    }
+                    push(name);
+                }
+            }
+        }
+        for (resource, names) in EAGER_EVENTS_BY_RESOURCE {
+            if self.is_eager(resource) {
+                for name in names {
+                    push(name);
                 }
             }
         }
         if self.has(R::MESSAGES) {
             // Channel and thread deletes drop their messages.
-            for name in ["CHANNEL_DELETE", "THREAD_DELETE"] {
-                if !out.contains(&name) {
-                    out.push(name);
-                }
-            }
+            push("CHANNEL_DELETE");
+            push("THREAD_DELETE");
         }
         out
     }
 }
 
-/// Dispatch names each resource reads.
+/// Live dispatch names each resource reads (both eager and lazy).
 const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
     use ResourceType as R;
     [
@@ -270,12 +365,7 @@ const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
         ),
         (
             R::THREADS,
-            &[
-                "THREAD_CREATE",
-                "THREAD_UPDATE",
-                "THREAD_DELETE",
-                "THREAD_LIST_SYNC",
-            ],
+            &["THREAD_CREATE", "THREAD_UPDATE", "THREAD_DELETE"],
         ),
         (
             R::USERS,
@@ -283,7 +373,9 @@ const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
                 "USER_UPDATE",
                 "GUILD_MEMBER_ADD",
                 "GUILD_MEMBER_UPDATE",
-                "GUILD_MEMBERS_CHUNK",
+                "INTERACTION_CREATE",
+                "MESSAGE_CREATE",
+                "VOICE_STATE_UPDATE",
             ],
         ),
         (
@@ -292,9 +384,9 @@ const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
                 "GUILD_MEMBER_ADD",
                 "GUILD_MEMBER_UPDATE",
                 "GUILD_MEMBER_REMOVE",
-                "GUILD_MEMBERS_CHUNK",
-                // The invoking member arrives with every guild interaction.
                 "INTERACTION_CREATE",
+                "MESSAGE_CREATE",
+                "VOICE_STATE_UPDATE",
             ],
         ),
         (
@@ -314,7 +406,6 @@ const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
                 "GUILD_SOUNDBOARD_SOUND_UPDATE",
                 "GUILD_SOUNDBOARD_SOUND_DELETE",
                 "GUILD_SOUNDBOARD_SOUNDS_UPDATE",
-                "SOUNDBOARD_SOUNDS",
             ],
         ),
         (R::VOICE_STATES, &["VOICE_STATE_UPDATE"]),
@@ -344,6 +435,17 @@ const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
                 "MESSAGE_DELETE_BULK",
             ],
         ),
+    ]
+};
+
+/// Bulk dispatch names read only when the resource is [`CachePolicy::Eager`].
+const EAGER_EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 4] = {
+    use ResourceType as R;
+    [
+        (R::THREADS, &["THREAD_LIST_SYNC"]),
+        (R::USERS, &["GUILD_MEMBERS_CHUNK"]),
+        (R::MEMBERS, &["GUILD_MEMBERS_CHUNK"]),
+        (R::SOUNDBOARD_SOUNDS, &["SOUNDBOARD_SOUNDS"]),
     ]
 };
 

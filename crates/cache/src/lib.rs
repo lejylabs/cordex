@@ -5,7 +5,7 @@ mod config;
 mod strip;
 
 pub use cache::{CacheStats, InMemoryCache, PermissionCacheError};
-pub use config::{CacheConfig, CacheParts, ConfigWarning, ResourceType};
+pub use config::{CacheConfig, CacheParts, CachePolicy, ConfigWarning, ResourceType};
 
 #[cfg(test)]
 mod tests;

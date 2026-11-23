@@ -553,6 +553,30 @@ pub struct GuildMemberUpdate {
     pub flags: crate::guild::MemberFlags,
 }
 
+impl GuildMemberUpdate {
+    /// Build a [`Member`] snapshot from this update payload.
+    pub fn to_member(&self) -> Member {
+        Member {
+            guild_id: Some(self.guild_id),
+            user: Some(self.user.clone()),
+            nick: self.nick.clone(),
+            avatar: self.avatar.clone(),
+            banner: self.banner.clone(),
+            roles: self.roles.clone(),
+            joined_at: self.joined_at,
+            premium_since: self.premium_since,
+            deaf: self.deaf.unwrap_or(false),
+            mute: self.mute.unwrap_or(false),
+            flags: self.flags,
+            pending: self.pending.unwrap_or(false),
+            permissions: None,
+            communication_disabled_until: self.communication_disabled_until,
+            avatar_decoration_data: self.avatar_decoration_data.clone(),
+            collectibles: self.collectibles.clone(),
+        }
+    }
+}
+
 /// `GUILD_MEMBERS_CHUNK` payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]

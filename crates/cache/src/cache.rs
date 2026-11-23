@@ -259,7 +259,7 @@ impl InMemoryCache {
                     strip::user(&mut user, c);
                     *self.current_user.write() = Some(Arc::new(user));
                 }
-                if c.has(R::GUILDS) {
+                if c.is_eager(R::GUILDS) {
                     let mut unavailable = self.unavailable.write();
                     for g in &ready.guilds {
                         unavailable.insert(g.id);
@@ -273,7 +273,7 @@ impl InMemoryCache {
             }
             Event::GuildCreate(GuildCreate::Available(g)) => self.guild_create(g, c),
             Event::GuildCreate(GuildCreate::Unavailable(g)) => {
-                if c.has(R::GUILDS) {
+                if c.is_eager(R::GUILDS) {
                     self.unavailable.write().insert(g.id);
                 }
             }
@@ -311,7 +311,7 @@ impl InMemoryCache {
                 self.threads.write().remove(&ch.id);
                 self.messages.write().remove(&ch.id);
             }
-            Event::ThreadListSync(sync) if c.has(R::THREADS) => {
+            Event::ThreadListSync(sync) if c.is_eager(R::THREADS) => {
                 self.note_channel_guild(Some(sync.guild_id));
                 let mut threads = self.threads.write();
                 threads.retain(|_, t| {
@@ -340,10 +340,8 @@ impl InMemoryCache {
                     self.release_user(r.user.id);
                 }
             }
-            Event::GuildMembersChunk(chunk) => {
-                for m in &chunk.members {
-                    self.insert_member(chunk.guild_id, m, c);
-                }
+            Event::GuildMembersChunk(chunk) if c.is_eager(R::MEMBERS) => {
+                self.insert_member_batch(chunk.guild_id, &chunk.members, c, c.is_eager(R::USERS));
             }
             Event::GuildRoleCreate(r) | Event::GuildRoleUpdate(r) if c.has(R::ROLES) => {
                 insert_by_guild(&self.roles, r.guild_id, r.role.id, r.role.clone());
@@ -381,18 +379,30 @@ impl InMemoryCache {
                     g.remove(&d.sound_id);
                 }
             }
-            Event::GuildSoundboardSoundsUpdate(s) | Event::SoundboardSounds(s)
-                if c.has(R::SOUNDBOARD_SOUNDS) =>
-            {
+            Event::GuildSoundboardSoundsUpdate(s) if c.has(R::SOUNDBOARD_SOUNDS) => {
                 replace_guild(
                     &self.sounds,
                     s.guild_id,
                     s.soundboard_sounds.iter().map(|x| (x.sound_id, x.clone())),
                 );
             }
-            Event::VoiceStateUpdate(v) if c.has(R::VOICE_STATES) => {
+            Event::SoundboardSounds(s) if c.is_eager(R::SOUNDBOARD_SOUNDS) => {
+                replace_guild(
+                    &self.sounds,
+                    s.guild_id,
+                    s.soundboard_sounds.iter().map(|x| (x.sound_id, x.clone())),
+                );
+            }
+            Event::VoiceStateUpdate(v) => {
                 if let Some(gid) = v.guild_id {
-                    self.insert_voice_state(gid, v, c);
+                    if c.has(R::VOICE_STATES) {
+                        self.insert_voice_state(gid, v, c);
+                    }
+                    if c.has(R::MEMBERS)
+                        && let Some(member) = v.member.as_deref()
+                    {
+                        self.insert_member(gid, member, c);
+                    }
                 }
             }
             Event::PresenceUpdate(p) if c.has(R::PRESENCES) => {
@@ -423,8 +433,10 @@ impl InMemoryCache {
             // Without the presences intent `GUILD_CREATE` carries almost no
             // members; the invoking member of an interaction is complete.
             Event::InteractionCreate(i) => {
-                if let (Some(gid), Some(member)) = (i.guild_id, i.member.as_deref()) {
-                    self.insert_member(gid, member, c);
+                if let (Some(gid), Some(member)) = (i.guild_id, i.member.as_deref())
+                    && let Some(user) = member.user.as_ref().or(i.user.as_ref())
+                {
+                    self.insert_member_with_user(gid, member, user, c);
                 }
             }
             Event::MessageCreate(m) => self.message_create(m, c),
@@ -446,51 +458,36 @@ impl InMemoryCache {
 
     fn guild_create(&self, g: &cordex_model::gateway::event::AvailableGuild, c: &CacheConfig) {
         use ResourceType as R;
+        if c.eager_resources().is_empty() {
+            return;
+        }
         let gid = g.guild.id;
-        if c.has(R::GUILDS) {
+        if c.is_eager(R::GUILDS) {
             self.unavailable.write().remove(&gid);
             let mut guild = g.guild.clone();
             strip::guild(&mut guild, c);
             self.guilds.write().insert(gid, Arc::new(guild));
         }
-        let had_channels = !self.channel_guilds.write().insert(gid);
-        if c.has(R::CHANNELS) {
-            let mut channels = self.channels.write();
-            if had_channels {
-                channels.retain(|_, ch| ch.guild_id != Some(gid));
-            }
-            channels.reserve(g.channels.len());
-            for ch in &g.channels {
-                let mut ch = ch.clone();
-                ch.guild_id = Some(gid);
-                strip::channel(&mut ch, c);
-                channels.insert(ch.id, Arc::new(ch));
-            }
+        let had_channels = (c.is_eager(R::CHANNELS) || c.is_eager(R::THREADS))
+            && !self.channel_guilds.write().insert(gid);
+        if c.is_eager(R::CHANNELS) {
+            replace_guild_channels(&self.channels, gid, &g.channels, had_channels, c);
         }
-        if c.has(R::THREADS) {
-            let mut threads = self.threads.write();
-            if had_channels {
-                threads.retain(|_, t| t.guild_id != Some(gid));
-            }
-            for t in &g.threads {
-                let mut t = t.clone();
-                t.guild_id = Some(gid);
-                strip::channel(&mut t, c);
-                threads.insert(t.id, Arc::new(t));
-            }
+        if c.is_eager(R::THREADS) {
+            replace_guild_channels(&self.threads, gid, &g.threads, had_channels, c);
         }
-        if c.has(R::MEMBERS) {
+        if c.is_eager(R::MEMBERS) {
             self.members.write().remove(&gid);
-            self.insert_member_batch(gid, &g.members, c);
+            self.insert_member_batch(gid, &g.members, c, c.is_eager(R::USERS));
         }
-        if c.has(R::ROLES) {
+        if c.is_eager(R::ROLES) {
             replace_guild(
                 &self.roles,
                 gid,
                 g.guild.roles.iter().map(|r| (r.id, r.clone())),
             );
         }
-        if c.has(R::EMOJIS) {
+        if c.is_eager(R::EMOJIS) {
             replace_guild(
                 &self.emojis,
                 gid,
@@ -500,14 +497,14 @@ impl InMemoryCache {
                     .filter_map(|e| e.id.map(|id| (id, e.clone()))),
             );
         }
-        if c.has(R::STICKERS) {
+        if c.is_eager(R::STICKERS) {
             replace_guild(
                 &self.stickers,
                 gid,
                 g.guild.stickers.iter().map(|s| (s.id, s.clone())),
             );
         }
-        if c.has(R::SOUNDBOARD_SOUNDS) {
+        if c.is_eager(R::SOUNDBOARD_SOUNDS) {
             replace_guild(
                 &self.sounds,
                 gid,
@@ -518,23 +515,23 @@ impl InMemoryCache {
                 }),
             );
         }
-        if c.has(R::VOICE_STATES) {
+        if c.is_eager(R::VOICE_STATES) {
             self.voice_states.write().remove(&gid);
             for v in &g.voice_states {
                 self.insert_voice_state(gid, v, c);
             }
         }
-        if c.has(R::PRESENCES) {
+        if c.is_eager(R::PRESENCES) {
             self.replace_presences(gid, &g.presences, c);
         }
-        if c.has(R::STAGE_INSTANCES) {
+        if c.is_eager(R::STAGE_INSTANCES) {
             replace_guild(
                 &self.stage_instances,
                 gid,
                 g.stage_instances.iter().map(|s| (s.id, s.clone())),
             );
         }
-        if c.has(R::SCHEDULED_EVENTS) {
+        if c.is_eager(R::SCHEDULED_EVENTS) {
             replace_guild(
                 &self.scheduled_events,
                 gid,
@@ -597,17 +594,49 @@ impl InMemoryCache {
     }
 
     fn insert_member(&self, gid: GuildId, m: &Member, c: &CacheConfig) {
-        self.insert_member_batch(gid, std::slice::from_ref(m), c);
+        self.insert_member_batch(gid, std::slice::from_ref(m), c, c.has(ResourceType::USERS));
+    }
+
+    /// Insert a single member whose user arrives separately (e.g.
+    /// `MESSAGE_CREATE`, where `message.member.user` is `None`).
+    fn insert_member_with_user(&self, gid: GuildId, m: &Member, user: &User, c: &CacheConfig) {
+        if !c.has(ResourceType::MEMBERS) {
+            return;
+        }
+        let uid = user.id;
+        let inserted = {
+            let mut members = self.members.write();
+            let guild = members.entry(gid).or_default();
+            if !guild.contains_key(&uid) && c.member_cap().is_some_and(|cap| guild.len() >= cap) {
+                false
+            } else {
+                let mut member = m.clone();
+                member.guild_id = Some(gid);
+                strip::member(&mut member, c);
+                guild.insert(uid, Arc::new(member));
+                true
+            }
+        };
+        if inserted && c.has(ResourceType::USERS) {
+            let mut user = user.clone();
+            strip::user(&mut user, c);
+            self.users.write().insert(uid, Arc::new(user));
+        }
     }
 
     /// Insert members with one lock per map instead of one per member.
-    fn insert_member_batch(&self, gid: GuildId, list: &[Member], c: &CacheConfig) {
+    fn insert_member_batch(
+        &self,
+        gid: GuildId,
+        list: &[Member],
+        c: &CacheConfig,
+        with_users: bool,
+    ) {
         // Users are reference-counted through member entries, so without
         // members only the current user is kept.
         if !c.has(ResourceType::MEMBERS) || list.is_empty() {
             return;
         }
-        let with_users = c.has(ResourceType::USERS);
         let mut users = Vec::with_capacity(if with_users { list.len() } else { 0 });
         {
             let mut members = self.members.write();
@@ -641,12 +670,11 @@ impl InMemoryCache {
     }
 
     fn member_update(&self, u: &GuildMemberUpdate, c: &CacheConfig) {
+        let mut stored_member = false;
         if c.has(ResourceType::MEMBERS) {
             let mut members = self.members.write();
-            if let Some(existing) = members
-                .get_mut(&u.guild_id)
-                .and_then(|g| g.get_mut(&u.user.id))
-            {
+            let guild = members.entry(u.guild_id).or_default();
+            if let Some(existing) = guild.get_mut(&u.user.id) {
                 let m = Arc::make_mut(existing);
                 m.roles.clone_from(&u.roles);
                 m.nick.clone_from(&u.nick);
@@ -671,9 +699,17 @@ impl InMemoryCache {
                 m.collectibles.clone_from(&u.collectibles);
                 m.flags = u.flags;
                 strip::member(m, c);
+                stored_member = true;
+            } else if c.member_cap().is_none_or(|cap| guild.len() < cap) {
+                let mut m = u.to_member();
+                strip::member(&mut m, c);
+                guild.insert(u.user.id, Arc::new(m));
+                stored_member = true;
             }
         }
-        if c.has(ResourceType::USERS) && self.users.read().contains_key(&u.user.id) {
+        if c.has(ResourceType::USERS)
+            && (stored_member || self.users.read().contains_key(&u.user.id))
+        {
             let mut user = u.user.clone();
             strip::user(&mut user, c);
             self.users.write().insert(user.id, Arc::new(user));
@@ -747,6 +783,12 @@ impl InMemoryCache {
     }
 
     fn message_create(&self, m: &Message, c: &CacheConfig) {
+        if c.has(ResourceType::MEMBERS)
+            && m.webhook_id.is_none()
+            && let (Some(gid), Some(member)) = (m.guild_id, m.member.as_deref())
+        {
+            self.insert_member_with_user(gid, member, &m.author, c);
+        }
         let size = c.messages_per_channel();
         if !c.has(ResourceType::MESSAGES) || size == 0 {
             return;
@@ -833,7 +875,7 @@ impl InMemoryCache {
             return 0;
         }
         let members: Vec<Member> = members.into_iter().collect();
-        self.insert_member_batch(guild, &members, c);
+        self.insert_member_batch(guild, &members, c, c.has(ResourceType::USERS));
         self.members.read().get(&guild).map_or(0, HashMap::len)
     }
 
@@ -1089,6 +1131,26 @@ impl InMemoryCache {
             scheduled_events: count(&self.scheduled_events),
             messages: self.messages.read().values().map(VecDeque::len).sum(),
         }
+    }
+}
+
+fn replace_guild_channels(
+    map: &Flat<ChannelId, Channel>,
+    gid: GuildId,
+    list: &[Channel],
+    had_existing: bool,
+    c: &CacheConfig,
+) {
+    let mut channels = map.write();
+    if had_existing {
+        channels.retain(|_, ch| ch.guild_id != Some(gid));
+    }
+    channels.reserve(list.len());
+    for ch in list {
+        let mut ch = ch.clone();
+        ch.guild_id = Some(gid);
+        strip::channel(&mut ch, c);
+        channels.insert(ch.id, Arc::new(ch));
     }
 }
 
