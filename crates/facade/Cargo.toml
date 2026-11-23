@@ -22,12 +22,16 @@ cordex-interactions = { workspace = true, optional = true }
 cordex-cache = { workspace = true, optional = true }
 # Bounded parallel backfill (comes with `http` anyway).
 tokio = { workspace = true, optional = true }
+# Logs of the simple layer (handler errors, command registration).
+tracing = { workspace = true, optional = true }
 
 [features]
-default = ["http", "gateway", "interactions"]
+default = ["http", "gateway", "interactions", "bot"]
 http = ["dep:cordex-http", "dep:tokio"]
 gateway = ["dep:cordex-gateway"]
 interactions = ["dep:cordex-interactions"]
+# Simple layer (`Bot`, handler contexts) on top of the three crates.
+bot = ["http", "gateway", "interactions", "dep:tracing"]
 # In-memory cache; off by default, and every resource inside is off too.
 cache = ["dep:cordex-cache"]
 # Ed25519 check for HTTP interactions (any web framework).

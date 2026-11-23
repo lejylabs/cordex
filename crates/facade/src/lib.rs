@@ -16,6 +16,9 @@ pub use cordex_cache as cache;
 #[cfg(all(feature = "cache", feature = "http"))]
 pub mod backfill;
 
+#[cfg(feature = "bot")]
+pub mod bot;
+
 #[cfg(feature = "gateway")]
 pub use cordex_gateway as gateway;
 #[cfg(feature = "http")]
@@ -99,14 +102,21 @@ impl From<cordex_interactions::InteractionError> for Error {
 }
 
 /// The types most bots need: `use cordex::prelude::*;`.
-///
 pub mod prelude {
     pub use crate::{Error, Result};
+    pub use cordex_model::component::{
+        ActionRow, Button, Component, Label, SelectOption, StringSelect, TextInput,
+    };
     pub use cordex_model::gateway::{Event, Intents};
     pub use cordex_model::{
         Channel, Guild, Id, Member, Message, Permissions, Role, Timestamp, Token, User,
     };
 
+    #[cfg(feature = "bot")]
+    pub use crate::bot::{
+        AutocompleteContext, Bot, CommandContext, ComponentContext, Context, EventContext,
+        MessageContext, ModalContext, ReadyContext,
+    };
     #[cfg(feature = "cache")]
     pub use cordex_cache::{CacheConfig, CacheParts, InMemoryCache, ResourceType};
     #[cfg(feature = "gateway")]

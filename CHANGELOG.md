@@ -4,6 +4,21 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
+## Unreleased
+
+- Simple layer (`cordex::bot`, facade feature `bot`, default on): `Bot`
+  with plain async closures as handlers (`command`, `autocomplete`,
+  `on_button`/`on_component`, `on_modal`, `on_message`, `on_ready`,
+  `on_event`). Intents follow from the handlers, shards are automatic,
+  commands are registered with one bulk overwrite on the first `READY`
+  (global or per guild), commands and modals are deferred automatically
+  after 2.5 s, handler errors and panics are logged and answered with an
+  ephemeral error message. Optional cache via `Bot::cache`.
+- `cordex-model`: short constructors for common components
+  (`ActionRow::new`, `Button::primary`/`secondary`/`success`/`danger`/`link`,
+  `StringSelect::new`, `SelectOption::new`, `TextInput::short`/`paragraph`,
+  `Label::new`) and `From<…> for Component`.
+
 ## 0.1.0-beta.2 - 2026-11-23
 
 - `cordex-cache` (new, facade feature `cache`): optional in-memory cache fed

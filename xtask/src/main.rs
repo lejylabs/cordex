@@ -127,6 +127,8 @@ const FEATURE_SETS: &[(&str, &str)] = &[
     ("cordex", "cache"),
     ("cordex", "gateway,cache"),
     ("cordex", "http,gateway,interactions"),
+    ("cordex", "bot"),
+    ("cordex", "bot,cache"),
     ("cordex-interactions", ""),
     ("cordex-interactions", "verify"),
     ("cordex-interactions", "server"),

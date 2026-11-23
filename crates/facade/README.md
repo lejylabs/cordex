@@ -15,6 +15,8 @@ Questions, feedback or help: join the [cordex Discord server](https://discord.gg
 - **REST**: per-route and global rate limiter, invalid request guard,
   retries, multipart uploads, local validation before sending, raw requests
   for anything not typed yet.
+- **Simple layer**: `Bot` with async closures as handlers for commands,
+  autocomplete, buttons, modals and messages; a working bot in ~20 lines.
 - **Interactions**: slash/user/message command builders with local
   validation, typed option access, `InteractionHandle` with auto-defer and
   double-response protection, HTTP endpoint with Ed25519 verification.
@@ -30,53 +32,45 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
 ```rust,no_run
-use cordex::gateway::{ManagerEvent, ShardManager};
-use cordex::model::interaction::InteractionData;
 use cordex::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let token = std::env::var("DISCORD_TOKEN")?;
-    let http = Client::new(&token)?;
-
-    let mut manager = ShardManager::builder(&token, Intents::GUILDS)
-        .http(http.clone())
-        .build()
+    Bot::new(std::env::var("DISCORD_TOKEN")?)
+        .command(
+            Command::slash("ping", "Replies with pong"),
+            |ctx: CommandContext| async move { ctx.reply("Pong!").await },
+        )
+        .command(
+            Command::slash("greet", "Greets a user")
+                .option(CommandOption::user("user", "Who to greet").required()),
+            |ctx: CommandContext| async move {
+                let user = ctx.user_option("user")?;
+                ctx.reply(format!("Hello {}!", user.mention())).await
+            },
+        )
+        .on_message(|ctx: MessageContext| async move {
+            if ctx.content() == "!hi" {
+                ctx.reply("Hi!").await?;
+            }
+            Ok(())
+        })
+        .run()
         .await?;
-    let mut events = manager.events();
-    manager.start().await?;
-
-    while let Some(event) = events.recv().await {
-        let ManagerEvent::Dispatch { event, .. } = event else { continue };
-        match event {
-            Event::Ready(ready) => {
-                // Register `/ping` in every guild (shows up instantly).
-                for guild in &ready.guilds {
-                    http.bulk_overwrite_guild_commands(
-                        ready.application.id,
-                        guild.id,
-                        [Command::slash("ping", "Replies with pong")],
-                    )
-                    .await?;
-                }
-            }
-            Event::InteractionCreate(interaction) => {
-                let handle = InteractionHandle::new(http.clone(), &interaction);
-                if let Some(InteractionData::Command(data)) = &interaction.data {
-                    if &*data.name == "ping" {
-                        handle.respond(Reply::new("pong").ephemeral()).await?;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
     Ok(())
 }
 ```
 
-A fuller example with text commands, autocomplete, auto-defer and follow-ups
-is in [`crates/facade/examples/testbot.rs`](https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/testbot.rs).
+`Bot` derives the intents from your handlers, shards automatically,
+registers the commands on start, defers slow interactions on its own and
+logs handler errors instead of crashing. Buttons, select menus, modals and
+autocomplete work the same way (`on_button`, `on_modal`, `autocomplete`):
+see [`examples/bot.rs`](https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/bot.rs).
+
+Everything below the simple layer stays available: `ShardManager`, the REST
+`Client`, `InteractionHandle` and raw events. The live test bot in
+[`examples/testbot.rs`](https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/testbot.rs)
+uses those directly.
 
 ## Features
 
@@ -85,6 +79,7 @@ is in [`crates/facade/examples/testbot.rs`](https://github.com/lejylabs/cordex/b
 | `http` | yes | REST client (`cordex-http`) |
 | `gateway` | yes | shards and shard manager (`cordex-gateway`) |
 | `interactions` | yes | command builders, responses (`cordex-interactions`) |
+| `bot` | yes | simple layer: `Bot` and handler contexts (needs `http`, `gateway`, `interactions`) |
 | `interactions-verify` | no | `verify_signature()` for HTTP interactions in any web framework |
 | `interactions-server` | no | standalone hyper endpoint for HTTP interactions |
 | `cache` | no | in-memory cache (`cordex-cache`); every resource inside is off until enabled |
@@ -95,7 +90,7 @@ The library sets no global allocator; applications may use `mimalloc`.
 
 | Crate | Content |
 |---|---|
-| `cordex` | facade, re-exports behind features, `prelude` |
+| `cordex` | facade, simple layer (`Bot`), re-exports behind features, `prelude` |
 | `cordex-model` | models, snowflakes, flags, gateway payloads (no async) |
 | `cordex-http` | REST client, rate limiter |
 | `cordex-gateway` | shards, shard manager, identify queue |

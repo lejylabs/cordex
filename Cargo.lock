@@ -115,6 +115,7 @@ dependencies = [
  "cordex-model",
  "serde_json",
  "tokio",
+ "tracing",
  "tracing-subscriber",
 ]
 
