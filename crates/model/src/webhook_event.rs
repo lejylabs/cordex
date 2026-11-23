@@ -8,6 +8,7 @@ use crate::entitlement::Entitlement;
 use crate::guild::Guild;
 use crate::id::Id;
 use crate::id::marker::ApplicationMarker;
+use crate::lobby::{LobbyMessage, LobbyMessageDelete, SdkDmMessage};
 use crate::serde_util::int_enum;
 use crate::timestamp::Timestamp;
 use crate::user::User;
@@ -66,7 +67,19 @@ pub enum WebhookEvent {
     EntitlementUpdate(Box<Entitlement>),
     /// An entitlement was deleted.
     EntitlementDelete(Box<Entitlement>),
-    /// Another event (Social SDK, quests, …); see the raw body.
+    /// A lobby message was created.
+    LobbyMessageCreate(Box<LobbyMessage>),
+    /// A lobby message was updated.
+    LobbyMessageUpdate(Box<LobbyMessage>),
+    /// A lobby message was deleted.
+    LobbyMessageDelete(Box<LobbyMessageDelete>),
+    /// A Social SDK DM was created.
+    GameDirectMessageCreate(Box<SdkDmMessage>),
+    /// A Social SDK DM was updated.
+    GameDirectMessageUpdate(Box<SdkDmMessage>),
+    /// A Social SDK DM was deleted.
+    GameDirectMessageDelete(Box<SdkDmMessage>),
+    /// Another event (quests, …); see the raw body.
     Other,
 }
 
@@ -85,6 +98,12 @@ impl WebhookEventBody {
             "ENTITLEMENT_CREATE" => WebhookEvent::EntitlementCreate(typed(data)?),
             "ENTITLEMENT_UPDATE" => WebhookEvent::EntitlementUpdate(typed(data)?),
             "ENTITLEMENT_DELETE" => WebhookEvent::EntitlementDelete(typed(data)?),
+            "LOBBY_MESSAGE_CREATE" => WebhookEvent::LobbyMessageCreate(typed(data)?),
+            "LOBBY_MESSAGE_UPDATE" => WebhookEvent::LobbyMessageUpdate(typed(data)?),
+            "LOBBY_MESSAGE_DELETE" => WebhookEvent::LobbyMessageDelete(typed(data)?),
+            "GAME_DIRECT_MESSAGE_CREATE" => WebhookEvent::GameDirectMessageCreate(typed(data)?),
+            "GAME_DIRECT_MESSAGE_UPDATE" => WebhookEvent::GameDirectMessageUpdate(typed(data)?),
+            "GAME_DIRECT_MESSAGE_DELETE" => WebhookEvent::GameDirectMessageDelete(typed(data)?),
             _ => WebhookEvent::Other,
         })
     }

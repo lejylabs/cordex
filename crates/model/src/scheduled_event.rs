@@ -151,6 +151,15 @@ pub struct ScheduledEvent {
     pub recurrence_rule: Option<RecurrenceRule>,
 }
 
+impl ScheduledEvent {
+    /// CDN URL of the cover image, if set.
+    pub fn cover_url(&self) -> Option<crate::cdn::CdnUrl> {
+        self.image
+            .as_ref()
+            .map(|h| crate::cdn::scheduled_event_cover(self.id, h))
+    }
+}
+
 /// Extra data for an event entity. `location` is required for external events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]

@@ -37,6 +37,13 @@ pub struct Sticker {
     pub sort_value: Option<u32>,
 }
 
+impl Sticker {
+    /// CDN URL of the sticker image.
+    pub fn url(&self) -> crate::cdn::CdnUrl {
+        crate::cdn::sticker(self.id, self.format_type)
+    }
+}
+
 int_enum! {
     /// Sticker type.
     pub enum StickerType: u8 {

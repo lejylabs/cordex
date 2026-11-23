@@ -14,6 +14,7 @@ mod intents_check;
 mod outbound;
 mod queue;
 mod session;
+mod standby;
 mod types;
 mod zlib;
 
@@ -29,6 +30,7 @@ pub use identify::{
 pub use manager::{ManagerEvents, ShardManager, ShardManagerBuilder};
 pub use shard::{GatewayBotSource, Shard, ShardBuilder};
 pub use spawn::{CurrentRuntime, RuntimeHandles, ShardTask, Spawner};
+pub use standby::Standby;
 pub use types::{
     Backpressure, CloseMode, DEFAULT_GATEWAY_URL, HEARTBEAT_RESERVE, LIBRARY_NAME, Latency,
     MAX_PAYLOAD_BYTES, ManagerEvent, OUTBOUND_LIMIT, OUTBOUND_WINDOW, ResumeInfo, ShardId,

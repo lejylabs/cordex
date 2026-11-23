@@ -6,40 +6,19 @@ Measured: REST endpoints, gateway receive events, opcodes and close codes, compo
 
 | Area | Covered | Total | % |
 |---|---:|---:|---:|
-| REST endpoints | 215 | 235 | 91.4 % |
+| REST endpoints | 235 | 235 | 100.0 % |
 | Gateway receive events | 82 | 82 | 100.0 % |
 | Gateway opcodes | 13 | 13 | 100.0 % |
 | Gateway close codes | 14 | 14 | 100.0 % |
 | Component types | 20 | 20 | 100.0 % |
-| Enum values | 315 | 315 | 100.0 % |
-| Object fields | 1203 | 1223 | 98.3 % |
-| Bitflags | 141 | 141 | 100.0 % |
-| **Total (measured)** | **2003** | **2043** | **98.0 %** |
+| Enum values | 318 | 318 | 100.0 % |
+| Object fields | 1270 | 1270 | 100.0 % |
+| Bitflags | 142 | 142 | 100.0 % |
+| **Total (measured)** | **2094** | **2094** | **100.0 %** |
 
-## REST endpoints (215/235)
+## REST endpoints (235/235)
 
-Missing:
-
-- Update Application Identity Profile `PATCH /applications/{}/users/{}/identities/{}/profile` (resources/application-identity-profile.mdx)
-- Get Application Identity Profile `GET /applications/{}/users/{}/identities/{}/profile` (resources/application-identity-profile.mdx)
-- Get Application Identities by User ID `GET /users/{}/application-identities/{}` (resources/application-identity-profile.mdx)
-- Get Application Identities by External ID `GET /applications/{}/application-identities/{}/{}` (resources/application-identity-profile.mdx)
-- Delete Application Identity `POST /users/{}/application-identities/{}/{}/{}/delete` (resources/application-identity-profile.mdx)
-- Create Lobby `POST /lobbies` (resources/lobby.mdx)
-- Create or Join Lobby `PUT /lobbies` (resources/lobby.mdx)
-- Get Lobby `GET /lobbies/{}` (resources/lobby.mdx)
-- Modify Lobby `PATCH /lobbies/{}` (resources/lobby.mdx)
-- Delete Lobby `DELETE /lobbies/{}` (resources/lobby.mdx)
-- Add a Member to a Lobby `PUT /lobbies/{}/members/{}` (resources/lobby.mdx)
-- Bulk Update Lobby Members `POST /lobbies/{}/members/bulk` (resources/lobby.mdx)
-- Remove a Member from a Lobby `DELETE /lobbies/{}/members/{}` (resources/lobby.mdx)
-- Leave Lobby `DELETE /lobbies/{}/members/@me` (resources/lobby.mdx)
-- Link Channel to Lobby `PATCH /lobbies/{}/channel-linking` (resources/lobby.mdx)
-- Send Lobby Message `POST /lobbies/{}/messages` (resources/lobby.mdx)
-- Get Lobby Messages `GET /lobbies/{}/messages` (resources/lobby.mdx)
-- Update Lobby Message Moderation Metadata `PUT /lobbies/{}/messages/{}/moderation-metadata` (resources/lobby.mdx)
-- Create Lobby Channel Invite for Self `POST /lobbies/{}/members/@me/invites` (resources/lobby.mdx)
-- Create Lobby Channel Invite for User `POST /lobbies/{}/members/{}/invites` (resources/lobby.mdx)
+Everything covered.
 
 ## Gateway receive events (82/82)
 
@@ -57,50 +36,18 @@ Everything covered.
 
 Everything covered.
 
-## Enum values (315/315)
+## Enum values (318/318)
 
 Everything covered.
 
-## Object fields (1203/1223)
-
-Missing:
-
-- Lobby Message Delete.id (events/webhook-events.mdx, Lobby Message Delete Structure)
-- Lobby Message Delete.lobby_id (events/webhook-events.mdx, Lobby Message Delete Structure)
-- Lobby Message.id (events/webhook-events.mdx, Lobby Message Structure)
-- Lobby Message.type (events/webhook-events.mdx, Lobby Message Structure)
-- Lobby Message.content (events/webhook-events.mdx, Lobby Message Structure)
-- Lobby Message.lobby_id (events/webhook-events.mdx, Lobby Message Structure)
-- Lobby Message.channel_id (events/webhook-events.mdx, Lobby Message Structure)
-- Lobby Message.author (events/webhook-events.mdx, Lobby Message Structure)
-- Lobby Message.metadata (events/webhook-events.mdx, Lobby Message Structure)
-- Lobby Message.flags (events/webhook-events.mdx, Lobby Message Structure)
-- Lobby Message.application_id (events/webhook-events.mdx, Lobby Message Structure)
-- SDK DM Message.id (events/webhook-events.mdx, SDK DM Message Structure)
-- SDK DM Message.type (events/webhook-events.mdx, SDK DM Message Structure)
-- SDK DM Message.content (events/webhook-events.mdx, SDK DM Message Structure)
-- SDK DM Message.author (events/webhook-events.mdx, SDK DM Message Structure)
-- SDK DM Message.flags (events/webhook-events.mdx, SDK DM Message Structure)
-- SDK DM Message.application_id (events/webhook-events.mdx, SDK DM Message Structure)
-- SDK DM Message.channel (events/webhook-events.mdx, SDK DM Message Structure)
-- SDK DM Message.activity (events/webhook-events.mdx, SDK DM Message Structure)
-- SDK DM Message.application (events/webhook-events.mdx, SDK DM Message Structure)
-
-## Bitflags (141/141)
+## Object fields (1270/1270)
 
 Everything covered.
 
-## Docs tables not compared yet (10)
+## Bitflags (142/142)
 
-These field tables are not mapped to a cordex type yet, so their fields are not in the numbers above:
+Everything covered.
 
-- Application Identity Structure (resources/application-identity-profile.mdx)
-- Application Identity Profile Structure (resources/application-identity-profile.mdx)
-- Profile Data Structure (resources/application-identity-profile.mdx)
-- Primary Profile Data Structure (resources/application-identity-profile.mdx)
-- Dynamic String Field Structure (resources/application-identity-profile.mdx)
-- Dynamic Number Field Structure (resources/application-identity-profile.mdx)
-- Dynamic Media Field Structure (resources/application-identity-profile.mdx)
-- Media Structure (resources/application-identity-profile.mdx)
-- Lobby Structure (resources/lobby.mdx)
-- Lobby Member Structure (resources/lobby.mdx)
+## Docs tables not compared yet (0)
+
+Every object and field table of the bot API pages is compared.

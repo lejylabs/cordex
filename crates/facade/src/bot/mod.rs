@@ -59,7 +59,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::task::{Context as TaskContext, Poll};
 
-use cordex_gateway::{CloseMode, EventTypeFlags, ManagerEvent, ShardId, ShardManager};
+use cordex_gateway::{CloseMode, EventTypeFlags, ManagerEvent, ShardId, ShardManager, Standby};
 use cordex_http::{Client, Route};
 use cordex_interactions::handle::{DEFAULT_AUTO_DEFER, ResponseState};
 use cordex_interactions::{Command, InteractionHandle, Reply};
@@ -69,6 +69,7 @@ use cordex_model::gateway::event::{Event, Ready};
 use cordex_model::id::Id;
 use cordex_model::id::marker::{ApplicationMarker, GuildMarker, UserMarker};
 use cordex_model::interaction::{Interaction, InteractionData, InteractionType};
+use cordex_model::message::AllowedMentions;
 
 pub use context::{
     AutocompleteContext, CommandContext, ComponentContext, Context, EventContext, MessageContext,
@@ -112,6 +113,7 @@ struct Shared {
     handlers: Handlers,
     error_message: Option<Box<str>>,
     auto_defer: bool,
+    standby: Standby,
 }
 
 /// Builder and runner of a bot; see the [module docs](self).
@@ -125,6 +127,8 @@ pub struct Bot {
     handlers: Handlers,
     error_message: Option<Box<str>>,
     auto_defer: bool,
+    default_allowed_mentions: Option<AllowedMentions>,
+    extra_events: EventTypeFlags,
     #[cfg(feature = "cache")]
     cache: Option<cordex_cache::CacheConfig>,
 }
@@ -151,9 +155,23 @@ impl Bot {
             handlers: Handlers::default(),
             error_message: Some(DEFAULT_ERROR_MESSAGE.into()),
             auto_defer: true,
+            default_allowed_mentions: None,
+            extra_events: EventTypeFlags::empty(),
             #[cfg(feature = "cache")]
             cache: None,
         }
+    }
+
+    /// Mentions applied to every message that does not set its own.
+    pub fn default_allowed_mentions(mut self, mentions: AllowedMentions) -> Self {
+        self.default_allowed_mentions = Some(mentions);
+        self
+    }
+
+    /// Extra gateway events to parse so [`Context::wait_for`] can see them.
+    pub fn parse_events(mut self, events: EventTypeFlags) -> Self {
+        self.extra_events |= events;
+        self
     }
 
     /// Add gateway intents on top of the derived ones (for
@@ -334,7 +352,7 @@ impl Bot {
         if let Some(config) = &self.cache {
             names.extend(config.wanted_events());
         }
-        names.into_iter().collect()
+        names.into_iter().collect::<EventTypeFlags>() | self.extra_events
     }
 
     /// Check the commands, connect and handle events until a shard fails
@@ -350,7 +368,11 @@ impl Bot {
             );
         }
 
-        let http = Client::new(&self.token)?;
+        let mut http = Client::builder(&self.token);
+        if let Some(mentions) = self.default_allowed_mentions.clone() {
+            http = http.default_allowed_mentions(mentions);
+        }
+        let http = http.build()?;
         let builder = ShardManager::builder(&self.token, self.intents)
             .http(http.clone())
             .event_types(self.event_types());
@@ -372,6 +394,7 @@ impl Bot {
             handlers: self.handlers,
             error_message: self.error_message,
             auto_defer: self.auto_defer,
+            standby: Standby::new(),
         });
         let commands: Arc<[Command]> = self.commands.into();
         let guild_commands = self.guild_commands;
@@ -469,6 +492,7 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
     if let Some(cache) = &shared.cache {
         cache.update(&event);
     }
+    shared.standby.process(&event);
     let handlers = &shared.handlers;
     if handlers.event.is_empty() {
         route_owned(ctx, event);

@@ -6,7 +6,9 @@ use std::pin::Pin;
 use cordex_model::component::Component;
 use cordex_model::id::Id;
 use cordex_model::id::marker::{ApplicationMarker, InteractionMarker};
-use cordex_model::interaction::{InteractionCallbackResponse, InteractionResponse};
+use cordex_model::interaction::{
+    InteractionCallbackResponse, InteractionCallbackType, InteractionResponse,
+};
 use cordex_model::message::{AllowedMentions, Embed, Message, MessageFlags};
 use cordex_model::token::InteractionToken;
 use serde::Serialize;
@@ -29,7 +31,8 @@ impl Client {
     ) -> impl Future<Output = Result<(), HttpError>> + Send + 'static {
         let client = self.clone();
         let token = token.expose().to_owned();
-        let response = response.clone();
+        let mut response = response.clone();
+        apply_default_mentions(&client, &mut response);
         async move {
             client
                 .post(Route::raw(
@@ -53,7 +56,8 @@ impl Client {
     ) -> impl Future<Output = Result<InteractionCallbackResponse, HttpError>> + Send + 'static {
         let client = self.clone();
         let token = token.expose().to_owned();
-        let response = response.clone();
+        let mut response = response.clone();
+        apply_default_mentions(&client, &mut response);
         async move {
             client
                 .post(Route::raw(
@@ -211,7 +215,8 @@ impl UpdateInteractionResponse {
             (self.application_id, self.token),
         )
         .interaction();
-        followup_send(self.client.patch(route), &self.body, self.files).await
+        let client = self.client.clone();
+        followup_send(client.clone(), client.patch(route), self.body, self.files).await
     }
 }
 
@@ -223,19 +228,35 @@ impl CreateFollowupMessage {
             (self.application_id, self.token),
         )
         .interaction();
-        followup_send(self.client.post(route), &self.body, self.files).await
+        let client = self.client.clone();
+        followup_send(client.clone(), client.post(route), self.body, self.files).await
     }
 }
 
+fn apply_default_mentions(client: &Client, response: &mut InteractionResponse) {
+    let Some(data) = &mut response.data else {
+        return;
+    };
+    if !matches!(
+        response.kind,
+        InteractionCallbackType::ChannelMessageWithSource | InteractionCallbackType::UpdateMessage
+    ) {
+        return;
+    }
+    client.fill_allowed_mentions(&mut data.allowed_mentions);
+}
+
 async fn followup_send(
+    client: Client,
     req: crate::RequestBuilder,
-    body: &FollowupBody,
+    mut body: FollowupBody,
     files: Vec<File>,
 ) -> Result<Message, HttpError> {
+    client.fill_allowed_mentions(&mut body.allowed_mentions);
     let req = if files.is_empty() {
-        req.json(body)?
+        req.json(&body)?
     } else {
-        let payload = serde_json::to_vec(body)
+        let payload = serde_json::to_vec(&body)
             .map_err(|e| HttpError::validation(format!("json body: {e}").into_boxed_str()))?;
         req.multipart(&Multipart {
             payload_json: payload.into(),

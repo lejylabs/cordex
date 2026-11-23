@@ -41,6 +41,8 @@ pub enum Error {
     /// Building a command or answering an interaction failed.
     #[cfg(feature = "interactions")]
     Interaction(cordex_interactions::InteractionError),
+    /// An embed builder check failed.
+    Embed(cordex_model::EmbedError),
 }
 
 /// `Result` with the facade [`Error`].
@@ -56,6 +58,7 @@ impl fmt::Display for Error {
             Self::Gateway(err) => fmt::Display::fmt(err, f),
             #[cfg(feature = "interactions")]
             Self::Interaction(err) => fmt::Display::fmt(err, f),
+            Self::Embed(err) => fmt::Display::fmt(err, f),
         }
     }
 }
@@ -70,6 +73,7 @@ impl StdError for Error {
             Self::Gateway(err) => Some(err),
             #[cfg(feature = "interactions")]
             Self::Interaction(err) => Some(err),
+            Self::Embed(err) => Some(err),
         }
     }
 }
@@ -77,6 +81,12 @@ impl StdError for Error {
 impl From<cordex_model::ParseError> for Error {
     fn from(err: cordex_model::ParseError) -> Self {
         Self::Model(err)
+    }
+}
+
+impl From<cordex_model::EmbedError> for Error {
+    fn from(err: cordex_model::EmbedError) -> Self {
+        Self::Embed(err)
     }
 }
 
@@ -104,12 +114,16 @@ impl From<cordex_interactions::InteractionError> for Error {
 /// The types most bots need: `use cordex::prelude::*;`.
 pub mod prelude {
     pub use crate::{Error, Result};
+    pub use cordex_model::cdn::{CdnUrl, ImageFormat};
     pub use cordex_model::component::{
         ActionRow, Button, Component, Label, SelectOption, StringSelect, TextInput,
     };
     pub use cordex_model::gateway::{Event, Intents};
+    pub use cordex_model::mention::{Mentionable, ParsedMention, parse_mentions};
+    pub use cordex_model::message::{AllowedMentions, Embed, EmbedError};
     pub use cordex_model::{
-        Channel, Guild, Id, Member, Message, Permissions, Role, Timestamp, Token, User,
+        Channel, Guild, Id, Member, Message, Permissions, Role, Timestamp, TimestampStyle, Token,
+        User, parse_webhook_url,
     };
 
     #[cfg(feature = "bot")]
@@ -120,7 +134,7 @@ pub mod prelude {
     #[cfg(feature = "cache")]
     pub use cordex_cache::{CacheConfig, CacheParts, InMemoryCache, ResourceType};
     #[cfg(feature = "gateway")]
-    pub use cordex_gateway::{CloseMode, EventTypeFlags, Shard, ShardId, ShardManager};
+    pub use cordex_gateway::{CloseMode, EventTypeFlags, Shard, ShardId, ShardManager, Standby};
     #[cfg(feature = "http")]
     pub use cordex_http::Client;
     #[cfg(feature = "interactions")]

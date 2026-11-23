@@ -283,6 +283,8 @@ impl ExecuteWebhook {
     /// Send the request. Returns `None` when `wait` is `false`.
     pub async fn send(self) -> Result<Option<Message>, HttpError> {
         let mut body = self.body;
+        self.client
+            .fill_allowed_mentions(&mut body.allowed_mentions);
         fill_attachments(&mut body.attachments, &self.files);
 
         let route = Route::raw(

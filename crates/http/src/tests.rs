@@ -607,6 +607,36 @@ async fn create_message_sends_json_and_await() {
 }
 
 #[tokio::test]
+async fn default_allowed_mentions_are_sent() {
+    use cordex_model::id::Id;
+    use cordex_model::id::marker::ChannelMarker;
+    use cordex_model::message::AllowedMentions;
+
+    let seen = Arc::new(Mutex::new(None::<String>));
+    let flag = seen.clone();
+    let client = Client::builder("test.token.secret")
+        .default_allowed_mentions(AllowedMentions::none())
+        .transport(Arc::new(FnTransport::new(move |req: Request<Bytes>| {
+            *flag.lock() = Some(String::from_utf8(req.body().to_vec()).unwrap());
+            async move { Ok(ok_json(MESSAGE_JSON)) }
+        })))
+        .build()
+        .unwrap();
+    let channel = Id::<ChannelMarker>::new(2).unwrap();
+    client
+        .create_message(channel)
+        .content("hello")
+        .unwrap()
+        .await
+        .unwrap();
+    let body = seen.lock().clone().unwrap();
+    assert!(
+        body.contains("\"allowed_mentions\":{\"parse\":[]}"),
+        "{body}"
+    );
+}
+
+#[tokio::test]
 async fn create_message_multipart_includes_files() {
     use cordex_model::id::Id;
     use cordex_model::id::marker::ChannelMarker;
@@ -891,11 +921,13 @@ async fn simple_endpoints_use_the_documented_route() {
         .follow_announcement_channel(id(6), id(8))
         .await
         .unwrap_err(); // `{}` is not a FollowedChannel
+    let _ = client.get_lobby(id(9)).await;
     let log = seen.lock();
     assert_eq!(log[0].0, "POST /api/v10/channels/3/typing");
     assert_eq!(log[1].0, "DELETE /api/v10/channels/4/thread-members/5");
     assert_eq!(log[2].0, "POST /api/v10/channels/6/followers");
     assert_eq!(log[2].1, r#"{"webhook_channel_id":"8"}"#);
+    assert_eq!(log[3].0, "GET /api/v10/lobbies/9");
 }
 
 #[tokio::test]

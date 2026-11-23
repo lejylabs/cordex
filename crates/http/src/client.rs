@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use cordex_model::Token;
+use cordex_model::message::AllowedMentions;
 use http::{HeaderValue, Method, Uri};
 
 use crate::error::HttpError;
@@ -60,6 +61,7 @@ pub(crate) struct ClientInner {
     pub limiter: Arc<dyn RateLimiter>,
     pub guard: InvalidRequestGuard,
     pub poisoned: AtomicBool,
+    pub default_allowed_mentions: Option<AllowedMentions>,
 }
 
 impl Client {
@@ -108,6 +110,17 @@ impl Client {
     pub fn is_poisoned(&self) -> bool {
         self.inner.poisoned.load(Ordering::SeqCst)
     }
+
+    /// Mentions applied when a request has none of its own.
+    pub fn default_allowed_mentions(&self) -> Option<&AllowedMentions> {
+        self.inner.default_allowed_mentions.as_ref()
+    }
+
+    pub(crate) fn fill_allowed_mentions(&self, mentions: &mut Option<AllowedMentions>) {
+        if mentions.is_none() {
+            mentions.clone_from(&self.inner.default_allowed_mentions);
+        }
+    }
 }
 
 impl fmt::Debug for Client {
@@ -137,6 +150,7 @@ pub struct ClientBuilder {
     invalid_reject_at: u32,
     limiter: Option<Arc<dyn RateLimiter>>,
     transport: Option<Arc<dyn Transport>>,
+    default_allowed_mentions: Option<AllowedMentions>,
 }
 
 impl ClientBuilder {
@@ -157,7 +171,16 @@ impl ClientBuilder {
             invalid_reject_at: crate::limiter::DEFAULT_REJECT_AT,
             limiter: None,
             transport: None,
+            default_allowed_mentions: None,
         }
+    }
+
+    /// Mentions used for messages, follow-ups, webhook executions and
+    /// interaction responses that do not set their own.
+    #[must_use]
+    pub fn default_allowed_mentions(mut self, mentions: AllowedMentions) -> Self {
+        self.default_allowed_mentions = Some(mentions);
+        self
     }
 
     /// Use `Bearer` instead of `Bot`.
@@ -284,6 +307,7 @@ impl ClientBuilder {
                 limiter,
                 guard: InvalidRequestGuard::new(self.invalid_warn_at, self.invalid_reject_at),
                 poisoned: AtomicBool::new(false),
+                default_allowed_mentions: self.default_allowed_mentions,
             }),
         })
     }

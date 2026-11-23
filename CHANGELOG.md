@@ -6,6 +6,22 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+- **Social SDK REST and models (measured coverage 100 %):** lobbies
+  (`POST`/`PUT`/`GET`/`PATCH`/`DELETE /lobbies`, members, bulk update,
+  channel linking, messages, moderation metadata, linked-channel invites)
+  and application identity profiles (get/update/delete identities and
+  profile data). Models: `Lobby`, `LobbyMember`, `LobbyMessage`,
+  `SdkDmMessage`, `ApplicationIdentityProfile`, `ProfileData`, dynamic
+  fields. Webhook events `LOBBY_MESSAGE_*` and `GAME_DIRECT_MESSAGE_*`
+  parse to typed payloads. REST 235/235, fields 1270/1270, bitflags
+  142/142, total 2094/2094 against `discord-api-docs@9b737ec51ee8`.
+- **Phase 8 ergonomics:** embed builder (`Embed::new().title(..)` with local
+  limits), CDN URLs (`user.avatar_url()`, guild icon/banner, emoji, sticker,
+  …), `mention()` on snowflake IDs, mention parsing, timestamp markdown,
+  `Standby` / `ctx.wait_for_*`, permission calculator
+  (`permission_calc` and `cache.permissions`),
+  `ClientBuilder::default_allowed_mentions` / `Bot::default_allowed_mentions`,
+  `parse_webhook_url`.
 - **All gateway receive events are typed** (82/82): new `VOICE_CHANNEL_STATUS_UPDATE`,
   `VOICE_CHANNEL_START_TIME_UPDATE`, `CHANNEL_INFO`, `INTEGRATION_CREATE` /
   `UPDATE` / `DELETE`, `SUBSCRIPTION_CREATE` / `UPDATE` / `DELETE` and
@@ -14,14 +30,10 @@ All notable changes are listed here. The project follows
   moderation), invite target users (CSV upload, bulk add/remove, job status),
   `search_guild_messages` with filters (returns `SearchResult::NotIndexed`
   on Discord's 202 answer), `GET /oauth2/applications/@me` and
-  `GET /oauth2/@me`. REST coverage 215/235; everything still missing is the
-  Social SDK (lobbies, identity profiles).
+  `GET /oauth2/@me`.
 - `cordex-model`: `GuildTemplate`.
 - Coverage: routes the docs mark as deprecated are no longer counted.
-- Coverage now also measures **object fields** (1203/1223, 196 docs tables
-  mapped to model types) and **bitflags** (141/141), and lists the docs tables
-  not compared yet (only Social SDK lobbies and identity profiles remain).
-  Total measured: 2003/2043 (98.0 %).
+- Coverage now also measures **object fields** and **bitflags**.
 - `cordex-model`: fields the comparison found missing: all `Activity` fields
   are on `PresenceActivity` already; added `Connection.integrations`,
   `Identify.capabilities`, `GuildMembersChunk.presences`,

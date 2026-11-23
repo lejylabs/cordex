@@ -4,6 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::ParseError;
 use crate::id::Id;
 use crate::id::marker::{ApplicationMarker, ChannelMarker, GuildMarker, WebhookMarker};
 use crate::image_hash::ImageHash;
@@ -73,6 +74,40 @@ impl fmt::Debug for Webhook {
     }
 }
 
+/// Parse `https://discord.com/api/webhooks/{id}/{token}` (also `ptb` /
+/// `canary` hosts and an optional `/api/v{n}` prefix).
+pub fn parse_webhook_url(url: &str) -> Result<(Id<WebhookMarker>, WebhookToken), ParseError> {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .ok_or(ParseError::WebhookUrl)?;
+    let (host, path) = rest.split_once('/').ok_or(ParseError::WebhookUrl)?;
+    if !matches!(
+        host,
+        "discord.com" | "www.discord.com" | "ptb.discord.com" | "canary.discord.com"
+    ) {
+        return Err(ParseError::WebhookUrl);
+    }
+    let mut segs = path.split('/');
+    if segs.next() != Some("api") {
+        return Err(ParseError::WebhookUrl);
+    }
+    let mut next = segs.next().ok_or(ParseError::WebhookUrl)?;
+    if next.starts_with('v') && next[1..].bytes().all(|b| b.is_ascii_digit()) {
+        next = segs.next().ok_or(ParseError::WebhookUrl)?;
+    }
+    if next != "webhooks" {
+        return Err(ParseError::WebhookUrl);
+    }
+    let id = segs.next().ok_or(ParseError::WebhookUrl)?;
+    let token = segs.next().ok_or(ParseError::WebhookUrl)?;
+    if id.is_empty() || token.is_empty() {
+        return Err(ParseError::WebhookUrl);
+    }
+    let id = id.parse().map_err(|_| ParseError::WebhookUrl)?;
+    Ok((id, WebhookToken::new(token)))
+}
+
 /// Partial guild on a channel-follower webhook (`id`, `name`, `icon`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -117,5 +152,17 @@ mod tests {
         assert!(debug.contains("***"));
         let out = serde_json::to_string(&hook).unwrap();
         assert!(out.contains("super-secret-webhook-token"));
+    }
+
+    #[test]
+    fn parses_webhook_urls() {
+        let (id, token) = parse_webhook_url("https://discord.com/api/webhooks/123/abcDEF").unwrap();
+        assert_eq!(id.get(), 123);
+        assert_eq!(token.expose(), "abcDEF");
+        let (id, token) =
+            parse_webhook_url("https://ptb.discord.com/api/v10/webhooks/123/tok").unwrap();
+        assert_eq!(id.get(), 123);
+        assert_eq!(token.expose(), "tok");
+        assert!(parse_webhook_url("https://example.com/api/webhooks/1/t").is_err());
     }
 }

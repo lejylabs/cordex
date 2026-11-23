@@ -591,22 +591,88 @@ const FIELDS: &[(&str, &str, &str, &str)] = &[
         "Application Deauthorized Structure",
     ),
     (
-        "",
-        "",
+        "lobby.rs",
+        "LobbyMessageDelete",
         "events/webhook-events.mdx",
         "Lobby Message Delete Structure",
     ),
     (
-        "",
-        "",
+        "lobby.rs",
+        "LobbyMessage",
         "events/webhook-events.mdx",
         "Lobby Message Structure",
     ),
     (
-        "",
-        "",
+        "lobby.rs",
+        "SdkDmMessage",
         "events/webhook-events.mdx",
         "SDK DM Message Structure",
+    ),
+    (
+        "message/mod.rs",
+        "Message",
+        "events/webhook-events.mdx",
+        "Additional Fields",
+    ),
+    (
+        "lobby.rs",
+        "Lobby",
+        "resources/lobby.mdx",
+        "Lobby Structure",
+    ),
+    (
+        "lobby.rs",
+        "LobbyMember",
+        "resources/lobby.mdx",
+        "Lobby Member Structure",
+    ),
+    (
+        "identity_profile.rs",
+        "ApplicationIdentity",
+        "resources/application-identity-profile.mdx",
+        "Application Identity Structure",
+    ),
+    (
+        "identity_profile.rs",
+        "ApplicationIdentityProfile",
+        "resources/application-identity-profile.mdx",
+        "Application Identity Profile Structure",
+    ),
+    (
+        "identity_profile.rs",
+        "ProfileData",
+        "resources/application-identity-profile.mdx",
+        "Profile Data Structure",
+    ),
+    (
+        "identity_profile.rs",
+        "PrimaryProfileData",
+        "resources/application-identity-profile.mdx",
+        "Primary Profile Data Structure",
+    ),
+    (
+        "identity_profile.rs",
+        "DynamicStringField",
+        "resources/application-identity-profile.mdx",
+        "Dynamic String Field Structure",
+    ),
+    (
+        "identity_profile.rs",
+        "DynamicNumberField",
+        "resources/application-identity-profile.mdx",
+        "Dynamic Number Field Structure",
+    ),
+    (
+        "identity_profile.rs",
+        "DynamicMediaField",
+        "resources/application-identity-profile.mdx",
+        "Dynamic Media Field Structure",
+    ),
+    (
+        "identity_profile.rs",
+        "Media",
+        "resources/application-identity-profile.mdx",
+        "Media Structure",
     ),
     (
         "gateway/bot.rs",
@@ -1338,11 +1404,23 @@ const FLAGS: &[(&str, &str, &str, &str)] = &[
         "components/reference.mdx",
         "Content Scan Metadata Flags",
     ),
+    (
+        "lobby.rs",
+        "LobbyMemberFlags",
+        "resources/lobby.mdx",
+        "Lobby Member Flags",
+    ),
 ];
 
 /// Model enums whose values are compared with a docs table:
 /// (file in `crates/model/src`, enum, docs page in `developers/`, heading).
 const ENUMS: &[(&str, &str, &str, &str)] = &[
+    (
+        "identity_profile.rs",
+        "DynamicFieldType",
+        "resources/application-identity-profile.mdx",
+        "Dynamic Field Types",
+    ),
     (
         "webhook_event.rs",
         "WebhookEventType",
@@ -2304,9 +2382,10 @@ fn flags(model: &Path, docs: &Path) -> Result<Area, String> {
     })
 }
 
-/// `1 << 12` inside a cell (also `` `(1 << 12)` ``).
+/// `1 << 12` inside a cell (also `` `(1 << 12)` `` and compact `` `1<<0` ``).
 fn shift_value(cell: &str) -> Option<u32> {
-    let (_, rest) = cell.split_once("1 << ")?;
+    let compact = cell.replace(['`', ' '], "");
+    let (_, rest) = compact.split_once("1<<")?;
     let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     digits.parse().ok()
 }
@@ -2836,6 +2915,7 @@ mod tests {
         assert_eq!(doc_field_name("**id**"), "id");
         assert_eq!(shift_value("`0x0000000000000002` `(1 << 1)`"), Some(1));
         assert_eq!(shift_value("`1 << 18`"), Some(18));
+        assert_eq!(shift_value("`1<<0`"), Some(0));
         assert_eq!(shift_value("none"), None);
     }
 

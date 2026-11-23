@@ -54,6 +54,13 @@ impl Role {
         format!("<@&{}>", self.id)
     }
 
+    /// CDN URL of the role icon, if set.
+    pub fn icon_url(&self) -> Option<crate::cdn::CdnUrl> {
+        self.icon
+            .as_ref()
+            .map(|h| crate::cdn::role_icon(self.id, h))
+    }
+
     /// Primary color: from `colors` if present, else the deprecated `color`.
     pub fn primary_color(&self) -> u32 {
         self.colors.as_ref().map_or(self.color, |c| c.primary_color)

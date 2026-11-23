@@ -9,8 +9,9 @@ use serde::{Deserialize, Serialize};
 pub use allowed_mentions::{AllowedMentionType, AllowedMentions};
 pub use attachment::{Attachment, AttachmentFlags};
 pub use embed::{
-    Embed, EmbedAuthor, EmbedField, EmbedFlags, EmbedFooter, EmbedMedia, EmbedMediaFlags,
-    EmbedProvider, EmbedType, EmbedVideo,
+    AUTHOR_LIMIT, DESCRIPTION_LIMIT, Embed, EmbedAuthor, EmbedError, EmbedField, EmbedFlags,
+    EmbedFooter, EmbedMedia, EmbedMediaFlags, EmbedProvider, EmbedType, EmbedVideo,
+    FIELD_COUNT_LIMIT, FIELD_NAME_LIMIT, FIELD_VALUE_LIMIT, FOOTER_LIMIT, TITLE_LIMIT, TOTAL_LIMIT,
 };
 
 use crate::application::Application;
@@ -20,8 +21,8 @@ use crate::emoji::Emoji;
 use crate::guild::Member;
 use crate::id::Id;
 use crate::id::marker::{
-    ApplicationMarker, ChannelMarker, GuildMarker, MessageMarker, RoleMarker, SkuMarker,
-    UserMarker, WebhookMarker,
+    ApplicationMarker, ChannelMarker, GuildMarker, LobbyMarker, MessageMarker, RoleMarker,
+    SkuMarker, UserMarker, WebhookMarker,
 };
 use crate::interaction::{InteractionMetadata, MessageInteraction, Resolved};
 use crate::poll::Poll;
@@ -41,6 +42,10 @@ pub struct Message {
     pub id: Id<MessageMarker>,
     /// Channel.
     pub channel_id: Id<ChannelMarker>,
+    /// Lobby this message belongs to (Social SDK linked-channel messages).
+    pub lobby_id: Option<Id<LobbyMarker>>,
+    /// Channel object with recipient information (Social SDK DM webhook events).
+    pub channel: Option<Box<Channel>>,
     /// Guild (gateway events only).
     pub guild_id: Option<Id<GuildMarker>>,
     /// Author; for webhooks the webhook's name and avatar.

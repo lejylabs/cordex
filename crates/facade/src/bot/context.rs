@@ -4,18 +4,19 @@ use std::fmt;
 use std::future::Future;
 use std::ops::Deref;
 use std::sync::Arc;
+use std::time::Duration;
 
 use cordex_gateway::{ShardId, ShardManager};
 use cordex_http::Client;
 use cordex_interactions::handle::ResponseState;
 use cordex_interactions::options::ResolvedUser;
 use cordex_interactions::{Choice, CommandOptions, InteractionHandle, Modal, Reply};
-use cordex_model::gateway::event::{Event, Ready};
+use cordex_model::gateway::event::{Event, MessageReactionAdd, Ready};
 use cordex_model::id::Id;
-use cordex_model::id::marker::{ChannelMarker, GuildMarker, UserMarker};
+use cordex_model::id::marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker};
 use cordex_model::interaction::{
-    CommandData, CommandOptionValue, Interaction, MessageComponentData, ModalSubmitData,
-    SubmittedComponent,
+    CommandData, CommandOptionValue, Interaction, InteractionType, MessageComponentData,
+    ModalSubmitData, SubmittedComponent,
 };
 use cordex_model::message::Attachment;
 use cordex_model::{Channel, Message, Role, User};
@@ -66,6 +67,75 @@ impl Context {
     #[cfg(feature = "cache")]
     pub fn cache(&self) -> Option<&cordex_cache::InMemoryCache> {
         self.shared.cache.as_deref()
+    }
+
+    /// Wait for the next event matching `pred`, or `None` after `timeout`.
+    pub async fn wait_for<F>(&self, timeout: Duration, pred: F) -> Option<Event>
+    where
+        F: Fn(&Event) -> bool + Send + Sync + 'static,
+    {
+        self.shared.standby.wait_for(timeout, pred).await
+    }
+
+    /// Wait for a component interaction on `message`.
+    pub async fn wait_for_button(
+        &self,
+        message_id: Id<MessageMarker>,
+        timeout: Duration,
+    ) -> Option<Interaction> {
+        match self
+            .wait_for(timeout, move |event| match event {
+                Event::InteractionCreate(i) => {
+                    i.kind == InteractionType::MessageComponent
+                        && i.message.as_ref().is_some_and(|m| m.id == message_id)
+                }
+                _ => false,
+            })
+            .await
+        {
+            Some(Event::InteractionCreate(i)) => Some(*i),
+            _ => None,
+        }
+    }
+
+    /// Wait for a message in `channel` matching `pred`.
+    pub async fn wait_for_message<F>(
+        &self,
+        channel: Id<ChannelMarker>,
+        timeout: Duration,
+        pred: F,
+    ) -> Option<Message>
+    where
+        F: Fn(&Message) -> bool + Send + Sync + 'static,
+    {
+        match self
+            .wait_for(timeout, move |event| match event {
+                Event::MessageCreate(m) => m.channel_id == channel && pred(m),
+                _ => false,
+            })
+            .await
+        {
+            Some(Event::MessageCreate(m)) => Some(*m),
+            _ => None,
+        }
+    }
+
+    /// Wait for a reaction on `message`.
+    pub async fn wait_for_reaction(
+        &self,
+        message_id: Id<MessageMarker>,
+        timeout: Duration,
+    ) -> Option<MessageReactionAdd> {
+        match self
+            .wait_for(timeout, move |event| match event {
+                Event::MessageReactionAdd(r) => r.message_id == message_id,
+                _ => false,
+            })
+            .await
+        {
+            Some(Event::MessageReactionAdd(r)) => Some(*r),
+            _ => None,
+        }
     }
 }
 

@@ -100,6 +100,13 @@ impl Application {
     pub fn all_flags(&self) -> ApplicationFlags {
         self.flags_new.map_or(self.flags, |f| f.0)
     }
+
+    /// CDN URL of the icon, if set.
+    pub fn icon_url(&self) -> Option<crate::cdn::CdnUrl> {
+        self.icon
+            .as_ref()
+            .map(|h| crate::cdn::application_icon(self.id, h))
+    }
 }
 
 bitflags::bitflags! {

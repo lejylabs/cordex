@@ -591,6 +591,8 @@ pub(crate) async fn send_message(
     reason: Option<String>,
     require_body: bool,
 ) -> Result<Message, HttpError> {
+    client.fill_allowed_mentions(&mut body.allowed_mentions);
+
     if !files.is_empty() {
         body.attachments = files
             .iter()

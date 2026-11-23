@@ -76,6 +76,14 @@ impl Member {
         self.communication_disabled_until
             .is_some_and(|until| until > now)
     }
+
+    /// CDN URL of the guild avatar, if set.
+    pub fn avatar_url(&self, guild_id: Id<GuildMarker>) -> Option<crate::cdn::CdnUrl> {
+        self.avatar
+            .as_ref()
+            .zip(self.user.as_ref())
+            .map(|(hash, user)| crate::cdn::member_avatar(guild_id, user.id, hash))
+    }
 }
 
 bitflags::bitflags! {

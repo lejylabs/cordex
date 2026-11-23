@@ -22,7 +22,7 @@ mod cache;
 mod config;
 mod strip;
 
-pub use cache::{CacheStats, InMemoryCache};
+pub use cache::{CacheStats, InMemoryCache, PermissionCacheError};
 pub use config::{CacheConfig, CacheParts, ConfigWarning, ResourceType};
 
 #[cfg(test)]

@@ -10,6 +10,55 @@ use time::format_description::well_known::Rfc3339;
 
 use crate::error::ParseError;
 
+/// Display style of a Discord timestamp mention (`<t:unix:style>`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum TimestampStyle {
+    /// Short time (`16:20`).
+    ShortTime,
+    /// Long time (`16:20:30`).
+    LongTime,
+    /// Short date (`20/04/2021`).
+    ShortDate,
+    /// Long date (`20 April 2021`).
+    LongDate,
+    /// Short date and time (`20 April 2021 16:20`).
+    ShortDateTime,
+    /// Long date and time (`Tuesday, 20 April 2021 16:20`).
+    LongDateTime,
+    /// Relative (`2 months ago`).
+    Relative,
+}
+
+impl TimestampStyle {
+    /// Style character Discord uses after the unix timestamp.
+    pub const fn as_char(self) -> char {
+        match self {
+            Self::ShortTime => 't',
+            Self::LongTime => 'T',
+            Self::ShortDate => 'd',
+            Self::LongDate => 'D',
+            Self::ShortDateTime => 'f',
+            Self::LongDateTime => 'F',
+            Self::Relative => 'R',
+        }
+    }
+
+    /// Parse a style character; `None` if unknown.
+    pub const fn from_char(c: u8) -> Option<Self> {
+        match c {
+            b't' => Some(Self::ShortTime),
+            b'T' => Some(Self::LongTime),
+            b'd' => Some(Self::ShortDate),
+            b'D' => Some(Self::LongDate),
+            b'f' => Some(Self::ShortDateTime),
+            b'F' => Some(Self::LongDateTime),
+            b'R' => Some(Self::Relative),
+            _ => None,
+        }
+    }
+}
+
 /// A point in time, stored as Unix microseconds (8 bytes).
 ///
 /// Discord sends ISO 8601 strings such as `2017-07-11T17:27:07.299000+00:00`
@@ -46,6 +95,16 @@ impl Timestamp {
     /// Unix seconds (rounded down).
     pub const fn as_secs(self) -> i64 {
         self.micros.div_euclid(1_000_000)
+    }
+
+    /// Discord timestamp markdown (`<t:unix:style>`).
+    pub fn markdown(self, style: TimestampStyle) -> String {
+        format!("<t:{}:{}>", self.as_secs(), style.as_char())
+    }
+
+    /// Discord timestamp markdown with the default style (`<t:unix>`).
+    pub fn markdown_default(self) -> String {
+        format!("<t:{}>", self.as_secs())
     }
 
     /// As a `time` value in UTC; `None` outside `time`'s supported range.

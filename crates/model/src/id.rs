@@ -207,6 +207,8 @@ pub mod marker {
         GuildMarker,
         /// Integration.
         IntegrationMarker,
+        /// Social SDK lobby.
+        LobbyMarker,
         /// Interaction.
         InteractionMarker,
         /// Message.

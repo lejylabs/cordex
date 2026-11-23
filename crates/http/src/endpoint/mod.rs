@@ -163,8 +163,10 @@ mod command;
 mod entitlement;
 mod guild;
 mod guild_admin;
+mod identity;
 mod interaction;
 mod invite;
+mod lobby;
 mod member;
 mod message;
 mod misc;
@@ -190,6 +192,12 @@ pub use guild_admin::{
     AddGuildMember, BeginGuildPrune, GetGuildMembers, GetGuildPruneCount, SearchGuildMembers,
     UpdateCurrentMember, UpdateGuild, UpdateGuildWidget, UpdateIncidentActions, UpdateOnboarding,
     UpdateWelcomeScreen,
+};
+pub use identity::{GetApplicationIdentitiesByExternalId, UpdateApplicationIdentityProfile};
+pub use lobby::{
+    AddLobbyMember, CreateLobby, CreateOrJoinLobby, GetLobbyMessages, LOBBY_IDLE_TIMEOUT_MAX,
+    LOBBY_IDLE_TIMEOUT_MIN, LOBBY_MEMBERS_PER_REQUEST, LOBBY_METADATA_MAX, LinkLobbyChannel,
+    LobbyMemberWrite, ModifyLobby, SendLobbyMessage,
 };
 pub use message::GetReactions;
 pub use message::{CreateMessage, EditMessage, GetChannelMessages};

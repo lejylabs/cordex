@@ -72,6 +72,33 @@ pub struct CacheStats {
     pub messages: usize,
 }
 
+/// A [`InMemoryCache::permissions`] lookup is missing a resource.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PermissionCacheError {
+    /// Guild is not cached.
+    Guild,
+    /// Member is not cached.
+    Member,
+    /// Channel (or thread) is not cached.
+    Channel,
+    /// `@everyone` role is not cached.
+    Roles,
+}
+
+impl std::fmt::Display for PermissionCacheError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Guild => "guild is not cached",
+            Self::Member => "member is not cached",
+            Self::Channel => "channel is not cached",
+            Self::Roles => "roles are not cached",
+        })
+    }
+}
+
+impl std::error::Error for PermissionCacheError {}
+
 /// In-memory cache fed with [`InMemoryCache::update`]. Thread-safe; share it
 /// with `Arc`. Reads return `Arc` clones and never hold a lock across an
 /// `.await`.
@@ -817,6 +844,52 @@ impl InMemoryCache {
     /// Roles of a guild.
     pub fn guild_roles(&self, guild: GuildId) -> Vec<Arc<Role>> {
         all_by_guild(&self.roles, guild)
+    }
+
+    /// Channel permissions for `user` in `channel` (or a thread). Needs the
+    /// guild, member, roles and channel in cache. Names the missing resource
+    /// when something is off.
+    pub fn permissions(
+        &self,
+        guild: GuildId,
+        user: UserId,
+        channel: ChannelId,
+    ) -> Result<cordex_model::Permissions, PermissionCacheError> {
+        use cordex_model::permission_calc;
+        use cordex_model::timestamp::Timestamp;
+
+        let g = self.guild(guild).ok_or(PermissionCacheError::Guild)?;
+        let member = self
+            .member(guild, user)
+            .ok_or(PermissionCacheError::Member)?;
+        let ch = self
+            .channel(channel)
+            .or_else(|| self.thread(channel))
+            .ok_or(PermissionCacheError::Channel)?;
+        let everyone_role = self
+            .role(guild, guild.cast())
+            .ok_or(PermissionCacheError::Roles)?;
+        let role_perms: Vec<_> = member
+            .roles
+            .iter()
+            .filter_map(|id| self.role(guild, *id).map(|r| r.permissions))
+            .collect();
+        let owner_id = g.owner_id.ok_or(PermissionCacheError::Guild)?;
+        let now_ms = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            Ok(d) => i64::try_from(d.as_millis()).unwrap_or(i64::MAX),
+            Err(_) => 0,
+        };
+        let timed_out = member.is_timed_out(Timestamp::from_millis(now_ms));
+        Ok(permission_calc::channel_permissions(
+            owner_id == user,
+            everyone_role.permissions,
+            role_perms,
+            &ch.permission_overwrites,
+            guild.cast(),
+            user,
+            &member.roles,
+            timed_out,
+        ))
     }
 
     /// Emoji by guild and id.

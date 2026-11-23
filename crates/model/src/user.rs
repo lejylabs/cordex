@@ -67,6 +67,11 @@ impl User {
     pub fn mention(&self) -> String {
         format!("<@{}>", self.id)
     }
+
+    /// CDN URL of the avatar, or the default avatar when none is set.
+    pub fn avatar_url(&self) -> crate::cdn::CdnUrl {
+        crate::cdn::user_avatar(self.id, self.avatar.as_ref(), &self.discriminator)
+    }
 }
 
 bitflags::bitflags! {

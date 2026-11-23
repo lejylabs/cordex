@@ -49,4 +49,9 @@ impl Emoji {
             None => name.to_owned(),
         }
     }
+
+    /// CDN URL of a custom emoji (`None` for unicode).
+    pub fn url(&self) -> Option<crate::cdn::CdnUrl> {
+        self.id.map(|id| crate::cdn::emoji(id, self.animated))
+    }
 }

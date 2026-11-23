@@ -13,4 +13,7 @@ pub enum ParseError {
     /// Not a valid bitfield (decimal `u64`).
     #[error("invalid bitfield")]
     Bitfield,
+    /// Not a Discord webhook execute URL.
+    #[error("invalid webhook URL")]
+    WebhookUrl,
 }

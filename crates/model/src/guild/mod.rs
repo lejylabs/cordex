@@ -146,6 +146,27 @@ impl Guild {
     pub fn has_feature(&self, feature: &GuildFeature) -> bool {
         self.features.contains(feature)
     }
+
+    /// CDN URL of the icon, if set.
+    pub fn icon_url(&self) -> Option<crate::cdn::CdnUrl> {
+        self.icon
+            .as_ref()
+            .map(|h| crate::cdn::guild_icon(self.id, h))
+    }
+
+    /// CDN URL of the banner, if set.
+    pub fn banner_url(&self) -> Option<crate::cdn::CdnUrl> {
+        self.banner
+            .as_ref()
+            .map(|h| crate::cdn::guild_banner(self.id, h))
+    }
+
+    /// CDN URL of the invite splash, if set.
+    pub fn splash_url(&self) -> Option<crate::cdn::CdnUrl> {
+        self.splash
+            .as_ref()
+            .map(|h| crate::cdn::guild_splash(self.id, h))
+    }
 }
 
 /// A guild that is offline or not sent yet (Ready, Guild Delete).
