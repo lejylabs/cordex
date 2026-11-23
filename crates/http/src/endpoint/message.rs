@@ -8,6 +8,7 @@ use cordex_model::id::Id;
 use cordex_model::id::marker::{ChannelMarker, MessageMarker, StickerMarker};
 use cordex_model::message::{
     AllowedMentions, ChannelPins, Embed, Message, MessageFlags, MessageReference,
+    MessageReferenceType,
 };
 use cordex_model::timestamp::Timestamp;
 use http::Method;
@@ -92,6 +93,18 @@ impl Client {
             files: Vec::new(),
             reason: None,
         }
+    }
+
+    /// Forward an existing message into `destination_channel_id` using a
+    /// [`MessageReference::forward`] payload.
+    pub fn forward_message(
+        &self,
+        destination_channel_id: Id<ChannelMarker>,
+        source_channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+    ) -> CreateMessage {
+        self.create_message(destination_channel_id)
+            .message_reference(MessageReference::forward(source_channel_id, message_id))
     }
 
     /// Fetch a single message: `GET /channels/{channel_id}/messages/{message_id}`.
@@ -606,7 +619,12 @@ pub(crate) async fn send_message(
             .collect();
     }
 
+    let is_forward = body
+        .message_reference
+        .as_ref()
+        .is_some_and(|r| r.kind == MessageReferenceType::Forward);
     if require_body
+        && !is_forward
         && body.content.as_ref().is_none_or(String::is_empty)
         && body.embeds.is_empty()
         && body.sticker_ids.is_empty()
@@ -614,7 +632,7 @@ pub(crate) async fn send_message(
         && files.is_empty()
     {
         return Err(HttpError::validation(
-            "message needs content, an embed, a sticker, components or a file",
+            "message needs content, an embed, a sticker, components, a file or a forward reference",
         ));
     }
 

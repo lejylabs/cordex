@@ -32,12 +32,13 @@ pub struct RequestBuilder {
 
 impl RequestBuilder {
     pub(crate) fn new(client: Client, route: Route) -> Self {
+        let reason = client.default_reason.clone();
         Self {
             client,
             route,
             body: None,
             content_type: None,
-            reason: None,
+            reason,
             query: String::new(),
         }
     }

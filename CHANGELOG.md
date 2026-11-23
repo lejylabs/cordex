@@ -6,13 +6,13 @@ All notable changes are listed here. The project follows
 
 ## 0.1.3 - 2026-11-23
 
-- **Ergonomics additions (`cordex`, `cordex-model`):**
+- **Ergonomics additions (`cordex`, `cordex-http`, `cordex-model`):**
   - **Shared bot state:** `Bot::data(value)` and `Context::data::<T>() -> Option<&T>` store arbitrary `Send + Sync + 'static` state by type without extra locking.
   - **Global error handler & pre-command hook:** `Bot::on_error(|ctx, err| ...)` catches every handler `Err` centrally; `Bot::before_command(|ctx| ...)` runs before every command handler (return `Ok(false)` to block execution).
   - **`MessageBuilder` with Markdown escaping:** `cordex_model::message::MessageBuilder` (re-exported in `cordex::prelude`) with `push`, `push_line`, `push_safe`, `push_bold[_safe]`, `push_italic[_safe]`, `push_underline[_safe]`, `push_strike[_safe]`, `push_spoiler[_safe]`, `push_mono[_safe]`, `push_quote_line`, `push_codeblock`, `push_named_link[_safe]`, `mention`, `push_timestamp`, `build` and `into_string`.
   - **Built-in graceful shutdown:** `Bot::run_until_ctrl_c()` (handles `Ctrl+C` and Unix `SIGTERM`) and `Bot::run_until(future)` shut down all shards cleanly.
-  - **Pagination helper:** `CommandContext::paginate(pages, timeout)` renders `◀` / `1 / N` / `▶` buttons with an author-only guard and disables the buttons on timeout.
-  - **Context shortcuts:** `Context::send(channel_id, content)` and `Context::dm(user_id, content)`.
+  - **Pagination & collector ergonomics:** `CommandContext::paginate(pages, timeout)` renders `◀` / `1 / N` / `▶` buttons with an author-only guard, sliding idle timeout, and automatic button disabling on timeout; `ButtonClicks::idle_timeout(duration)` and `ButtonClicks::stop()` added.
+  - **Scoped audit-log reasons & shortcuts:** `Client::with_reason(...)` returns a cheap scoped clone that attaches `X-Audit-Log-Reason` to every request; `Client::forward_message(...)`, `Context::forward_message(...)`, `Context::send(channel_id, content)` and `Context::dm(user_id, content)` added.
 
 ## 0.1.2 - 2026-11-23
 

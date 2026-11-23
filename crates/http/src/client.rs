@@ -46,6 +46,7 @@ pub enum AuthScheme {
 #[derive(Clone)]
 pub struct Client {
     pub(crate) inner: Arc<ClientInner>,
+    pub(crate) default_reason: Option<HeaderValue>,
 }
 
 pub(crate) struct ClientInner {
@@ -149,6 +150,17 @@ impl Client {
     /// Start a builder (timeouts, base URL, mock transport, custom limiter).
     pub fn builder(token: impl AsRef<str>) -> ClientBuilder {
         ClientBuilder::new(token)
+    }
+
+    /// Cheap scoped clone that attaches `X-Audit-Log-Reason` to every request
+    /// made through it (shares the connection pool, rate limiter and metrics).
+    /// A per-request `.reason(...)` still overrides this default.
+    pub fn with_reason(&self, reason: impl AsRef<str>) -> Result<Self, HttpError> {
+        let encoded = crate::encode_audit_log_reason(reason.as_ref())?;
+        Ok(Self {
+            inner: Arc::clone(&self.inner),
+            default_reason: Some(encoded),
+        })
     }
 
     /// Begin a raw request. The rate limiter keys off `method` + `route`.
@@ -421,6 +433,7 @@ impl ClientBuilder {
                 default_allowed_mentions: self.default_allowed_mentions,
                 counters: ClientCounters::default(),
             }),
+            default_reason: None,
         })
     }
 }

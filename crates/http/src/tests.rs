@@ -1257,3 +1257,73 @@ async fn metrics_count_user_429_5xx_timeouts_and_transport_errors() {
     assert_eq!(m.timeouts, 1);
     assert_eq!(m.transport_errors, 1);
 }
+
+#[tokio::test]
+async fn client_with_reason_applies_default_and_allows_override() {
+    let seen = Arc::new(Mutex::new(Vec::<Option<String>>::new()));
+    let seen_tx = seen.clone();
+    let client = Client::builder("t")
+        .transport(Arc::new(FnTransport::new(
+            move |req: http::Request<Bytes>| {
+                let reason = req
+                    .headers()
+                    .get("x-audit-log-reason")
+                    .and_then(|v| v.to_str().ok())
+                    .map(str::to_owned);
+                seen_tx.lock().push(reason);
+                async { Ok(ok_json("{}")) }
+            },
+        )))
+        .build()
+        .unwrap();
+
+    let scoped = client.with_reason("AutoMod spam").unwrap();
+    scoped.get(Route::new("/users/@me")).send().await.unwrap();
+    scoped
+        .get(Route::new("/users/@me"))
+        .reason("override")
+        .unwrap()
+        .send()
+        .await
+        .unwrap();
+    // Original client remains unaffected.
+    client.get(Route::new("/users/@me")).send().await.unwrap();
+
+    let reasons = seen.lock().clone();
+    assert_eq!(
+        reasons,
+        vec![
+            Some("AutoMod%20spam".to_owned()),
+            Some("override".to_owned()),
+            None,
+        ]
+    );
+    assert!(client.with_reason("x".repeat(513)).is_err());
+}
+
+#[tokio::test]
+async fn forward_message_sends_forward_reference() {
+    let body = Arc::new(Mutex::new(Bytes::new()));
+    let body_tx = body.clone();
+    let client = Client::builder("t")
+        .transport(Arc::new(FnTransport::new(move |req: http::Request<Bytes>| {
+            *body_tx.lock() = req.into_body();
+            async {
+                Ok(ok_json(
+                    r#"{"id":"99","channel_id":"2","author":{"id":"1","username":"b","discriminator":"0","avatar":null},"content":"","timestamp":"2026-01-01T00:00:00Z","tts":false,"mention_everyone":false,"mentions":[],"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0}"#,
+                ))
+            }
+        })))
+        .build()
+        .unwrap();
+
+    let dst = cordex_model::id::Id::new(2).unwrap();
+    let src = cordex_model::id::Id::new(10).unwrap();
+    let msg = cordex_model::id::Id::new(20).unwrap();
+    client.forward_message(dst, src, msg).await.unwrap();
+
+    let sent: serde_json::Value = serde_json::from_slice(&body.lock()).unwrap();
+    assert_eq!(sent["message_reference"]["type"], 1);
+    assert_eq!(sent["message_reference"]["channel_id"], "10");
+    assert_eq!(sent["message_reference"]["message_id"], "20");
+}

@@ -148,8 +148,23 @@ impl Context {
                 .shared
                 .standby
                 .wait_for_stream(component_on(message_id)),
-            deadline: tokio::time::Instant::now() + timeout,
+            deadline: Some(tokio::time::Instant::now() + timeout),
+            idle: None,
+            stopped: false,
         }
+    }
+
+    /// Forward an existing message into `destination_channel_id`.
+    pub async fn forward_message(
+        &self,
+        destination_channel_id: Id<ChannelMarker>,
+        source_channel_id: Id<ChannelMarker>,
+        message_id: Id<MessageMarker>,
+    ) -> Result<Message> {
+        Ok(self
+            .http()
+            .forward_message(destination_channel_id, source_channel_id, message_id)
+            .await?)
     }
 
     /// `ComponentContext` for a component interaction event.
@@ -230,7 +245,9 @@ fn component_on(message_id: Id<MessageMarker>) -> impl Fn(&Event) -> bool + Send
 pub struct ButtonClicks {
     ctx: Context,
     events: tokio::sync::mpsc::Receiver<Event>,
-    deadline: tokio::time::Instant,
+    deadline: Option<tokio::time::Instant>,
+    idle: Option<Duration>,
+    stopped: bool,
 }
 
 impl fmt::Debug for ButtonClicks {
@@ -240,12 +257,39 @@ impl fmt::Debug for ButtonClicks {
 }
 
 impl ButtonClicks {
-    /// The next click, or `None` once the timeout has passed.
+    /// Also stop the stream when no click arrives for `timeout` (sliding idle
+    /// timeout, reset on every received click).
+    #[must_use]
+    pub fn idle_timeout(mut self, timeout: Duration) -> Self {
+        self.idle = Some(timeout);
+        self
+    }
+
+    /// Stop listening immediately; further calls to [`next`](Self::next)
+    /// return `None`.
+    pub fn stop(&mut self) {
+        self.stopped = true;
+        self.events.close();
+    }
+
+    /// The next click, or `None` once the timeout has passed or
+    /// [`stop`](Self::stop) was called.
     pub async fn next(&mut self) -> Option<ComponentContext> {
+        if self.stopped {
+            return None;
+        }
         loop {
-            let event = tokio::time::timeout_at(self.deadline, self.events.recv())
-                .await
-                .ok()??;
+            let idle_deadline = self.idle.map(|d| tokio::time::Instant::now() + d);
+            let until = match (self.deadline, idle_deadline) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (a, b) => a.or(b),
+            };
+            let event = match until {
+                Some(at) => tokio::time::timeout_at(at, self.events.recv())
+                    .await
+                    .ok()??,
+                None => self.events.recv().await?,
+            };
             if let Some(click) = self.ctx.component_context(event) {
                 return Some(click);
             }
@@ -464,8 +508,9 @@ impl CommandContext {
     }
 
     /// Show `pages` with `◀` / `▶` pagination buttons until `timeout` expires
-    /// (then disables the buttons). Only the invoking user can change pages;
-    /// other users receive a short ephemeral notice.
+    /// after the last click (idle timeout, then disables the buttons). Only
+    /// the invoking user can change pages; other users receive a short
+    /// ephemeral notice.
     pub async fn paginate(
         &self,
         pages: impl IntoIterator<Item = Reply>,
@@ -502,7 +547,16 @@ impl CommandContext {
 
         self.defer().await?;
         let message = self.edit(page_reply(index, false)).await?;
-        let mut clicks = self.button_clicks(message.id, timeout);
+        let mut clicks = ButtonClicks {
+            ctx: self.ctx.clone(),
+            events: self
+                .shared
+                .standby
+                .wait_for_stream(component_on(message.id)),
+            deadline: None,
+            idle: Some(timeout),
+            stopped: false,
+        };
         while let Some(click) = clicks.next().await {
             if author.is_some() && click.user().map(|u| u.id) != author {
                 let _ = click
