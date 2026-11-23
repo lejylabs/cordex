@@ -115,49 +115,48 @@ impl Component {
 
 impl<'de> Deserialize<'de> for Component {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        #[derive(Deserialize)]
-        struct Kind {
-            #[serde(rename = "type")]
-            kind: u8,
-        }
-
-        // Keep the component raw, peek `"type"` at top-level without a full
-        // first-pass parse (falling back to serde for escaped/unusual JSON),
-        // then parse the matching struct.
         let raw = Box::<RawValue>::deserialize(deserializer)?;
-        let json = raw.get();
-        let kind = match peek_component_type(json) {
-            Some(k) => k,
-            None => {
-                serde_json::from_str::<Kind>(json)
-                    .map_err(D::Error::custom)?
-                    .kind
-            }
-        };
-        let parsed = match kind {
-            1 => serde_json::from_str(json).map(Self::ActionRow),
-            2 => serde_json::from_str(json).map(Self::Button),
-            3 => serde_json::from_str(json).map(Self::StringSelect),
-            4 => serde_json::from_str(json).map(Self::TextInput),
-            5 => serde_json::from_str(json).map(Self::UserSelect),
-            6 => serde_json::from_str(json).map(Self::RoleSelect),
-            7 => serde_json::from_str(json).map(Self::MentionableSelect),
-            8 => serde_json::from_str(json).map(Self::ChannelSelect),
-            9 => serde_json::from_str(json).map(Self::Section),
-            10 => serde_json::from_str(json).map(Self::TextDisplay),
-            11 => serde_json::from_str(json).map(Self::Thumbnail),
-            12 => serde_json::from_str(json).map(Self::MediaGallery),
-            13 => serde_json::from_str(json).map(Self::File),
-            14 => serde_json::from_str(json).map(Self::Separator),
-            17 => serde_json::from_str(json).map(Self::Container),
-            18 => serde_json::from_str(json).map(Self::Label),
-            19 => serde_json::from_str(json).map(Self::FileUpload),
-            21 => serde_json::from_str(json).map(Self::RadioGroup),
-            22 => serde_json::from_str(json).map(Self::CheckboxGroup),
-            23 => serde_json::from_str(json).map(Self::Checkbox),
-            _ => return Ok(Self::Unknown(UnknownComponent { kind, raw })),
-        };
-        parsed.map_err(D::Error::custom)
+        parse_component(raw).map_err(D::Error::custom)
+    }
+}
+
+/// Non-generic component parser so every downstream crate shares one copy
+/// instead of monomorphizing all 20 component deserializers per crate.
+#[inline(never)]
+fn parse_component(raw: Box<RawValue>) -> Result<Component, serde_json::Error> {
+    #[derive(Deserialize)]
+    struct Kind {
+        #[serde(rename = "type")]
+        kind: u8,
+    }
+
+    let json = raw.get();
+    let kind = match peek_component_type(json) {
+        Some(k) => k,
+        None => serde_json::from_str::<Kind>(json)?.kind,
+    };
+    match kind {
+        1 => serde_json::from_str(json).map(Component::ActionRow),
+        2 => serde_json::from_str(json).map(Component::Button),
+        3 => serde_json::from_str(json).map(Component::StringSelect),
+        4 => serde_json::from_str(json).map(Component::TextInput),
+        5 => serde_json::from_str(json).map(Component::UserSelect),
+        6 => serde_json::from_str(json).map(Component::RoleSelect),
+        7 => serde_json::from_str(json).map(Component::MentionableSelect),
+        8 => serde_json::from_str(json).map(Component::ChannelSelect),
+        9 => serde_json::from_str(json).map(Component::Section),
+        10 => serde_json::from_str(json).map(Component::TextDisplay),
+        11 => serde_json::from_str(json).map(Component::Thumbnail),
+        12 => serde_json::from_str(json).map(Component::MediaGallery),
+        13 => serde_json::from_str(json).map(Component::File),
+        14 => serde_json::from_str(json).map(Component::Separator),
+        17 => serde_json::from_str(json).map(Component::Container),
+        18 => serde_json::from_str(json).map(Component::Label),
+        19 => serde_json::from_str(json).map(Component::FileUpload),
+        21 => serde_json::from_str(json).map(Component::RadioGroup),
+        22 => serde_json::from_str(json).map(Component::CheckboxGroup),
+        23 => serde_json::from_str(json).map(Component::Checkbox),
+        _ => Ok(Component::Unknown(UnknownComponent { kind, raw })),
     }
 }
 

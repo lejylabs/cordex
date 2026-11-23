@@ -50,16 +50,24 @@ impl HyperTransport {
             .with_provider_and_platform_verifier(rustls::crypto::aws_lc_rs::default_provider())
             .map_err(HttpError::transport)?
             .https_or_http();
+
+        #[cfg(feature = "http2")]
         let https = if http1_only {
             tls.enable_http1().wrap_connector(http)
         } else {
             tls.enable_all_versions().wrap_connector(http)
+        };
+        #[cfg(not(feature = "http2"))]
+        let https = {
+            let _ = http1_only;
+            tls.enable_http1().wrap_connector(http)
         };
 
         let mut builder = HyperClient::builder(TokioExecutor::new());
         builder
             .pool_idle_timeout(Duration::from_secs(30))
             .pool_timer(TokioTimer::new());
+        #[cfg(feature = "http2")]
         if !http1_only {
             builder.http2_adaptive_window(true);
         }

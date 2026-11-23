@@ -43,10 +43,10 @@ time = { version = "0.3.55", default-features = false, features = ["std", "parsi
 tokio = { version = "1.54.1", default-features = false, features = ["rt", "net", "time", "sync", "macros"] }
 bytes = { version = "1.12.2", default-features = false, features = ["std"] }
 http = { version = "1.5.0", default-features = false, features = ["std"] }
-hyper = { version = "1.12.0", default-features = false, features = ["client", "server", "http1", "http2"] }
-hyper-util = { version = "0.1.21", default-features = false, features = ["client", "client-legacy", "server", "service", "tokio", "http1", "http2"] }
+hyper = { version = "1.12.0", default-features = false, features = ["client", "server", "http1"] }
+hyper-util = { version = "0.1.21", default-features = false, features = ["client", "client-legacy", "server", "service", "tokio", "http1"] }
 http-body-util = { version = "0.1.5", default-features = false }
-hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "http2", "aws-lc-rs", "rustls-platform-verifier"] }
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "aws-lc-rs", "rustls-platform-verifier"] }
 rustls = { version = "0.23.46", default-features = false, features = ["std", "aws_lc_rs"] }
 rustls-platform-verifier = { version = "0.7.1", default-features = false }
 parking_lot = { version = "0.13.0", default-features = false }
@@ -126,6 +126,10 @@ codegen-units = 1
 panic = "unwind"
 debug = "limited"
 strip = "debuginfo"
+
+# Optimize the serde-heavy model crate for size without slowing down gateway/http/cache.
+[profile.release.package.cordex-model]
+opt-level = "s"
 
 [profile.release-fast]
 inherits = "release"

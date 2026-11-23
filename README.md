@@ -183,6 +183,7 @@ Most bots only need `cordex`. The parts work on their own too:
 | Feature | Default | Content |
 |---|---|---|
 | `http` | yes | REST client (`cordex-http`) |
+| `http2` | yes | Negotiate HTTP/2 via ALPN on the REST client (disable for smaller binaries) |
 | `gateway` | yes | Shards and shard manager (`cordex-gateway`) |
 | `interactions` | yes | Command builders and responses (`cordex-interactions`) |
 | `bot` | yes | Simple layer: `Bot` and handler contexts |
@@ -205,6 +206,9 @@ is bounded. For your own release builds:
 lto = "fat"          # whole-program optimization
 codegen-units = 1
 strip = "debuginfo"
+# Optimize the serde-heavy model crate for size without slowing down gateway/http/cache:
+[profile.release.package.cordex-model]
+opt-level = "s"
 # opt-level = "z"    # smallest binary, slightly slower
 # panic = "abort"    # smaller, but a panic ends the process
 #                    # (cordex then cannot keep other handlers running)

@@ -21,7 +21,7 @@ metrics = ["dep:metrics"]
 [dependencies]
 cordex-model.workspace = true
 metrics = { workspace = true, optional = true }
-cordex-http.workspace = true
+cordex-http = { workspace = true, default-features = false }
 bitflags.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

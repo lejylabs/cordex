@@ -15,6 +15,9 @@ readme = "README.md"
 workspace = true
 
 [features]
+default = ["http2"]
+# Negotiate HTTP/2 via ALPN (falls back to HTTP/1.1 automatically).
+http2 = ["hyper/http2", "hyper-util/http2", "hyper-rustls/http2"]
 # Export client counters through the `metrics` crate.
 metrics = ["dep:metrics"]
 
