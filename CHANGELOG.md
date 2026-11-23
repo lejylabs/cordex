@@ -6,6 +6,8 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+## 0.1.2 - 2026-11-23
+
 - **`cordex-http`: HTTP/2 via ALPN enabled by default** (`http2` feature on `cordex-http` and `cordex`, `http2_adaptive_window(true)`), falling back to HTTP/1.1 automatically; `ClientBuilder::http1_only(true)` forces HTTP/1.1 at runtime, or disable `http2` for smaller binaries.
 - **Smaller binaries:** non-generic `#[inline(never)]` `parse_component` in `cordex-model` and `[profile.release.package.cordex-model] opt-level = "s"` in the workspace release profile.
 - **Optional `metrics` feature** on `cordex-http`, `cordex-gateway` and `cordex`: exports HTTP and gateway counters through the `metrics` crate (off by default).
