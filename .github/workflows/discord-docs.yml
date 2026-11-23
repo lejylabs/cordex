@@ -1,0 +1,105 @@
+# Watches discord/discord-api-docs. When the docs move past the commit
+# pinned in docs/discord-api-docs.rev, this measures the coverage against
+# the new docs and opens (or updates) one issue labelled
+# `discord-api-docs` with the compare link and the new numbers.
+#
+# To take the new docs: `cargo xtask coverage --rev latest --pin`, review
+# docs/coverage.md, close the gaps, commit.
+name: Discord API docs
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: discord-docs
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  watch:
+    name: watch docs
+    runs-on: blacksmith-4vcpu-ubuntu-2604
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare pinned and latest docs commit
+        id: rev
+        run: |
+          pinned="$(tr -d '[:space:]' < docs/discord-api-docs.rev)"
+          latest="$(git ls-remote https://github.com/discord/discord-api-docs HEAD | cut -f1)"
+          echo "pinned=$pinned" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ "$pinned" = "$latest" ]; then
+            echo "Docs unchanged ($pinned)."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install toolchain
+        if: steps.rev.outputs.changed == 'true'
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: steps.rev.outputs.changed == 'true'
+        with:
+          shared-key: coverage
+
+      - name: Measure coverage against the latest docs
+        if: steps.rev.outputs.changed == 'true'
+        env:
+          PINNED: ${{ steps.rev.outputs.pinned }}
+          LATEST: ${{ steps.rev.outputs.latest }}
+        run: |
+          cargo xtask coverage --rev "$LATEST" | tee summary.txt
+          {
+            echo "The official API docs changed since the pinned commit."
+            echo
+            echo "- Pinned: \`${PINNED:0:12}\`"
+            echo "- Latest: \`${LATEST:0:12}\`"
+            echo "- Changes: https://github.com/discord/discord-api-docs/compare/${PINNED}...${LATEST}"
+            echo
+            echo "Coverage against the latest docs:"
+            echo
+            echo '```'
+            grep -A8 '^discord-api-docs' summary.txt
+            echo '```'
+            echo
+            echo "Take the new docs with \`cargo xtask coverage --rev latest --pin\`, review \`docs/coverage.md\`, close the gaps and commit."
+            echo
+            echo "<details><summary>Full report</summary>"
+            echo
+            cat "target/coverage-${LATEST:0:12}.md"
+            echo
+            echo "</details>"
+          } > issue.md
+
+      - name: Open or update the issue
+        if: steps.rev.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create discord-api-docs --color 5865F2 \
+            --description "Upstream Discord API docs changed" --force
+          number="$(gh issue list --label discord-api-docs --state open --json number --jq '.[0].number')"
+          # GitHub caps issue bodies at 65536 characters.
+          head -c 65000 issue.md > body.md
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file body.md
+          else
+            gh issue create --title "Discord API docs changed" \
+              --label discord-api-docs --body-file body.md
+          fi

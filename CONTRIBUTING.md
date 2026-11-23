@@ -23,9 +23,14 @@ Thanks for helping! Bug reports, docs fixes and code are all welcome.
 ```bash
 cargo xtask check      # fmt, clippy, tests, docs, cargo-deny, layout rules
 cargo xtask features   # every supported feature combination
+cargo xtask coverage   # regenerate docs/coverage.md (needs git + network)
 ```
 
-Both must pass before a pull request is merged; CI runs the same commands.
+All three must pass before a pull request is merged; CI runs the same commands.
+When you add or remove an endpoint, event or enum value, run
+`cargo xtask coverage` and commit the updated `docs/coverage.md`. Every REST
+method in `cordex-http` needs a doc comment with its route, e.g.
+`` /// `GET /channels/{channel_id}` ``; the coverage tool reads these.
 
 ## Rules for code
 

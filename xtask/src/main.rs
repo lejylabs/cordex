@@ -4,6 +4,10 @@
 //! - `cargo xtask layout-check`: crate dependency rules, README/license copies
 //! - `cargo xtask features`: clippy for every supported feature combination
 //! - `cargo xtask release-check`: `check` plus a `cargo publish --dry-run`
+//! - `cargo xtask coverage`: API coverage against the official docs
+//!   (`docs/coverage.md`, see `coverage.rs`)
+
+mod coverage;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -54,7 +58,11 @@ fn main() -> ExitCode {
         "layout-check" => layout_check(),
         "features" => features(),
         "release-check" => release_check(),
-        _ => Err("usage: cargo xtask <check|features|layout-check|release-check>".to_owned()),
+        "coverage" => coverage::coverage(&std::env::args().skip(2).collect::<Vec<_>>()),
+        _ => Err(
+            "usage: cargo xtask <check|features|layout-check|release-check|coverage [--check|--rev <sha|latest>|--pin]>"
+                .to_owned(),
+        ),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

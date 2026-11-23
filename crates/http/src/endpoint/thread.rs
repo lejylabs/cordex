@@ -13,7 +13,8 @@ use crate::error::HttpError;
 use crate::route::Route;
 
 impl Client {
-    /// Start a thread in a text or announcement channel (not from a message).
+    /// Start a thread in a text or announcement channel (not from a message):
+    /// `POST /channels/{channel_id}/threads`.
     pub fn create_thread(
         &self,
         channel_id: Id<ChannelMarker>,
@@ -31,7 +32,8 @@ impl Client {
         }
     }
 
-    /// Start a thread from an existing message.
+    /// Start a thread from an existing message:
+    /// `POST /channels/{channel_id}/messages/{message_id}/threads`.
     pub fn create_thread_from_message(
         &self,
         channel_id: Id<ChannelMarker>,
@@ -50,7 +52,8 @@ impl Client {
         }
     }
 
-    /// Start a forum or media thread with an initial message.
+    /// Start a forum or media thread with an initial message:
+    /// `POST /channels/{channel_id}/threads`.
     pub fn create_forum_thread(
         &self,
         channel_id: Id<ChannelMarker>,

@@ -117,3 +117,24 @@ jobs:
 
       - name: cargo publish --dry-run
         run: cargo publish --workspace --dry-run --locked
+
+  coverage:
+    # docs/coverage.md must match the code and the pinned docs commit, so
+    # the coverage number in releases stays honest.
+    name: coverage (docs/coverage.md)
+    runs-on: blacksmith-4vcpu-ubuntu-2604
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: coverage
+
+      - name: cargo xtask coverage --check
+        run: cargo xtask coverage --check
