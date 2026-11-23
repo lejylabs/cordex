@@ -4,9 +4,11 @@
 //! - `cargo xtask layout-check`: crate dependency rules, README/license copies
 //! - `cargo xtask features`: clippy for every supported feature combination
 //! - `cargo xtask release-check`: `check` plus a `cargo publish --dry-run`
+//! - `cargo xtask bench`: benchmarks compared with `benches/baseline.json`
 //! - `cargo xtask coverage`: API coverage against the official docs
 //!   (`docs/coverage.md`, see `coverage.rs`)
 
+mod bench;
 mod coverage;
 
 use std::fs;
@@ -59,8 +61,9 @@ fn main() -> ExitCode {
         "features" => features(),
         "release-check" => release_check(),
         "coverage" => coverage::coverage(&std::env::args().skip(2).collect::<Vec<_>>()),
+        "bench" => bench::bench(&std::env::args().skip(2).collect::<Vec<_>>()),
         _ => Err(
-            "usage: cargo xtask <check|features|layout-check|release-check|coverage [--check|--rev <sha|latest>|--pin]>"
+            "usage: cargo xtask <check|features|layout-check|release-check|coverage [--check|--rev <sha|latest>|--pin]|bench [--save] [-- criterion args]>"
                 .to_owned(),
         ),
     };

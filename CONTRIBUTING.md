@@ -36,6 +36,7 @@ Thanks for helping! Bug reports, docs fixes and code are all welcome.
 cargo xtask check      # fmt, clippy, tests, docs, cargo-deny, layout rules
 cargo xtask features   # every supported feature combination
 cargo xtask coverage   # regenerate docs/coverage.md (needs curl, tar + network)
+cargo xtask bench      # benchmarks vs. benches/baseline.json (before larger merges)
 ```
 
 All three must pass before a pull request is merged; CI runs the same commands.

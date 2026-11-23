@@ -6,6 +6,11 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+- **Benchmarks:** `cargo xtask bench` runs criterion benches (gateway parsing,
+  filtered events, cache update and lookup) and a dhat allocation bench, and
+  compares with `benches/baseline.json` (warning at > 10 % slower). Results
+  in `docs/performance.md`: `MESSAGE_CREATE` 1.4 µs and 7 allocations, a
+  filtered event 0.36 µs, cache lookups ≈ 20 ns.
 - **`InteractionClient`**: `client.interaction(app_id)` (or
   `client.interaction_for_current_app().await`) gives the application-scoped
   endpoints without repeating the ID: global and guild commands (incl. bulk

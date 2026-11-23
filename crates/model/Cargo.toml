@@ -21,3 +21,15 @@ serde_json.workspace = true
 bitflags.workspace = true
 thiserror.workspace = true
 time.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+dhat.workspace = true
+
+[[bench]]
+name = "parse"
+harness = false
+
+[[bench]]
+name = "alloc"
+harness = false

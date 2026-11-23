@@ -28,3 +28,12 @@ flamegraph*.svg
 # Local planning document, not versioned
 /PLAN.md
 /docs/zenybot-inventory.md
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Local tool settings
+.claude/settings.local.json
+*.code-workspace
