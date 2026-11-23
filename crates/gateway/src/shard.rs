@@ -28,8 +28,8 @@ use crate::session::{self, Shared, UserCommand};
 use crate::spawn::{CurrentRuntime, Spawner};
 use crate::types::{
     Backpressure, CloseMode, DEFAULT_COMMAND_CAPACITY, DEFAULT_EVENT_CAPACITY, DEFAULT_GATEWAY_URL,
-    DEFAULT_LARGE_THRESHOLD, DEFAULT_MEMBER_TIMEOUT, Latency, MAX_PAYLOAD_BYTES, ManagerEvent,
-    ResumeInfo, ShardId, ShardState, ShardStatus,
+    DEFAULT_LARGE_THRESHOLD, DEFAULT_MAX_MESSAGE_BYTES, DEFAULT_MEMBER_TIMEOUT, Latency,
+    MAX_PAYLOAD_BYTES, ManagerEvent, ResumeInfo, ShardId, ShardState, ShardStatus,
 };
 
 /// Source of `GET /gateway/bot`.
@@ -68,6 +68,7 @@ pub struct ShardBuilder<C: Connector = WsConnector> {
     backpressure: Backpressure,
     event_capacity: usize,
     large_threshold: u8,
+    max_message_bytes: usize,
     presence: Option<UpdatePresence>,
     member_timeout: Duration,
     resume: Option<ResumeInfo>,
@@ -90,6 +91,7 @@ impl ShardBuilder<WsConnector> {
             backpressure: Backpressure::Disconnect,
             event_capacity: DEFAULT_EVENT_CAPACITY,
             large_threshold: DEFAULT_LARGE_THRESHOLD,
+            max_message_bytes: DEFAULT_MAX_MESSAGE_BYTES,
             presence: None,
             member_timeout: DEFAULT_MEMBER_TIMEOUT,
             resume: None,
@@ -140,6 +142,7 @@ impl<C: Connector> ShardBuilder<C> {
             backpressure: self.backpressure,
             event_capacity: self.event_capacity,
             large_threshold: self.large_threshold,
+            max_message_bytes: self.max_message_bytes,
             presence: self.presence,
             member_timeout: self.member_timeout,
             resume: self.resume,
@@ -205,6 +208,16 @@ impl<C: Connector> ShardBuilder<C> {
         self
     }
 
+    /// Cap on one decompressed gateway message (default
+    /// [`DEFAULT_MAX_MESSAGE_BYTES`], 16 MiB). A larger message ends the
+    /// connection, which then reconnects. Raise it only for very large
+    /// guilds whose `GUILD_CREATE` exceeds the default.
+    #[must_use]
+    pub fn max_message_bytes(mut self, bytes: usize) -> Self {
+        self.max_message_bytes = bytes.max(1);
+        self
+    }
+
     /// Initial presence sent with Identify.
     #[must_use]
     pub fn presence(mut self, presence: UpdatePresence) -> Self {
@@ -247,6 +260,7 @@ impl<C: Connector> ShardBuilder<C> {
             event_types: self.event_types,
             backpressure: self.backpressure,
             large_threshold: self.large_threshold,
+            max_message_bytes: self.max_message_bytes,
             presence: self.presence,
             member_timeout: self.member_timeout,
             cancel: self.cancel,
@@ -257,6 +271,7 @@ impl<C: Connector> ShardBuilder<C> {
             last_ack: parking_lot::Mutex::new(None),
             guild_count: std::sync::atomic::AtomicU32::new(0),
             reconnects: std::sync::atomic::AtomicU32::new(0),
+            counters: crate::types::AtomicCounters::default(),
             manager_tx: self.manager_tx,
         });
         let runner = Arc::clone(&shared);
@@ -293,7 +308,8 @@ impl<C: Connector> Shard<C> {
         self.shared.state()
     }
 
-    /// Status snapshot (state, latency, guild count, reconnects).
+    /// Status snapshot (state, latency, guild count, reconnects and the
+    /// [`ShardCounters`](crate::ShardCounters)).
     #[must_use]
     pub fn status(&self) -> ShardStatus {
         self.shared.status()

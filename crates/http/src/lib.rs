@@ -12,7 +12,7 @@ mod request;
 mod transport;
 mod validate;
 
-pub use client::{AuthScheme, Client, ClientBuilder, DEFAULT_BASE_URL, USER_AGENT};
+pub use client::{AuthScheme, Client, ClientBuilder, ClientMetrics, DEFAULT_BASE_URL, USER_AGENT};
 pub use endpoint::{
     CommandBody, CommandPayload, CreateMessage, EditMessage, ExecuteWebhook, GetChannelMessages,
     InteractionClient,

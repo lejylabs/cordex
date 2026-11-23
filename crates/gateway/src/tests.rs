@@ -134,7 +134,42 @@ async fn connect_identify_ready_events() {
     assert!(matches!(event, Event::MessageCreate(_)));
     assert_eq!(h.shard.state(), ShardState::Active);
 
+    let counters = h.shard.status().counters;
+    assert_eq!((counters.identifies, counters.resumes), (1, 0));
+    assert_eq!(counters.dispatches, 2);
+    assert_eq!(counters.dropped_events, 0);
+    assert_eq!(counters.bytes_received, counters.bytes_decompressed);
+    let before = counters.bytes_received;
+    assert!(before > 0);
+
     server.send_zlib(&ready_json("wss://resume.test")).unwrap();
+    let _ = next_ok(&h).await;
+    let counters = h.shard.status().counters;
+    assert_eq!(counters.dispatches, 3);
+    let wire = counters.bytes_received - before;
+    let json = counters.bytes_decompressed - before;
+    assert!(wire > 0 && wire < json, "compressed {wire} vs json {json}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn resume_is_counted() {
+    let mut h = harness();
+    let (_, mut server) = accept(&mut h).await;
+    handshake(&mut server, 45_000, "wss://resume.test").await;
+    let _ = next_ok(&h).await;
+    server.drop_tcp();
+    let (_, mut server) = accept(&mut h).await;
+    server.send_json(hello(45_000));
+    let _ = recv_opcode(&mut server, 6).await;
+    server.send_json(r#"{"op":0,"s":2,"t":"RESUMED","d":null}"#.to_owned());
+    timeout(Duration::from_secs(5), async {
+        while h.shard.status().counters.resumes == 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("resume counted");
+    assert_eq!(h.shard.status().counters.identifies, 1);
 }
 
 #[tokio::test(start_paused = true)]
@@ -781,4 +816,17 @@ fn fatal_close_message_names_the_fix() {
     let text = err.to_string();
     assert!(text.contains("Disallowed intent(s)."), "{text}");
     assert!(text.contains("Privileged Gateway Intents"), "{text}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn decompressed_message_cap_is_configurable() {
+    let mut h = harness_with(|b| b.max_message_bytes(64));
+    let (_, mut server) = accept(&mut h).await;
+    handshake(&mut server, 45_000, "wss://resume.test").await;
+    let _ = next_ok(&h).await;
+    // A compressed MESSAGE_CREATE inflates to more than 64 bytes: the
+    // connection ends and the shard resumes on a new one.
+    server.send_zlib(message_create()).unwrap();
+    let (url, _server) = accept(&mut h).await;
+    assert!(url.contains("resume.test"), "{url}");
 }

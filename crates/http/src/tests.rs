@@ -214,6 +214,11 @@ async fn retries_429_when_wait_under_cap() {
 
     client.get(Route::new("/users/@me")).send().await.unwrap();
     assert_eq!(n.load(Ordering::SeqCst), 2);
+    let m = client.metrics();
+    assert_eq!((m.requests, m.rate_limited_other), (2, 1));
+    assert_eq!(m.invalid_requests_window, 1);
+    // The route's pre-header bucket and the one for its hash `b`.
+    assert_eq!(m.active_buckets, Some(2));
 }
 
 #[tokio::test]
@@ -248,6 +253,7 @@ async fn long_429_returns_rate_limited() {
         }
         other => panic!("unexpected {other:?}"),
     }
+    assert_eq!(client.metrics().rate_limited_global, 1);
 }
 
 #[tokio::test(start_paused = true)]
@@ -417,6 +423,8 @@ async fn shared_429_does_not_trip_guard() {
         matches!(err, HttpError::RateLimited { .. }),
         "shared 429s must not fill the invalid-request guard: {err:?}"
     );
+    let m = client.metrics();
+    assert_eq!((m.rate_limited_shared, m.invalid_requests_window), (2, 0));
 }
 
 #[tokio::test(start_paused = true)]
@@ -556,6 +564,12 @@ async fn load_test_zero_avoidable_429s() {
         avoidable.load(Ordering::SeqCst),
         0,
         "limiter sent a request the mock had to 429"
+    );
+    let m = client.metrics();
+    assert_eq!(m.requests, 2000);
+    assert_eq!(
+        m.rate_limited_user + m.rate_limited_global + m.rate_limited_other,
+        0
     );
 }
 
@@ -1195,4 +1209,51 @@ async fn interaction_client_fills_in_the_application_id() {
         log[3].0,
         "DELETE /api/v10/webhooks/42/tok/messages/@original"
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn metrics_count_user_429_5xx_timeouts_and_transport_errors() {
+    let n = Arc::new(AtomicU32::new(0));
+    let hits = n.clone();
+    let client = Client::builder("t")
+        .max_retries(0)
+        .request_timeout(Duration::from_secs(1))
+        .transport(Arc::new(FnTransport::new(move |_| {
+            let i = hits.fetch_add(1, Ordering::SeqCst);
+            async move {
+                match i {
+                    0 => {
+                        let mut headers = HeaderMap::new();
+                        headers.insert("x-ratelimit-scope", HeaderValue::from_static("user"));
+                        headers.insert("retry-after", HeaderValue::from_static("30"));
+                        Ok(RawResponse {
+                            status: StatusCode::TOO_MANY_REQUESTS,
+                            headers,
+                            body: Bytes::from(r#"{"retry_after":30.0,"global":false}"#),
+                        })
+                    }
+                    1 => Ok(RawResponse {
+                        status: StatusCode::INTERNAL_SERVER_ERROR,
+                        headers: HeaderMap::new(),
+                        body: Bytes::new(),
+                    }),
+                    2 => {
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        Ok(ok_json("{}"))
+                    }
+                    _ => Err(HttpError::validation("connection reset")),
+                }
+            }
+        })))
+        .build()
+        .unwrap();
+    for _ in 0..4 {
+        let _ = client.get(Route::new("/users/@me")).send().await;
+    }
+    let m = client.metrics();
+    assert_eq!(m.requests, 4);
+    assert_eq!(m.rate_limited_user, 1);
+    assert_eq!(m.server_errors, 1);
+    assert_eq!(m.timeouts, 1);
+    assert_eq!(m.transport_errors, 1);
 }

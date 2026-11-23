@@ -63,6 +63,12 @@ pub trait RateLimiter: Send + Sync + 'static {
     /// Return a permit taken by [`acquire`](Self::acquire) when the request failed
     /// before headers (timeout, reset, transport error).
     fn release(&self, route: &Route);
+
+    /// Rate-limit buckets currently tracked, for metrics; `None` when the
+    /// limiter cannot tell (the default).
+    fn bucket_count(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// Default in-process limiter: per-route buckets, global 50 rps, global 429 lock.
@@ -583,6 +589,18 @@ impl RateLimiter for InProcessRateLimiter {
     fn release(&self, route: &Route) {
         self.release_inner(route);
     }
+
+    fn bucket_count(&self) -> Option<usize> {
+        Some(
+            self.shards
+                .iter()
+                .map(|s| {
+                    let inner = s.inner.lock();
+                    inner.buckets.len() + inner.unknown.len()
+                })
+                .sum(),
+        )
+    }
 }
 
 impl fmt::Debug for InProcessRateLimiter {
@@ -632,6 +650,13 @@ impl InvalidRequestGuard {
         } else {
             Ok(())
         }
+    }
+
+    /// Invalid responses in the current 10-minute window.
+    pub(crate) fn window_count(&self) -> u32 {
+        let mut events = self.events.lock();
+        Self::prune_locked(&mut events, Instant::now());
+        u32::try_from(events.len()).unwrap_or(u32::MAX)
     }
 
     pub(crate) fn record(&self) {

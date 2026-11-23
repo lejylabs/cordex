@@ -31,9 +31,9 @@ pub use shard::{GatewayBotSource, Shard, ShardBuilder};
 pub use spawn::{CurrentRuntime, RuntimeHandles, ShardTask, Spawner};
 pub use standby::{STANDBY_STREAM_CAPACITY, Standby};
 pub use types::{
-    Backpressure, CloseMode, DEFAULT_GATEWAY_URL, HEARTBEAT_RESERVE, LIBRARY_NAME, Latency,
-    MAX_PAYLOAD_BYTES, ManagerEvent, OUTBOUND_LIMIT, OUTBOUND_WINDOW, ResumeInfo, ShardId,
-    ShardState, ShardStatus, USER_OUTBOUND_LIMIT,
+    Backpressure, CloseMode, DEFAULT_GATEWAY_URL, DEFAULT_MAX_MESSAGE_BYTES, HEARTBEAT_RESERVE,
+    LIBRARY_NAME, Latency, MAX_PAYLOAD_BYTES, ManagerEvent, OUTBOUND_LIMIT, OUTBOUND_WINDOW,
+    ResumeInfo, ShardCounters, ShardId, ShardState, ShardStatus, USER_OUTBOUND_LIMIT,
 };
 
 #[cfg(test)]

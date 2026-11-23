@@ -24,7 +24,7 @@ use crate::shard::{GatewayBotSource, Shard, ShardBuilder};
 use crate::spawn::{CurrentRuntime, Spawner};
 use crate::types::{
     Backpressure, CloseMode, DEFAULT_EVENT_CAPACITY, DEFAULT_LARGE_THRESHOLD,
-    DEFAULT_MEMBER_TIMEOUT, ManagerEvent, ShardId, ShardStatus,
+    DEFAULT_MAX_MESSAGE_BYTES, DEFAULT_MEMBER_TIMEOUT, ManagerEvent, ShardId, ShardStatus,
 };
 
 enum ShardSpec {
@@ -45,6 +45,7 @@ pub struct ShardManagerBuilder<C: Connector = WsConnector> {
     backpressure: Backpressure,
     event_capacity: usize,
     large_threshold: u8,
+    max_message_bytes: usize,
     presence: Option<UpdatePresence>,
     member_timeout: Duration,
     cancel: CancellationToken,
@@ -83,6 +84,7 @@ struct ShardFactory<C: Connector> {
     backpressure: Backpressure,
     event_capacity: usize,
     large_threshold: u8,
+    max_message_bytes: usize,
     presence: Option<UpdatePresence>,
     member_timeout: Duration,
     cancel: CancellationToken,
@@ -107,6 +109,7 @@ impl ShardManagerBuilder<WsConnector> {
             backpressure: Backpressure::Disconnect,
             event_capacity: DEFAULT_EVENT_CAPACITY,
             large_threshold: DEFAULT_LARGE_THRESHOLD,
+            max_message_bytes: DEFAULT_MAX_MESSAGE_BYTES,
             presence: None,
             member_timeout: DEFAULT_MEMBER_TIMEOUT,
             cancel: CancellationToken::new(),
@@ -145,6 +148,7 @@ impl<C: Connector> ShardManagerBuilder<C> {
             backpressure: self.backpressure,
             event_capacity: self.event_capacity,
             large_threshold: self.large_threshold,
+            max_message_bytes: self.max_message_bytes,
             presence: self.presence,
             member_timeout: self.member_timeout,
             cancel: self.cancel,
@@ -199,6 +203,16 @@ impl<C: Connector> ShardManagerBuilder<C> {
     #[must_use]
     pub fn large_threshold(mut self, threshold: u8) -> Self {
         self.large_threshold = threshold.clamp(50, 250);
+        self
+    }
+
+    /// Cap on one decompressed gateway message (default
+    /// [`DEFAULT_MAX_MESSAGE_BYTES`], 16 MiB). A larger message ends the
+    /// connection, which then reconnects. Raise it only for very large
+    /// guilds whose `GUILD_CREATE` exceeds the default.
+    #[must_use]
+    pub fn max_message_bytes(mut self, bytes: usize) -> Self {
+        self.max_message_bytes = bytes.max(1);
         self
     }
 
@@ -278,6 +292,7 @@ impl<C: Connector> ShardManagerBuilder<C> {
                 backpressure: self.backpressure,
                 event_capacity: self.event_capacity,
                 large_threshold: self.large_threshold,
+                max_message_bytes: self.max_message_bytes,
                 presence: self.presence,
                 member_timeout: self.member_timeout,
                 cancel: self.cancel.clone(),
@@ -324,6 +339,7 @@ impl<C: Connector> ShardFactory<C> {
             .backpressure(self.backpressure)
             .event_capacity(self.event_capacity)
             .large_threshold(self.large_threshold)
+            .max_message_bytes(self.max_message_bytes)
             .member_timeout(self.member_timeout)
             .cancellation_token(self.cancel.child_token())
             .manager_events(self.events.clone())

@@ -10,7 +10,7 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use crate::client::Client;
+use crate::client::{Client, ClientCounters};
 use crate::error::{HttpError, discord_from_body};
 use crate::limiter::{InvalidRequestGuard, PermitGuard, RateLimitScope, parse_secs};
 use crate::multipart::Multipart;
@@ -321,11 +321,16 @@ async fn execute(builder: RequestBuilder) -> Result<Response, HttpError> {
             &query,
         )?;
 
+        ClientCounters::bump(&inner.counters.requests);
         let timed =
             tokio::time::timeout(inner.request_timeout, inner.transport.send(request)).await;
         let raw = match timed {
-            Err(_) => return Err(HttpError::Timeout),
+            Err(_) => {
+                ClientCounters::bump(&inner.counters.timeouts);
+                return Err(HttpError::Timeout);
+            }
             Ok(Err(err)) => {
+                ClientCounters::bump(&inner.counters.transport_errors);
                 if is_idempotent(&route.method) && retries < inner.max_retries {
                     retries += 1;
                     let wait = jittered_backoff(retries - 1);
@@ -348,6 +353,7 @@ async fn execute(builder: RequestBuilder) -> Result<Response, HttpError> {
         }
         drop(permit);
 
+        inner.counters.count_response(&raw);
         if InvalidRequestGuard::is_invalid(raw.status, &raw.headers) {
             inner.guard.record();
         }
@@ -389,5 +395,24 @@ async fn execute(builder: RequestBuilder) -> Result<Response, HttpError> {
         }
 
         return Ok(Response::from_raw(raw));
+    }
+}
+
+impl ClientCounters {
+    /// Count 5xx responses and 429s by scope.
+    fn count_response(&self, raw: &RawResponse) {
+        if raw.status.is_server_error() {
+            Self::bump(&self.server_errors);
+        }
+        if raw.status.as_u16() == 429 {
+            let info = parse_429(raw);
+            let counter = match (&info.scope, info.global) {
+                (_, true) | (Some(RateLimitScope::Global), _) => &self.rate_limited_global,
+                (Some(RateLimitScope::User), _) => &self.rate_limited_user,
+                (Some(RateLimitScope::Shared), _) => &self.rate_limited_shared,
+                _ => &self.rate_limited_other,
+            };
+            Self::bump(counter);
+        }
     }
 }

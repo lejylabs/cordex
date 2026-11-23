@@ -6,6 +6,15 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+- **Metrics getters:** `ShardStatus::counters` (`ShardCounters`: identifies,
+  resumes, dispatches, dropped events, bytes received and decompressed) and
+  `Client::metrics()` (`ClientMetrics`: requests, transport errors,
+  timeouts, 429s by scope, 5xx, invalid-request window, active buckets).
+  `RateLimiter::bucket_count` is a new provided method (default `None`).
+  `ShardStatus` is now `#[non_exhaustive]`.
+- **Configurable decompressed-message cap:** `max_message_bytes` on
+  `ShardBuilder` and `ShardManagerBuilder` (default
+  `DEFAULT_MAX_MESSAGE_BYTES`, 16 MiB).
 - **Faster parsing and caching:** `INTERACTION_CREATE` parses `data` in one
   pass (1.82 → 1.62 µs, 15 → 12 allocations); the cache handles
   `GUILD_CREATE` with one lock per map, reserved capacity and no scan of all

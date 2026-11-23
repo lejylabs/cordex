@@ -7,9 +7,6 @@ use crate::error::GatewayError;
 /// Suffix Discord writes after each zlib-stream payload (`Z_SYNC_FLUSH`).
 pub(crate) const ZLIB_SUFFIX: [u8; 4] = [0, 0, 0xFF, 0xFF];
 
-/// Default cap on one decompressed gateway message.
-pub(crate) const MAX_MESSAGE: usize = 16 * 1024 * 1024;
-
 const SHRINK_AFTER: usize = 1024 * 1024;
 const SHRINK_TO: usize = 8 * 1024;
 
@@ -22,11 +19,13 @@ pub(crate) struct ZlibStream {
 }
 
 impl ZlibStream {
-    /// New context; every connection (including a resume) starts one.
+    /// New context with the default cap (tests; sessions pass their cap).
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
-        Self::with_limit(MAX_MESSAGE)
+        Self::with_limit(crate::types::DEFAULT_MAX_MESSAGE_BYTES)
     }
 
+    /// New context; every connection (including a resume) starts one.
     pub(crate) fn with_limit(max_message: usize) -> Self {
         Self {
             inflate: Decompress::new(true),

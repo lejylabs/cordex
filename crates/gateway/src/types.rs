@@ -30,6 +30,9 @@ pub(crate) const STABLE_ACTIVE: Duration = Duration::from_secs(60);
 pub(crate) const DEFAULT_EVENT_CAPACITY: usize = 1024;
 pub(crate) const DEFAULT_COMMAND_CAPACITY: usize = 32;
 pub(crate) const DEFAULT_LARGE_THRESHOLD: u8 = 50;
+
+/// Default cap on one decompressed gateway message (16 MiB).
+pub const DEFAULT_MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const DEFAULT_MEMBER_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const LATENCY_SAMPLES: usize = 5;
 pub(crate) const PANIC_WINDOW: Duration = Duration::from_secs(600);
@@ -176,6 +179,7 @@ pub enum ManagerEvent {
 
 /// Snapshot of one shard for [`crate::ShardManager::status`].
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ShardStatus {
     /// Shard identity.
     pub id: ShardId,
@@ -189,6 +193,58 @@ pub struct ShardStatus {
     pub guild_count: u32,
     /// Successful reconnects after the first connection.
     pub reconnect_count: u32,
+    /// Counters since the shard was built.
+    pub counters: ShardCounters,
+}
+
+/// Monotonic counters of one shard since it was built (PLAN §15). Read
+/// them periodically and export the differences to your metrics system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct ShardCounters {
+    /// Identify payloads sent (new sessions).
+    pub identifies: u64,
+    /// Sessions resumed (`RESUMED` received).
+    pub resumes: u64,
+    /// Dispatch frames received (opcode 0), filtered ones included.
+    pub dispatches: u64,
+    /// Events dropped by a `DropOldest` / `DropNewest` backpressure policy.
+    pub dropped_events: u64,
+    /// Bytes received on the socket (compressed when zlib-stream is on).
+    pub bytes_received: u64,
+    /// Bytes of JSON after decompression.
+    pub bytes_decompressed: u64,
+}
+
+/// Atomic backing store for [`ShardCounters`].
+#[derive(Debug, Default)]
+pub(crate) struct AtomicCounters {
+    pub identifies: std::sync::atomic::AtomicU64,
+    pub resumes: std::sync::atomic::AtomicU64,
+    pub dispatches: std::sync::atomic::AtomicU64,
+    pub bytes_received: std::sync::atomic::AtomicU64,
+    pub bytes_decompressed: std::sync::atomic::AtomicU64,
+}
+
+impl AtomicCounters {
+    pub(crate) fn add(counter: &std::sync::atomic::AtomicU64, n: usize) {
+        counter.fetch_add(
+            u64::try_from(n).unwrap_or(u64::MAX),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    pub(crate) fn snapshot(&self, dropped_events: u64) -> ShardCounters {
+        use std::sync::atomic::Ordering::Relaxed;
+        ShardCounters {
+            identifies: self.identifies.load(Relaxed),
+            resumes: self.resumes.load(Relaxed),
+            dispatches: self.dispatches.load(Relaxed),
+            dropped_events,
+            bytes_received: self.bytes_received.load(Relaxed),
+            bytes_decompressed: self.bytes_decompressed.load(Relaxed),
+        }
+    }
 }
 
 /// Recent heartbeat round-trips.

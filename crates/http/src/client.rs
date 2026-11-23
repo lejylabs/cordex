@@ -2,7 +2,7 @@
 
 use std::fmt;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use cordex_model::Token;
@@ -62,6 +62,57 @@ pub(crate) struct ClientInner {
     pub guard: InvalidRequestGuard,
     pub poisoned: AtomicBool,
     pub default_allowed_mentions: Option<AllowedMentions>,
+    pub counters: ClientCounters,
+}
+
+/// Atomic backing store for [`ClientMetrics`].
+#[derive(Debug, Default)]
+pub(crate) struct ClientCounters {
+    pub requests: AtomicU64,
+    pub transport_errors: AtomicU64,
+    pub timeouts: AtomicU64,
+    pub rate_limited_user: AtomicU64,
+    pub rate_limited_global: AtomicU64,
+    pub rate_limited_shared: AtomicU64,
+    pub rate_limited_other: AtomicU64,
+    pub server_errors: AtomicU64,
+}
+
+impl ClientCounters {
+    pub(crate) fn bump(counter: &AtomicU64) {
+        counter.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// Counters of one [`Client`] (and its clones) since it was built, plus
+/// the current limiter state (PLAN §15). Read them periodically and
+/// export the differences to your metrics system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct ClientMetrics {
+    /// Requests handed to the transport (each retry counts).
+    pub requests: u64,
+    /// Requests that failed before a response (connection errors).
+    pub transport_errors: u64,
+    /// Requests that hit the request timeout.
+    pub timeouts: u64,
+    /// 429 responses with scope `user` (this bot's own limits).
+    pub rate_limited_user: u64,
+    /// 429 responses with scope `global` (or the global flag).
+    pub rate_limited_global: u64,
+    /// 429 responses with scope `shared` (a shared resource; not counted
+    /// toward the invalid-request window).
+    pub rate_limited_shared: u64,
+    /// 429 responses without or with an unknown scope.
+    pub rate_limited_other: u64,
+    /// 5xx responses.
+    pub server_errors: u64,
+    /// 401/403/429 (non-shared) responses in the current 10-minute window;
+    /// Cloudflare bans at 10 000.
+    pub invalid_requests_window: u32,
+    /// Rate-limit buckets the limiter tracks; `None` for a custom limiter
+    /// that does not report it.
+    pub active_buckets: Option<usize>,
 }
 
 impl Client {
@@ -104,6 +155,25 @@ impl Client {
     /// `DELETE` convenience for [`Client::request`].
     pub fn delete(&self, route: Route) -> RequestBuilder {
         self.request(Method::DELETE, route)
+    }
+
+    /// Counters and limiter state, see [`ClientMetrics`].
+    #[must_use]
+    pub fn metrics(&self) -> ClientMetrics {
+        let c = &self.inner.counters;
+        let load = |a: &AtomicU64| a.load(Ordering::Relaxed);
+        ClientMetrics {
+            requests: load(&c.requests),
+            transport_errors: load(&c.transport_errors),
+            timeouts: load(&c.timeouts),
+            rate_limited_user: load(&c.rate_limited_user),
+            rate_limited_global: load(&c.rate_limited_global),
+            rate_limited_shared: load(&c.rate_limited_shared),
+            rate_limited_other: load(&c.rate_limited_other),
+            server_errors: load(&c.server_errors),
+            invalid_requests_window: self.inner.guard.window_count(),
+            active_buckets: self.inner.limiter.bucket_count(),
+        }
     }
 
     /// Whether a 401 has poisoned this client.
@@ -308,6 +378,7 @@ impl ClientBuilder {
                 guard: InvalidRequestGuard::new(self.invalid_warn_at, self.invalid_reject_at),
                 poisoned: AtomicBool::new(false),
                 default_allowed_mentions: self.default_allowed_mentions,
+                counters: ClientCounters::default(),
             }),
         })
     }

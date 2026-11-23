@@ -22,7 +22,7 @@ use crate::identify::IdentifyQueue;
 use crate::outbound::OutboundLimiter;
 use crate::queue::{EventPipe, Push};
 use crate::types::{
-    Backpressure, CLOSE_TIMEOUT, CloseMode, HELLO_TIMEOUT, LIBRARY_NAME, Latency,
+    AtomicCounters, Backpressure, CLOSE_TIMEOUT, CloseMode, HELLO_TIMEOUT, LIBRARY_NAME, Latency,
     MAX_PAYLOAD_BYTES, ManagerEvent, READY_TIMEOUT, ResumeInfo, STABLE_ACTIVE, ShardId, ShardState,
     ShardStatus, with_gateway_query,
 };
@@ -55,6 +55,7 @@ pub(crate) struct Shared<C> {
     pub event_types: EventTypeFlags,
     pub backpressure: Backpressure,
     pub large_threshold: u8,
+    pub max_message_bytes: usize,
     pub presence: Option<cordex_model::gateway::presence::UpdatePresence>,
     pub member_timeout: Duration,
     pub cancel: CancellationToken,
@@ -65,6 +66,7 @@ pub(crate) struct Shared<C> {
     pub last_ack: Mutex<Option<Instant>>,
     pub guild_count: AtomicU32,
     pub reconnects: AtomicU32,
+    pub counters: AtomicCounters,
     pub manager_tx: Option<tokio::sync::mpsc::Sender<ManagerEvent>>,
 }
 
@@ -97,6 +99,7 @@ impl<C> Shared<C> {
             last_heartbeat_ack,
             guild_count: self.guild_count.load(Ordering::Relaxed),
             reconnect_count: self.reconnects.load(Ordering::Relaxed),
+            counters: self.counters.snapshot(self.events.dropped()),
         }
     }
 
@@ -365,7 +368,7 @@ async fn run_session<C: Connector>(
     let mut sess = Session {
         shared: &*shared,
         conn: &mut conn,
-        zlib: ZlibStream::new(),
+        zlib: ZlibStream::with_limit(shared.max_message_bytes),
         outbound: OutboundLimiter::new(),
         seq: shared.resume_info().map(|i| i.seq),
         next_heartbeat: None,
@@ -483,21 +486,32 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
                 Some(self.reconnect_end(self.shared.resume_info().is_some(), true))
             }
             Ok(Some(Incoming::Close { code, reason })) => Some(self.on_close(code, &reason)),
-            Ok(Some(Incoming::Text(text))) => self.on_json(&text).await,
-            Ok(Some(Incoming::Binary(bytes))) => match self.zlib.push(&bytes) {
-                Err(err) => {
-                    tracing::error!(shard = self.shared.shard.number(), %err, "zlib");
-                    Some(self.reconnect_close_now(true, true).await)
-                }
-                Ok(messages) => {
-                    for json in messages {
-                        if let Some(end) = self.on_json(&json).await {
-                            return Some(end);
-                        }
+            Ok(Some(Incoming::Text(text))) => {
+                AtomicCounters::add(&self.shared.counters.bytes_received, text.len());
+                AtomicCounters::add(&self.shared.counters.bytes_decompressed, text.len());
+                self.on_json(&text).await
+            }
+            Ok(Some(Incoming::Binary(bytes))) => {
+                AtomicCounters::add(&self.shared.counters.bytes_received, bytes.len());
+                match self.zlib.push(&bytes) {
+                    Err(err) => {
+                        tracing::error!(shard = self.shared.shard.number(), %err, "zlib");
+                        Some(self.reconnect_close_now(true, true).await)
                     }
-                    None
+                    Ok(messages) => {
+                        for json in messages {
+                            AtomicCounters::add(
+                                &self.shared.counters.bytes_decompressed,
+                                json.len(),
+                            );
+                            if let Some(end) = self.on_json(&json).await {
+                                return Some(end);
+                            }
+                        }
+                        None
+                    }
                 }
-            },
+            }
         }
     }
 
@@ -539,7 +553,10 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
             }
         };
         match envelope.op {
-            OpCode::Dispatch => self.on_dispatch(&envelope),
+            OpCode::Dispatch => {
+                AtomicCounters::add(&self.shared.counters.dispatches, 1);
+                self.on_dispatch(&envelope)
+            }
             OpCode::Heartbeat => self.send_heartbeat().await,
             OpCode::Reconnect => {
                 tracing::info!(shard = self.shared.shard.number(), "opcode 7 reconnect");
@@ -634,6 +651,7 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
             return None;
         }
         if name == "RESUMED" {
+            AtomicCounters::add(&self.shared.counters.resumes, 1);
             self.shared.set_state(ShardState::Active);
             self.phase_deadline = None;
             self.active_since = Some(Instant::now());
@@ -767,6 +785,7 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
         if let Some(end) = self.send_user_now().await {
             return Some(end);
         }
+        AtomicCounters::add(&self.shared.counters.identifies, 1);
         self.phase_deadline = Some(Instant::now() + READY_TIMEOUT);
         None
     }
