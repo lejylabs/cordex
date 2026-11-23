@@ -26,7 +26,10 @@ use crate::types::{
     MAX_PAYLOAD_BYTES, ManagerEvent, READY_TIMEOUT, ResumeInfo, STABLE_ACTIVE, ShardId, ShardState,
     ShardStatus, with_gateway_query,
 };
+#[cfg(not(feature = "zstd-stream"))]
 use crate::zlib::ZlibStream;
+#[cfg(feature = "zstd-stream")]
+use crate::zstd_stream::ZstdStream;
 use cordex_model::Token;
 
 pub(crate) enum UserCommand {
@@ -147,7 +150,10 @@ struct PendingMembers {
 struct Session<'a, C: Connector, Conn> {
     shared: &'a Shared<C>,
     conn: &'a mut Conn,
+    #[cfg(not(feature = "zstd-stream"))]
     zlib: ZlibStream,
+    #[cfg(feature = "zstd-stream")]
+    zstd: ZstdStream,
     outbound: OutboundLimiter,
     seq: Option<u64>,
     next_heartbeat: Option<Instant>,
@@ -365,11 +371,19 @@ async fn run_session<C: Connector>(
         }
     };
 
+    #[cfg(feature = "zstd-stream")]
+    let zstd = match ZstdStream::with_limit(shared.max_message_bytes) {
+        Ok(stream) => stream,
+        Err(err) => return SessionEnd::Fatal(err),
+    };
     shared.set_state(ShardState::AwaitingHello);
     let mut sess = Session {
         shared: &*shared,
         conn: &mut conn,
+        #[cfg(not(feature = "zstd-stream"))]
         zlib: ZlibStream::with_limit(shared.max_message_bytes),
+        #[cfg(feature = "zstd-stream")]
+        zstd,
         outbound: OutboundLimiter::new(),
         seq: shared.resume_info().map(|i| i.seq),
         next_heartbeat: None,
@@ -499,57 +513,84 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
                 }
                 self.on_json(&text).await
             }
-            Ok(Some(Incoming::Binary(bytes))) => {
-                AtomicCounters::add(&self.shared.counters.bytes_received, bytes.len());
+            Ok(Some(Incoming::Binary(bytes))) => self.on_binary(&bytes).await,
+        }
+    }
+
+    async fn on_binary(&mut self, bytes: &[u8]) -> Option<SessionEnd> {
+        AtomicCounters::add(&self.shared.counters.bytes_received, bytes.len());
+        #[cfg(feature = "metrics")]
+        metrics::counter!("cordex_gateway_bytes_received_total")
+            .increment(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+        #[cfg(feature = "zstd-stream")]
+        {
+            let mut out = std::mem::take(&mut self.zlib_out);
+            if let Err(err) = self.zstd.decompress_into(bytes, &mut out) {
+                crate::zlib::shrink_output(&mut out);
+                self.zlib_out = out;
+                tracing::error!(shard = self.shared.shard.number(), %err, "zstd");
+                Some(self.reconnect_close_now(true, true).await)
+            } else {
+                AtomicCounters::add(&self.shared.counters.bytes_decompressed, out.len());
                 #[cfg(feature = "metrics")]
-                metrics::counter!("cordex_gateway_bytes_received_total")
-                    .increment(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
-                // Fast path: 99.9% of frames are a single complete zlib-stream
-                // message; inflate straight into the reused `zlib_out` buffer
-                // with zero extra copies or heap allocations.
-                let mut out = std::mem::take(&mut self.zlib_out);
-                match self.zlib.try_inflate_single(&bytes, &mut out) {
-                    Err(err) => {
-                        crate::zlib::shrink_output(&mut out);
-                        self.zlib_out = out;
-                        tracing::error!(shard = self.shared.shard.number(), %err, "zlib");
-                        Some(self.reconnect_close_now(true, true).await)
-                    }
-                    Ok(true) => {
-                        AtomicCounters::add(&self.shared.counters.bytes_decompressed, out.len());
-                        #[cfg(feature = "metrics")]
-                        metrics::counter!("cordex_gateway_bytes_decompressed_total")
-                            .increment(u64::try_from(out.len()).unwrap_or(u64::MAX));
-                        let end = match std::str::from_utf8(&out) {
-                            Ok(json) => self.on_json(json).await,
-                            Err(_) => None,
-                        };
-                        crate::zlib::shrink_output(&mut out);
-                        self.zlib_out = out;
-                        end
-                    }
-                    Ok(false) => {
-                        self.zlib_out = out;
-                        match self.zlib.push(&bytes) {
-                            Err(err) => {
-                                tracing::error!(shard = self.shared.shard.number(), %err, "zlib");
-                                Some(self.reconnect_close_now(true, true).await)
-                            }
-                            Ok(messages) => {
-                                for json in messages {
-                                    AtomicCounters::add(
-                                        &self.shared.counters.bytes_decompressed,
-                                        json.len(),
-                                    );
-                                    #[cfg(feature = "metrics")]
-                                    metrics::counter!("cordex_gateway_bytes_decompressed_total")
-                                        .increment(u64::try_from(json.len()).unwrap_or(u64::MAX));
-                                    if let Some(end) = self.on_json(&json).await {
-                                        return Some(end);
-                                    }
+                metrics::counter!("cordex_gateway_bytes_decompressed_total")
+                    .increment(u64::try_from(out.len()).unwrap_or(u64::MAX));
+                let end = match std::str::from_utf8(&out) {
+                    Ok(json) => self.on_json(json).await,
+                    Err(_) => None,
+                };
+                crate::zlib::shrink_output(&mut out);
+                self.zlib_out = out;
+                end
+            }
+        }
+        #[cfg(not(feature = "zstd-stream"))]
+        {
+            // Fast path: 99.9% of frames are a single complete zlib-stream
+            // message; inflate straight into the reused `zlib_out` buffer
+            // with zero extra copies or heap allocations.
+            let mut out = std::mem::take(&mut self.zlib_out);
+            match self.zlib.try_inflate_single(bytes, &mut out) {
+                Err(err) => {
+                    crate::zlib::shrink_output(&mut out);
+                    self.zlib_out = out;
+                    tracing::error!(shard = self.shared.shard.number(), %err, "zlib");
+                    Some(self.reconnect_close_now(true, true).await)
+                }
+                Ok(true) => {
+                    AtomicCounters::add(&self.shared.counters.bytes_decompressed, out.len());
+                    #[cfg(feature = "metrics")]
+                    metrics::counter!("cordex_gateway_bytes_decompressed_total")
+                        .increment(u64::try_from(out.len()).unwrap_or(u64::MAX));
+                    let end = match std::str::from_utf8(&out) {
+                        Ok(json) => self.on_json(json).await,
+                        Err(_) => None,
+                    };
+                    crate::zlib::shrink_output(&mut out);
+                    self.zlib_out = out;
+                    end
+                }
+                Ok(false) => {
+                    self.zlib_out = out;
+                    match self.zlib.push(bytes) {
+                        Err(err) => {
+                            tracing::error!(shard = self.shared.shard.number(), %err, "zlib");
+                            Some(self.reconnect_close_now(true, true).await)
+                        }
+                        Ok(messages) => {
+                            for json in messages {
+                                AtomicCounters::add(
+                                    &self.shared.counters.bytes_decompressed,
+                                    json.len(),
+                                );
+                                #[cfg(feature = "metrics")]
+                                metrics::counter!("cordex_gateway_bytes_decompressed_total")
+                                    .increment(u64::try_from(json.len()).unwrap_or(u64::MAX));
+                                if let Some(end) = self.on_json(&json).await {
+                                    return Some(end);
                                 }
-                                None
                             }
+                            None
                         }
                     }
                 }

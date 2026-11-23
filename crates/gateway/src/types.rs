@@ -273,12 +273,16 @@ impl Latency {
     }
 }
 
-/// Attach the v10 JSON zlib-stream query string to a gateway base URL.
+/// Attach the v10 JSON transport-compression query string to a gateway base URL.
 pub(crate) fn with_gateway_query(url: &str) -> String {
     let without_query = url.split_once('?').map_or(url, |(head, _)| head);
     let without_query = without_query.trim_end_matches('/');
+    #[cfg(feature = "zstd-stream")]
+    let compress = "zstd-stream";
+    #[cfg(not(feature = "zstd-stream"))]
+    let compress = "zlib-stream";
     format!(
-        "{without_query}/?v={}&encoding=json&compress=zlib-stream",
+        "{without_query}/?v={}&encoding=json&compress={compress}",
         cordex_model::API_VERSION
     )
 }
@@ -297,13 +301,17 @@ mod tests {
 
     #[test]
     fn query_replaces_existing() {
+        #[cfg(feature = "zstd-stream")]
+        let expected_compress = "zstd-stream";
+        #[cfg(not(feature = "zstd-stream"))]
+        let expected_compress = "zlib-stream";
         assert_eq!(
             with_gateway_query("wss://gateway.discord.gg"),
-            "wss://gateway.discord.gg/?v=10&encoding=json&compress=zlib-stream"
+            format!("wss://gateway.discord.gg/?v=10&encoding=json&compress={expected_compress}")
         );
         assert_eq!(
             with_gateway_query("wss://resume.discord.gg/?foo=1"),
-            "wss://resume.discord.gg/?v=10&encoding=json&compress=zlib-stream"
+            format!("wss://resume.discord.gg/?v=10&encoding=json&compress={expected_compress}")
         );
     }
 }

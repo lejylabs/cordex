@@ -36,6 +36,7 @@ cargo generate lejylabs/cordex-template
 | `interactions-verify` | no | Ed25519 `verify_signature()` for any web framework |
 | `interactions-server` | no | Standalone Hyper HTTP interaction endpoint |
 | `metrics` | no | Export HTTP and gateway counters through the `metrics` crate |
+| `zstd-stream` | no | Use `zstd-stream` gateway compression instead of pure-Rust `zlib-stream` (requires a C compiler) |
 
 ## Quick start
 

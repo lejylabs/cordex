@@ -107,6 +107,27 @@ impl MockServer {
         Ok(())
     }
 
+    /// Send JSON as a zstd-stream binary frame.
+    #[cfg(feature = "zstd-stream")]
+    pub fn send_zstd(&self, json: &str) -> Result<(), GatewayError> {
+        let bin = crate::zstd_stream::compress_json(json.as_bytes())?;
+        let _ = self.tx.send(Incoming::Binary(Bytes::from(bin)));
+        Ok(())
+    }
+
+    /// Send JSON compressed with whichever transport compression is compiled in
+    /// (`zstd-stream` when that feature is enabled, otherwise `zlib-stream`).
+    pub fn send_compressed(&self, json: &str) -> Result<(), GatewayError> {
+        #[cfg(feature = "zstd-stream")]
+        {
+            self.send_zstd(json)
+        }
+        #[cfg(not(feature = "zstd-stream"))]
+        {
+            self.send_zlib(json)
+        }
+    }
+
     /// Send a close frame.
     pub fn send_close(&self, code: u16, reason: &str) {
         let _ = self.tx.send(Incoming::Close {

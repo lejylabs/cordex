@@ -46,6 +46,8 @@ interactions-verify = ["interactions", "cordex-interactions/verify"]
 interactions-server = ["interactions-verify", "cordex-interactions/server"]
 # Export HTTP and gateway counters through the `metrics` crate.
 metrics = ["cordex-http?/metrics", "cordex-gateway?/metrics"]
+# Use zstd-stream gateway transport compression instead of zlib-stream (requires a C compiler).
+zstd-stream = ["cordex-gateway?/zstd-stream"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }

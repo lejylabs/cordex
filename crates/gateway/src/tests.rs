@@ -125,6 +125,9 @@ async fn connect_identify_ready_events() {
     let (url, mut server) = accept(&mut h).await;
     assert!(url.contains("v=10"));
     assert!(url.contains("encoding=json"));
+    #[cfg(feature = "zstd-stream")]
+    assert!(url.contains("compress=zstd-stream"));
+    #[cfg(not(feature = "zstd-stream"))]
     assert!(url.contains("compress=zlib-stream"));
     handshake(&mut server, 45_000, "wss://resume.test").await;
     let event = next_ok(&h).await;
@@ -142,7 +145,9 @@ async fn connect_identify_ready_events() {
     let before = counters.bytes_received;
     assert!(before > 0);
 
-    server.send_zlib(&ready_json("wss://resume.test")).unwrap();
+    server
+        .send_compressed(&ready_json("wss://resume.test"))
+        .unwrap();
     let _ = next_ok(&h).await;
     let counters = h.shard.status().counters;
     assert_eq!(counters.dispatches, 3);
@@ -826,7 +831,7 @@ async fn decompressed_message_cap_is_configurable() {
     let _ = next_ok(&h).await;
     // A compressed MESSAGE_CREATE inflates to more than 64 bytes: the
     // connection ends and the shard resumes on a new one.
-    server.send_zlib(message_create()).unwrap();
+    server.send_compressed(message_create()).unwrap();
     let (url, _server) = accept(&mut h).await;
     assert!(url.contains("resume.test"), "{url}");
 }

@@ -32,6 +32,10 @@ pub enum GatewayError {
     /// zlib-stream inflate failed or a message exceeded the size cap.
     #[error("zlib: {0}")]
     Zlib(Box<str>),
+    /// zstd-stream decompression failed or a message exceeded the size cap.
+    #[cfg(feature = "zstd-stream")]
+    #[error("zstd: {0}")]
+    Zstd(Box<str>),
     /// A gateway payload was not valid JSON.
     #[error("failed to parse gateway payload")]
     Deserialize {
@@ -93,6 +97,11 @@ impl GatewayError {
 
     pub(crate) fn zlib(err: impl fmt::Display) -> Self {
         Self::Zlib(err.to_string().into_boxed_str())
+    }
+
+    #[cfg(feature = "zstd-stream")]
+    pub(crate) fn zstd(err: impl fmt::Display) -> Self {
+        Self::Zstd(err.to_string().into_boxed_str())
     }
 
     pub(crate) fn validation(msg: impl Into<Box<str>>) -> Self {

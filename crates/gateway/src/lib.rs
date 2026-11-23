@@ -17,6 +17,9 @@ mod standby;
 mod types;
 #[doc(hidden)]
 pub mod zlib;
+#[cfg(feature = "zstd-stream")]
+#[doc(hidden)]
+pub mod zstd_stream;
 
 pub use connection::{
     Connector, DEFAULT_MAX_FRAME_BYTES, Incoming, Outgoing, WsConnection, WsConnector,

@@ -195,6 +195,7 @@ Most bots only need `cordex`. The parts work on their own too:
 | `interactions-verify` | no | `verify_signature()` for HTTP interactions in any web framework |
 | `interactions-server` | no | Standalone hyper endpoint for HTTP interactions |
 | `metrics` | no | Export HTTP and gateway counters through the `metrics` crate |
+| `zstd-stream` | no | Use `zstd-stream` gateway compression instead of pure-Rust `zlib-stream` (requires a C compiler) |
 
 TLS uses rustls with aws-lc-rs and the platform certificate verifier. The
 library sets no global allocator; applications may use `mimalloc`.

@@ -17,10 +17,13 @@ workspace = true
 [features]
 # Export shard counters through the `metrics` crate.
 metrics = ["dep:metrics"]
+# Use zstd-stream transport compression instead of zlib-stream (requires a C compiler).
+zstd-stream = ["dep:zstd"]
 
 [dependencies]
 cordex-model.workspace = true
 metrics = { workspace = true, optional = true }
+zstd = { workspace = true, optional = true }
 cordex-http = { workspace = true, default-features = false }
 bitflags.workspace = true
 tokio.workspace = true

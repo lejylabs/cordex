@@ -6,6 +6,7 @@ All notable changes are listed here. The project follows
 
 ## 0.1.3 - 2026-11-23
 
+- **Optional `zstd-stream` gateway compression (`cordex-gateway`, `cordex`):** opt-in `zstd-stream` feature switches gateway transport compression from pure-Rust `zlib-stream` to `zstd-stream` via `zstd` (lower bandwidth and faster decompression; requires a C compiler to build `libzstd`, off by default).
 - **Ergonomics additions (`cordex`, `cordex-http`, `cordex-model`):**
   - **Shared bot state:** `Bot::data(value)` and `Context::data::<T>() -> Option<&T>` store arbitrary `Send + Sync + 'static` state by type without extra locking.
   - **Global error handler & pre-command hook:** `Bot::on_error(|ctx, err| ...)` catches every handler `Err` centrally; `Bot::before_command(|ctx| ...)` runs before every command handler (return `Ok(false)` to block execution).
