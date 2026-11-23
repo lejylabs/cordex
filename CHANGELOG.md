@@ -4,7 +4,12 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
-## Unreleased
+## 0.1.0-beta.4 - 2026-11-23
+
+Coverage against the official docs (`discord-api-docs@9b737ec51ee8`, see
+`docs/coverage.md`): REST endpoints 194/238 (beta.3: 77), gateway receive
+events 71/82, gateway opcodes, close codes, component types and enum values
+100 %; object fields and bitflags are not measured yet.
 
 - `cordex-http`: 43 more REST endpoints (REST coverage 77 → 120 of 238):
   channel invites, typing, followers, voice channel status, group DM
@@ -26,6 +31,9 @@ All notable changes are listed here. The project follows
   SKU subscriptions, current application (get, edit), activity instances,
   role connection metadata, poll answer voters and ending polls. Upload sizes
   (emoji 256 KiB, sticker and sound 512 KiB) are checked before sending.
+- Docs watch: the daily workflow opens an issue with a checklist of new and
+  removed endpoints, events and enum values plus the changed bot API pages;
+  `cargo xtask coverage` downloads the docs as a tarball by commit hash.
 - `cordex-http`: request builder types are exported from `cordex_http::endpoint`.
 - `cordex-model`: `Sku`/`SkuType`, `Subscription`/`SubscriptionStatus`,
   `StickerPack`, `RoleConnectionMetadata`/`RoleConnectionMetadataType`,
