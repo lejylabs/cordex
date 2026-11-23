@@ -621,7 +621,10 @@ fn interaction_member_is_cached() {
         "version": 1, "guild_id": id(GUILD), "member": member(777),
         "data": {"id": id(3), "name": "perms", "type": 1}});
     cache.update(&ev("INTERACTION_CREATE", &interaction));
-    assert_eq!(cache.member(g, carol).unwrap().nick.as_deref(), Some("nick"));
+    assert_eq!(
+        cache.member(g, carol).unwrap().nick.as_deref(),
+        Some("nick")
+    );
 
     // DMs (no guild) and a disabled member resource store nothing.
     let mut dm = interaction.clone();

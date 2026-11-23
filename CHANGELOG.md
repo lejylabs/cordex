@@ -12,6 +12,13 @@ All notable changes are listed here. The project follows
   `ModalContext::checked(id)`; a radio group's choice is read with
   `ModalContext::value(id)` (Discord sends one `value`, not `values`).
   Found in the live test.
+- **Fix: `cache.permissions` failed with "member is not cached"** for the
+  user of a command. Without the presences intent `GUILD_CREATE` carries
+  almost no members; the cache (with `MEMBERS` on) now stores the invoking
+  member of every guild interaction.
+- **`Bot::register_commands(false)`** switches the automatic command
+  registration off, for commands registered elsewhere (deploy step, another
+  process of the same application).
 - **Benchmarks:** `cargo xtask bench` runs criterion benches (gateway parsing,
   filtered events, cache update and lookup) and a dhat allocation bench, and
   compares with `benches/baseline.json` (warning at > 10 % slower). Results
