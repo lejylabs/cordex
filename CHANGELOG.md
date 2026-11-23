@@ -4,7 +4,13 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
-## Unreleased
+## 0.1.0 - 2026-11-23
+
+First regular release. Covers 100 % of the measured official bot API
+(`docs/coverage.md`: endpoints, gateway events, opcodes, close codes, enum
+values, object fields and flags against `discord-api-docs@9b737ec51ee8`).
+From here on normal SemVer for `0.x`: a minor release may break the API, a
+patch release never does. Changes since `0.1.0-beta.4`:
 
 - **Metrics getters:** `ShardStatus::counters` (`ShardCounters`: identifies,
   resumes, dispatches, dropped events, bytes received and decompressed) and

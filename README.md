@@ -7,8 +7,9 @@ It covers the whole official bot API — gateway, sharding, REST, interactions,
 an optional cache — and adds a simple layer, so a working bot takes a few
 lines. Low-level access stays available, but you never need it.
 
-> **Beta.** The API can still change between `0.x` releases (see the
-> [changelog]). `0.1.0` is the first regular release. Coverage of the
+> **`0.1.0` is the first regular release.** Before `1.0` a minor release
+> (`0.2.0`, …) may break the API; a patch release never does (see the
+> [changelog]). Coverage of the
 > official docs is measured, not estimated: [`docs/coverage.md`][coverage]
 > (currently 100 % of all endpoints, events, opcodes, enum values, object
 > fields and flags).
@@ -19,7 +20,7 @@ Questions, feedback or help: join the [cordex Discord server][discord link].
 
 ```toml
 [dependencies]
-cordex = "0.1.0-beta.4"
+cordex = "0.1.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
