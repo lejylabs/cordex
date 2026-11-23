@@ -204,7 +204,7 @@ pub use lobby::{
     LobbyMemberWrite, ModifyLobby, SendLobbyMessage,
 };
 pub use message::GetReactions;
-pub use message::{CreateMessage, EditMessage, GetChannelMessages};
+pub use message::{CreateMessage, EditMessage, GetChannelMessages, MessageHistory};
 pub use misc::{
     AuthorizationInfo, MAX_TARGET_USERS_BULK, SearchGuildMessages, SearchResult, SearchResults,
     TargetUsersJob, UpdateCurrentVoiceState, UpdateGuildTemplate, UpdateVoiceState,

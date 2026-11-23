@@ -1327,3 +1327,39 @@ async fn forward_message_sends_forward_reference() {
     assert_eq!(sent["message_reference"]["channel_id"], "10");
     assert_eq!(sent["message_reference"]["message_id"], "20");
 }
+
+#[tokio::test]
+async fn messages_iter_paginates_backwards_with_limit() {
+    let calls = Arc::new(AtomicU32::new(0));
+    let calls_tx = calls.clone();
+    let client = Client::builder("t")
+        .transport(Arc::new(FnTransport::new(move |req: http::Request<Bytes>| {
+            let n = calls_tx.fetch_add(1, Ordering::SeqCst);
+            let query = req.uri().query().unwrap_or("").to_owned();
+            async move {
+                let json = match n {
+                    0 => {
+                        assert!(query.contains("limit=2"), "{query}");
+                        r#"[
+                            {"id":"200","channel_id":"5","author":{"id":"1","username":"b","discriminator":"0","avatar":null},"content":"a","timestamp":"2026-01-01T00:00:00Z","tts":false,"mention_everyone":false,"mentions":[],"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0},
+                            {"id":"199","channel_id":"5","author":{"id":"1","username":"b","discriminator":"0","avatar":null},"content":"b","timestamp":"2026-01-01T00:00:00Z","tts":false,"mention_everyone":false,"mentions":[],"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0}
+                        ]"#
+                    }
+                    _ => "[]",
+                };
+                Ok(ok_json(json))
+            }
+        })))
+        .build()
+        .unwrap();
+
+    let mut iter = client
+        .messages_iter(cordex_model::id::Id::new(5).unwrap())
+        .limit(2);
+    let mut ids = Vec::new();
+    while let Some(msg) = iter.next().await {
+        ids.push(msg.unwrap().id.get());
+    }
+    assert_eq!(ids, vec![200, 199]);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}

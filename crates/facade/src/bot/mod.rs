@@ -50,7 +50,10 @@
 //! `ctx.handle()`, [`on_event`](Bot::on_event) for any event.
 
 mod context;
+mod cooldown;
 mod sync;
+
+pub use cooldown::Cooldowns;
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -155,6 +158,7 @@ pub struct Bot {
     error_message: Option<Box<str>>,
     auto_defer: bool,
     default_allowed_mentions: Option<AllowedMentions>,
+    presence: Option<cordex_model::gateway::presence::UpdatePresence>,
     extra_events: EventTypeFlags,
     reshard_interval: Option<Duration>,
     #[cfg(feature = "cache")]
@@ -186,6 +190,7 @@ impl Bot {
             error_message: Some(DEFAULT_ERROR_MESSAGE.into()),
             auto_defer: true,
             default_allowed_mentions: None,
+            presence: None,
             extra_events: EventTypeFlags::empty(),
             reshard_interval: Some(DEFAULT_RESHARD_INTERVAL),
             #[cfg(feature = "cache")]
@@ -196,6 +201,13 @@ impl Bot {
     /// Mentions applied to every message that does not set its own.
     pub fn default_allowed_mentions(mut self, mentions: AllowedMentions) -> Self {
         self.default_allowed_mentions = Some(mentions);
+        self
+    }
+
+    /// Initial presence sent with `IDENTIFY` on every shard (also preserved
+    /// across automatic reshards).
+    pub fn presence(mut self, presence: cordex_model::gateway::presence::UpdatePresence) -> Self {
+        self.presence = Some(presence);
         self
     }
 
@@ -474,8 +486,16 @@ impl Bot {
         let http = http.build()?;
         let event_types = self.event_types();
         let fixed_shards = self.shards;
-        let mut manager =
-            build_manager(&self.token, self.intents, &http, event_types, fixed_shards).await?;
+        let presence = self.presence;
+        let mut manager = build_manager(
+            &self.token,
+            self.intents,
+            &http,
+            event_types,
+            fixed_shards,
+            presence.clone(),
+        )
+        .await?;
         let mut events = manager.events();
 
         let shared = Arc::new(Shared {
@@ -508,6 +528,7 @@ impl Bot {
                 self.token.clone(),
                 self.intents,
                 event_types,
+                presence,
                 interval,
                 switch_tx,
             ));
@@ -552,7 +573,7 @@ async fn shutdown_signal() {
         let mut term = signal(SignalKind::terminate()).ok();
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {}
-            _ = async {
+            () = async {
                 if let Some(s) = term.as_mut() {
                     let _ = s.recv().await;
                 } else {
@@ -617,10 +638,14 @@ async fn build_manager(
     http: &Client,
     event_types: EventTypeFlags,
     fixed_shards: Option<u32>,
+    presence: Option<cordex_model::gateway::presence::UpdatePresence>,
 ) -> Result<ShardManager> {
-    let builder = ShardManager::builder(token, intents)
+    let mut builder = ShardManager::builder(token, intents)
         .http(http.clone())
         .event_types(event_types);
+    if let Some(presence) = presence {
+        builder = builder.presence(presence);
+    }
     let builder = match fixed_shards {
         Some(n) => builder.shards(0..n, n),
         None => builder.automatic(),
@@ -643,6 +668,7 @@ async fn reshard_loop(
     token: String,
     intents: Intents,
     event_types: EventTypeFlags,
+    presence: Option<cordex_model::gateway::presence::UpdatePresence>,
     interval: Duration,
     switch: tokio::sync::mpsc::Sender<Reshard>,
 ) {
@@ -660,7 +686,7 @@ async fn reshard_loop(
             continue;
         }
         tracing::info!(running, recommended = info.shards, "resharding");
-        match prepare_reshard(&shared.http, &token, intents, event_types).await {
+        match prepare_reshard(&shared.http, &token, intents, event_types, presence.clone()).await {
             Ok(next) => {
                 if switch.send(next).await.is_err() {
                     return; // the bot stopped
@@ -692,8 +718,9 @@ async fn prepare_reshard(
     token: &str,
     intents: Intents,
     event_types: EventTypeFlags,
+    presence: Option<cordex_model::gateway::presence::UpdatePresence>,
 ) -> Result<Reshard> {
-    let mut manager = build_manager(token, intents, http, event_types, None).await?;
+    let mut manager = build_manager(token, intents, http, event_types, None, presence).await?;
     let mut events = manager.events();
     manager.start().await?;
     let total = manager.total_shards();

@@ -73,6 +73,78 @@ pub struct EditMessage {
     reason: Option<String>,
 }
 
+/// Async paginator over a channel's message history, from [`Client::messages_iter`].
+pub struct MessageHistory {
+    client: Client,
+    channel_id: Id<ChannelMarker>,
+    before: Option<Id<MessageMarker>>,
+    remaining: Option<usize>,
+    buffer: std::collections::VecDeque<Message>,
+    done: bool,
+}
+
+impl MessageHistory {
+    /// Start fetching messages before this message ID.
+    #[must_use]
+    pub fn before(mut self, id: Id<MessageMarker>) -> Self {
+        self.before = Some(id);
+        self
+    }
+
+    /// Stop after yielding at most `max` messages.
+    #[must_use]
+    pub fn limit(mut self, max: usize) -> Self {
+        self.remaining = Some(max);
+        self
+    }
+
+    /// Next message (newest to oldest), fetching another page when needed.
+    pub async fn next(&mut self) -> Option<Result<Message, HttpError>> {
+        if let Some(0) = self.remaining {
+            return None;
+        }
+        if let Some(msg) = self.buffer.pop_front() {
+            if let Some(rem) = &mut self.remaining {
+                *rem = rem.saturating_sub(1);
+            }
+            return Some(Ok(msg));
+        }
+        if self.done {
+            return None;
+        }
+        let page_size = self
+            .remaining
+            .map_or(100_u8, |r| u8::try_from(r.min(100)).unwrap_or(100));
+        let mut req = self
+            .client
+            .get_channel_messages(self.channel_id)
+            .limit(page_size);
+        if let Some(before) = self.before {
+            req = req.before(before);
+        }
+        match req.send().await {
+            Ok(page) => {
+                if page.len() < usize::from(page_size) {
+                    self.done = true;
+                }
+                if let Some(last) = page.last() {
+                    self.before = Some(last.id);
+                }
+                self.buffer.extend(page);
+                let msg = self.buffer.pop_front()?;
+                if let Some(rem) = &mut self.remaining {
+                    *rem = rem.saturating_sub(1);
+                }
+                Some(Ok(msg))
+            }
+            Err(err) => {
+                self.done = true;
+                Some(Err(err))
+            }
+        }
+    }
+}
+
 /// `GET /channels/{channel_id}/messages`.
 pub struct GetChannelMessages {
     client: Client,
@@ -135,6 +207,25 @@ impl Client {
             after: None,
             around: None,
         }
+    }
+
+    /// Paginate backwards through a channel's message history in batches of
+    /// up to 100 messages.
+    pub fn messages_iter(&self, channel_id: Id<ChannelMarker>) -> MessageHistory {
+        MessageHistory {
+            client: self.clone(),
+            channel_id,
+            before: None,
+            remaining: None,
+            buffer: std::collections::VecDeque::new(),
+            done: false,
+        }
+    }
+
+    /// Keep Discord's "bot is typing…" indicator active in `channel_id` until
+    /// the returned [`Typing`](crate::Typing) guard is dropped.
+    pub fn start_typing(&self, channel_id: Id<ChannelMarker>) -> crate::Typing {
+        crate::Typing::start(self.clone(), channel_id)
     }
 
     /// Edit a message the bot sent: `PATCH /channels/{channel_id}/messages/{message_id}`.

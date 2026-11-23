@@ -167,6 +167,23 @@ impl Context {
             .await?)
     }
 
+    /// Keep Discord's "bot is typing…" indicator active in `channel_id` until
+    /// the returned [`Typing`](cordex_http::Typing) guard is dropped.
+    pub fn start_typing(&self, channel_id: Id<ChannelMarker>) -> cordex_http::Typing {
+        self.http().start_typing(channel_id)
+    }
+
+    /// Update the bot's presence on the shard that delivered this event.
+    pub async fn set_presence(
+        &self,
+        presence: &cordex_model::gateway::presence::UpdatePresence,
+    ) -> Result<()> {
+        if let Some(shard) = self.shared.manager().shard(self.shard.number()) {
+            shard.update_presence(presence).await?;
+        }
+        Ok(())
+    }
+
     /// `ComponentContext` for a component interaction event.
     fn component_context(&self, event: Event) -> Option<ComponentContext> {
         let Event::InteractionCreate(mut interaction) = event else {
@@ -823,6 +840,26 @@ impl MessageContext {
             .create_message(self.message.channel_id)
             .content(content)?
             .send()
+            .await?)
+    }
+
+    /// Add a reaction (`"👍"` or `"name:id"`) to this message.
+    pub async fn react(&self, emoji: impl Into<String>) -> Result<()> {
+        Ok(self
+            .ctx
+            .shared
+            .http
+            .create_reaction(self.message.channel_id, self.message.id, emoji)
+            .await?)
+    }
+
+    /// Delete this message.
+    pub async fn delete(&self) -> Result<()> {
+        Ok(self
+            .ctx
+            .shared
+            .http
+            .delete_message(self.message.channel_id, self.message.id)
             .await?)
     }
 }

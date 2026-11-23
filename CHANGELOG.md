@@ -13,7 +13,8 @@ All notable changes are listed here. The project follows
   - **`MessageBuilder` with Markdown escaping:** `cordex_model::message::MessageBuilder` (re-exported in `cordex::prelude`) with `push`, `push_line`, `push_safe`, `push_bold[_safe]`, `push_italic[_safe]`, `push_underline[_safe]`, `push_strike[_safe]`, `push_spoiler[_safe]`, `push_mono[_safe]`, `push_quote_line`, `push_codeblock`, `push_named_link[_safe]`, `mention`, `push_timestamp`, `build` and `into_string`.
   - **Built-in graceful shutdown:** `Bot::run_until_ctrl_c()` (handles `Ctrl+C` and Unix `SIGTERM`) and `Bot::run_until(future)` shut down all shards cleanly.
   - **Pagination & collector ergonomics:** `CommandContext::paginate(pages, timeout)` renders `◀` / `1 / N` / `▶` buttons with an author-only guard, sliding idle timeout, and automatic button disabling on timeout; `ButtonClicks::idle_timeout(duration)` and `ButtonClicks::stop()` added.
-  - **Scoped audit-log reasons & shortcuts:** `Client::with_reason(...)` returns a cheap scoped clone that attaches `X-Audit-Log-Reason` to every request; `Client::forward_message(...)`, `Context::forward_message(...)`, `Context::send(channel_id, content)` and `Context::dm(user_id, content)` added.
+  - **Scoped audit-log reasons & shortcuts:** `Client::with_reason(...)` returns a cheap scoped clone that attaches `X-Audit-Log-Reason` to every request; `Client::forward_message(...)`, `Context::forward_message(...)`, `Context::send(channel_id, content)`, `Context::dm(user_id, content)`, `MessageContext::react(...)` and `MessageContext::delete()` added.
+  - **Presence, typing, history, links & cooldowns:** `Bot::presence(...)` and `Context::set_presence(...)`; RAII `Typing` guard via `Client::start_typing` / `Context::start_typing`; `Client::messages_iter(channel_id)` (`MessageHistory` async paginator); `parse_message_link` / `MessageLink` in `cordex-model`; and thread-safe `Cooldowns<K>` in `cordex::bot`.
 
 ## 0.1.2 - 2026-11-23
 

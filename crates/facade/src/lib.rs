@@ -120,7 +120,9 @@ pub mod prelude {
     };
     pub use cordex_model::gateway::{Event, Intents};
     pub use cordex_model::mention::{Mentionable, ParsedMention, parse_mentions};
-    pub use cordex_model::message::{AllowedMentions, Embed, EmbedError, MessageBuilder};
+    pub use cordex_model::message::{
+        AllowedMentions, Embed, EmbedError, MessageBuilder, MessageLink, parse_message_link,
+    };
     pub use cordex_model::{
         Channel, Guild, Id, Member, Message, Permissions, Role, Timestamp, TimestampStyle, Token,
         User, parse_webhook_url,
@@ -128,15 +130,15 @@ pub mod prelude {
 
     #[cfg(feature = "bot")]
     pub use crate::bot::{
-        AutocompleteContext, Bot, CommandContext, ComponentContext, Context, EventContext,
-        MessageContext, ModalContext, ReadyContext,
+        AutocompleteContext, Bot, CommandContext, ComponentContext, Context, Cooldowns,
+        EventContext, MessageContext, ModalContext, ReadyContext,
     };
     #[cfg(feature = "cache")]
     pub use cordex_cache::{CacheConfig, CacheParts, CachePolicy, InMemoryCache, ResourceType};
     #[cfg(feature = "gateway")]
     pub use cordex_gateway::{CloseMode, EventTypeFlags, Shard, ShardId, ShardManager, Standby};
     #[cfg(feature = "http")]
-    pub use cordex_http::{Client, InteractionClient};
+    pub use cordex_http::{Client, InteractionClient, Typing};
     #[cfg(feature = "interactions")]
     pub use cordex_interactions::{
         Choice, Command, CommandOption, CommandOptions, InteractionHandle, Modal, Reply,

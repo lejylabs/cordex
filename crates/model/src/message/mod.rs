@@ -4,6 +4,7 @@ pub mod allowed_mentions;
 pub mod attachment;
 pub mod builder;
 pub mod embed;
+pub mod link;
 
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +16,7 @@ pub use embed::{
     EmbedFooter, EmbedMedia, EmbedMediaFlags, EmbedProvider, EmbedType, EmbedVideo,
     FIELD_COUNT_LIMIT, FIELD_NAME_LIMIT, FIELD_VALUE_LIMIT, FOOTER_LIMIT, TITLE_LIMIT, TOTAL_LIMIT,
 };
+pub use link::{MessageLink, parse_message_link};
 
 use crate::application::Application;
 use crate::channel::{Channel, ChannelType};
