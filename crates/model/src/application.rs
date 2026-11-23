@@ -252,6 +252,100 @@ str_enum! {
     }
 }
 
+/// One metadata field of an application's linked roles.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct RoleConnectionMetadata {
+    /// How the user value is compared with the guild's value.
+    #[serde(rename = "type")]
+    pub kind: RoleConnectionMetadataType,
+    /// Dictionary key (`a-z`, `0-9`, `_`; 1-50 characters).
+    pub key: Box<str>,
+    /// Name (1-100 characters).
+    pub name: Box<str>,
+    /// Localized names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name_localizations: Option<std::collections::BTreeMap<Box<str>, Box<str>>>,
+    /// Description (1-200 characters).
+    pub description: Box<str>,
+    /// Localized descriptions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description_localizations: Option<std::collections::BTreeMap<Box<str>, Box<str>>>,
+}
+
+impl RoleConnectionMetadata {
+    /// Metadata field with a key, name and description.
+    pub fn new(
+        kind: RoleConnectionMetadataType,
+        key: impl Into<Box<str>>,
+        name: impl Into<Box<str>>,
+        description: impl Into<Box<str>>,
+    ) -> Self {
+        Self {
+            kind,
+            key: key.into(),
+            name: name.into(),
+            name_localizations: None,
+            description: description.into(),
+            description_localizations: None,
+        }
+    }
+}
+
+int_enum! {
+    /// Comparison of a role connection metadata field.
+    pub enum RoleConnectionMetadataType: u8 {
+        /// User value <= guild value (integer).
+        IntegerLessThanOrEqual = 1,
+        /// User value >= guild value (integer).
+        IntegerGreaterThanOrEqual = 2,
+        /// User value == guild value (integer).
+        IntegerEqual = 3,
+        /// User value != guild value (integer).
+        IntegerNotEqual = 4,
+        /// User date is at most N days ago.
+        DatetimeLessThanOrEqual = 5,
+        /// User date is at least N days ago.
+        DatetimeGreaterThanOrEqual = 6,
+        /// User value == guild value (boolean).
+        BooleanEqual = 7,
+        /// User value != guild value (boolean).
+        BooleanNotEqual = 8,
+    }
+}
+
+/// A running activity (`GET /applications/{id}/activity-instances/{id}`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ActivityInstance {
+    /// Application ID.
+    pub application_id: Id<ApplicationMarker>,
+    /// Instance ID.
+    pub instance_id: Box<str>,
+    /// Launch ID.
+    pub launch_id: Id<crate::id::marker::GenericMarker>,
+    /// Where the activity runs.
+    pub location: ActivityLocation,
+    /// Users in the activity.
+    #[serde(default)]
+    pub users: Vec<Id<UserMarker>>,
+}
+
+/// Where an activity instance runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ActivityLocation {
+    /// Location ID.
+    pub id: Box<str>,
+    /// `"gc"` (guild channel) or `"pc"` (private channel).
+    pub kind: Box<str>,
+    /// Channel ID.
+    pub channel_id: Id<crate::id::marker::ChannelMarker>,
+    /// Guild ID (guild channels only).
+    #[serde(default)]
+    pub guild_id: Option<Id<GuildMarker>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -972,3 +972,77 @@ async fn bulk_ban_checks_limits_locally() {
     assert!(client.bulk_ban(id(1), users, 0).await.is_err());
     assert!(seen.lock().is_empty());
 }
+
+#[tokio::test]
+async fn sticker_upload_is_a_plain_form() {
+    let (client, seen) = recording(
+        r#"{"id":"1","name":"s","tags":"t","type":2,"format_type":1,"description":null}"#,
+    );
+    let file = crate::File::bytes("s.png", vec![1u8, 2, 3]).content_type("image/png");
+    client
+        .create_guild_sticker(id(5), "s", "desc", "t", &file)
+        .await
+        .unwrap();
+    let (line, body) = seen.lock()[0].clone();
+    assert_eq!(line, "POST /api/v10/guilds/5/stickers");
+    assert!(body.contains("name=\"name\"\r\n\r\ns\r\n"), "{body}");
+    assert!(body.contains("name=\"tags\"\r\n\r\nt\r\n"), "{body}");
+    assert!(body.contains("name=\"file\"; filename=\"s.png\""), "{body}");
+    assert!(!body.contains("payload_json"), "{body}");
+}
+
+#[tokio::test]
+async fn asset_sizes_are_checked_locally() {
+    let (client, seen) = recording("{}");
+    let big = format!("data:image/png;base64,{}", "A".repeat(400_000));
+    let huge = format!("data:audio/ogg;base64,{}", "A".repeat(800_000));
+    assert!(
+        client
+            .create_guild_emoji(id(1), "e", &big, &[])
+            .await
+            .is_err()
+    );
+    assert!(
+        client
+            .create_application_emoji(id(1), "e", "not-a-data-uri")
+            .await
+            .is_err()
+    );
+    let file = crate::File::bytes("x.png", vec![0u8; 600 * 1024]);
+    assert!(
+        client
+            .create_guild_sticker(id(1), "s", "", "t", &file)
+            .await
+            .is_err()
+    );
+    assert!(
+        client
+            .create_guild_soundboard_sound(id(1), "s", &huge)
+            .await
+            .is_err()
+    );
+    assert!(seen.lock().is_empty());
+}
+
+#[tokio::test]
+async fn auto_moderation_rule_body() {
+    use cordex_model::auto_moderation::{AutoModerationEventType, AutoModerationTriggerType};
+    let (client, seen) = recording("{}");
+    let _ = client
+        .create_auto_moderation_rule(
+            id(7),
+            "no spam",
+            AutoModerationEventType::MessageSend,
+            AutoModerationTriggerType::Spam,
+            &[],
+        )
+        .enabled(true)
+        .await;
+    let (line, body) = seen.lock()[0].clone();
+    assert_eq!(line, "POST /api/v10/guilds/7/auto-moderation/rules");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        body,
+        json!({"name": "no spam", "event_type": 1, "trigger_type": 3, "actions": [], "enabled": true})
+    );
+}

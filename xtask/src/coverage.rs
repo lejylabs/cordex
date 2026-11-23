@@ -43,6 +43,19 @@ const BOT_PAGES: &[&str] = &[
 /// Model enums whose values are compared with a docs table:
 /// (file in `crates/model/src`, enum, docs page in `developers/`, heading).
 const ENUMS: &[(&str, &str, &str, &str)] = &[
+    ("sku.rs", "SkuType", "resources/sku.mdx", "SKU Types"),
+    (
+        "sku.rs",
+        "SubscriptionStatus",
+        "resources/subscription.mdx",
+        "Subscription Statuses",
+    ),
+    (
+        "application.rs",
+        "RoleConnectionMetadataType",
+        "resources/application-role-connection-metadata.mdx",
+        "Application Role Connection Metadata Type",
+    ),
     (
         "guild/extra.rs",
         "OnboardingMode",

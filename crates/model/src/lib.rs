@@ -25,6 +25,7 @@ pub mod message;
 pub mod permissions;
 pub mod poll;
 pub mod scheduled_event;
+pub mod sku;
 pub mod soundboard;
 pub mod stage;
 pub mod sticker;

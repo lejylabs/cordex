@@ -6,15 +6,15 @@ Measured: REST endpoints, gateway receive events, opcodes and close codes, compo
 
 | Area | Covered | Total | % |
 |---|---:|---:|---:|
-| REST endpoints | 146 | 238 | 61.3 % |
+| REST endpoints | 194 | 238 | 81.5 % |
 | Gateway receive events | 71 | 82 | 86.5 % |
 | Gateway opcodes | 13 | 13 | 100.0 % |
 | Gateway close codes | 14 | 14 | 100.0 % |
 | Component types | 20 | 20 | 100.0 % |
-| Enum values | 298 | 298 | 100.0 % |
-| **Total (measured)** | **562** | **665** | **84.5 %** |
+| Enum values | 313 | 313 | 100.0 % |
+| **Total (measured)** | **625** | **680** | **91.9 %** |
 
-## REST endpoints (146/238)
+## REST endpoints (194/238)
 
 Missing:
 
@@ -23,30 +23,6 @@ Missing:
 - Get Application Identities by User ID `GET /users/{}/application-identities/{}` (resources/application-identity-profile.mdx)
 - Get Application Identities by External ID `GET /applications/{}/application-identities/{}/{}` (resources/application-identity-profile.mdx)
 - Delete Application Identity `POST /users/{}/application-identities/{}/{}/{}/delete` (resources/application-identity-profile.mdx)
-- Get Application Role Connection Metadata Records `GET /applications/{}/role-connections/metadata` (resources/application-role-connection-metadata.mdx)
-- Update Application Role Connection Metadata Records `PUT /applications/{}/role-connections/metadata` (resources/application-role-connection-metadata.mdx)
-- Get Current Application `GET /applications/@me` (resources/application.mdx)
-- Edit Current Application `PATCH /applications/@me` (resources/application.mdx)
-- Get Application Activity Instance `GET /applications/{}/activity-instances/{}` (resources/application.mdx)
-- List Auto Moderation Rules for Guild `GET /guilds/{}/auto-moderation/rules` (resources/auto-moderation.mdx)
-- Get Auto Moderation Rule `GET /guilds/{}/auto-moderation/rules/{}` (resources/auto-moderation.mdx)
-- Create Auto Moderation Rule `POST /guilds/{}/auto-moderation/rules` (resources/auto-moderation.mdx)
-- Modify Auto Moderation Rule `PATCH /guilds/{}/auto-moderation/rules/{}` (resources/auto-moderation.mdx)
-- Delete Auto Moderation Rule `DELETE /guilds/{}/auto-moderation/rules/{}` (resources/auto-moderation.mdx)
-- List Guild Emojis `GET /guilds/{}/emojis` (resources/emoji.mdx)
-- Get Guild Emoji `GET /guilds/{}/emojis/{}` (resources/emoji.mdx)
-- Create Guild Emoji `POST /guilds/{}/emojis` (resources/emoji.mdx)
-- Modify Guild Emoji `PATCH /guilds/{}/emojis/{}` (resources/emoji.mdx)
-- Delete Guild Emoji `DELETE /guilds/{}/emojis/{}` (resources/emoji.mdx)
-- List Application Emojis `GET /applications/{}/emojis` (resources/emoji.mdx)
-- Get Application Emoji `GET /applications/{}/emojis/{}` (resources/emoji.mdx)
-- Create Application Emoji `POST /applications/{}/emojis` (resources/emoji.mdx)
-- Modify Application Emoji `PATCH /applications/{}/emojis/{}` (resources/emoji.mdx)
-- Delete Application Emoji `DELETE /applications/{}/emojis/{}` (resources/emoji.mdx)
-- Get Entitlement `GET /applications/{}/entitlements/{}` (resources/entitlement.mdx)
-- Consume an Entitlement `POST /applications/{}/entitlements/{}/consume` (resources/entitlement.mdx)
-- Create Test Entitlement `POST /applications/{}/entitlements` (resources/entitlement.mdx)
-- Delete Test Entitlement `DELETE /applications/{}/entitlements/{}` (resources/entitlement.mdx)
 - Get Guild Template `GET /guilds/templates/{}` (resources/guild-template.mdx)
 - Get Guild Templates `GET /guilds/{}/templates` (resources/guild-template.mdx)
 - Create Guild Template `POST /guilds/{}/templates` (resources/guild-template.mdx)
@@ -79,30 +55,6 @@ Missing:
 - Get Pinned Messages (deprecated) `GET /channels/{}/pins` (resources/message.mdx)
 - Pin Message (deprecated) `PUT /channels/{}/pins/{}` (resources/message.mdx)
 - Unpin Message (deprecated) `DELETE /channels/{}/pins/{}` (resources/message.mdx)
-- Get Answer Voters `GET /channels/{}/polls/{}/answers/{}` (resources/poll.mdx)
-- End Poll `POST /channels/{}/polls/{}/expire` (resources/poll.mdx)
-- List SKUs `GET /applications/{}/skus` (resources/sku.mdx)
-- Send Soundboard Sound `POST /channels/{}/send-soundboard-sound` (resources/soundboard.mdx)
-- List Default Soundboard Sounds `GET /soundboard-default-sounds` (resources/soundboard.mdx)
-- List Guild Soundboard Sounds `GET /guilds/{}/soundboard-sounds` (resources/soundboard.mdx)
-- Get Guild Soundboard Sound `GET /guilds/{}/soundboard-sounds/{}` (resources/soundboard.mdx)
-- Create Guild Soundboard Sound `POST /guilds/{}/soundboard-sounds` (resources/soundboard.mdx)
-- Modify Guild Soundboard Sound `PATCH /guilds/{}/soundboard-sounds/{}` (resources/soundboard.mdx)
-- Delete Guild Soundboard Sound `DELETE /guilds/{}/soundboard-sounds/{}` (resources/soundboard.mdx)
-- Create Stage Instance `POST /stage-instances` (resources/stage-instance.mdx)
-- Get Stage Instance `GET /stage-instances/{}` (resources/stage-instance.mdx)
-- Modify Stage Instance `PATCH /stage-instances/{}` (resources/stage-instance.mdx)
-- Delete Stage Instance `DELETE /stage-instances/{}` (resources/stage-instance.mdx)
-- Get Sticker `GET /stickers/{}` (resources/sticker.mdx)
-- List Sticker Packs `GET /sticker-packs` (resources/sticker.mdx)
-- Get Sticker Pack `GET /sticker-packs/{}` (resources/sticker.mdx)
-- List Guild Stickers `GET /guilds/{}/stickers` (resources/sticker.mdx)
-- Get Guild Sticker `GET /guilds/{}/stickers/{}` (resources/sticker.mdx)
-- Create Guild Sticker `POST /guilds/{}/stickers` (resources/sticker.mdx)
-- Modify Guild Sticker `PATCH /guilds/{}/stickers/{}` (resources/sticker.mdx)
-- Delete Guild Sticker `DELETE /guilds/{}/stickers/{}` (resources/sticker.mdx)
-- List SKU Subscriptions `GET /skus/{}/subscriptions` (resources/subscription.mdx)
-- Get SKU Subscription `GET /skus/{}/subscriptions/{}` (resources/subscription.mdx)
 - List Voice Regions `GET /voice/regions` (resources/voice.mdx)
 - Get Current User Voice State `GET /guilds/{}/voice-states/@me` (resources/voice.mdx)
 - Get User Voice State `GET /guilds/{}/voice-states/{}` (resources/voice.mdx)
@@ -139,6 +91,6 @@ Everything covered.
 
 Everything covered.
 
-## Enum values (298/298)
+## Enum values (313/313)
 
 Everything covered.

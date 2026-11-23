@@ -72,3 +72,25 @@ pub struct StickerItem {
     /// Format type.
     pub format_type: StickerFormatType,
 }
+
+/// A pack of standard stickers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct StickerPack {
+    /// Pack ID.
+    pub id: Id<StickerPackMarker>,
+    /// Stickers in the pack.
+    #[serde(default)]
+    pub stickers: Vec<Sticker>,
+    /// Name.
+    pub name: Box<str>,
+    /// SKU of the pack.
+    pub sku_id: Id<crate::id::marker::SkuMarker>,
+    /// Sticker shown as the pack icon.
+    pub cover_sticker_id: Option<Id<StickerMarker>>,
+    /// Description.
+    #[serde(default)]
+    pub description: Box<str>,
+    /// Banner image asset ID.
+    pub banner_asset_id: Option<Id<crate::id::marker::GenericMarker>>,
+}

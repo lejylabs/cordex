@@ -67,6 +67,13 @@ impl RequestBuilder {
         Ok(self)
     }
 
+    /// Pre-encoded body with its `Content-Type` (e.g. a form with boundary).
+    pub(crate) fn encoded(mut self, (content_type, body): (HeaderValue, Bytes)) -> Self {
+        self.body = Some(body);
+        self.content_type = Some(content_type);
+        self
+    }
+
     /// Appends `key=value` query parameters (percent-encoded).
     #[must_use]
     pub fn query(mut self, key: &str, value: impl std::fmt::Display) -> Self {

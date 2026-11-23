@@ -154,6 +154,8 @@ macro_rules! json_request {
     };
 }
 
+mod app_admin;
+mod assets;
 mod audit_log;
 mod ban;
 mod channel;
@@ -173,9 +175,28 @@ mod thread;
 mod user;
 mod webhook;
 
+pub use app_admin::{
+    AnswerVoters, AutoModerationRuleRequest, CreateStageInstance, GetAnswerVoters,
+    GetSkuSubscriptions, UpdateCurrentApplication, UpdateStageInstance,
+};
+pub use assets::{
+    EMOJI_MAX_BYTES, GuildSoundRequest, SOUND_MAX_BYTES, STICKER_MAX_BYTES, UpdateGuildEmoji,
+    UpdateGuildSticker,
+};
+pub use audit_log::GetAuditLog;
 pub use command::{CommandBody, CommandPayload};
+pub use guild_admin::{
+    AddGuildMember, BeginGuildPrune, GetGuildMembers, GetGuildPruneCount, SearchGuildMembers,
+    UpdateCurrentMember, UpdateGuild, UpdateGuildWidget, UpdateIncidentActions, UpdateOnboarding,
+    UpdateWelcomeScreen,
+};
+pub use message::GetReactions;
 pub use message::{CreateMessage, EditMessage, GetChannelMessages};
-pub use webhook::ExecuteWebhook;
+pub use permissions::{GetPermissions, PermissionsOnly};
+pub use scheduled_event::{GetScheduledEvent, GetScheduledEventUsers, GetScheduledEvents};
+pub use thread::{GetArchivedThreads, GetThreadMember, GetThreadMembers, ThreadList};
+pub use user::{GatewayUrl, GetCurrentUserGuilds, UpdateCurrentUser};
+pub use webhook::{ExecuteWebhook, UpdateWebhook};
 
 use crate::error::HttpError;
 

@@ -103,6 +103,39 @@ impl Multipart {
     }
 }
 
+/// Plain form (text fields plus one file under `file_field`), for
+/// endpoints without `payload_json` such as sticker uploads.
+pub(crate) fn encode_form(
+    fields: &[(&str, &str)],
+    file_field: &str,
+    file: &File,
+) -> Result<(HeaderValue, Bytes), HttpError> {
+    let boundary = format!("----cordex{}", fastrand::u64(..));
+    let mut out = BytesMut::new();
+    for (name, value) in fields {
+        write_part(&mut out, &boundary, name, None, None, value.as_bytes());
+    }
+    let ct = file
+        .content_type
+        .as_deref()
+        .unwrap_or("application/octet-stream");
+    write_part(
+        &mut out,
+        &boundary,
+        file_field,
+        Some(&file.filename),
+        Some(ct),
+        &file.data,
+    );
+    out.extend_from_slice(b"--");
+    out.extend_from_slice(boundary.as_bytes());
+    out.extend_from_slice(b"--\r\n");
+    let header = format!("multipart/form-data; boundary={boundary}");
+    let value = HeaderValue::from_str(&header)
+        .map_err(|_| HttpError::validation("multipart boundary is not a valid header"))?;
+    Ok((value, out.freeze()))
+}
+
 fn write_part(
     out: &mut BytesMut,
     boundary: &str,

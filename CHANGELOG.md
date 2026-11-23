@@ -19,6 +19,17 @@ All notable changes are listed here. The project follows
   ban (limits checked locally), single role, role member counts, prune count
   and prune, voice regions, integrations, widget settings/data/image, vanity
   URL, welcome screen, onboarding, incident actions.
+- `cordex-http`: 48 more endpoints (REST coverage now 194 of 238):
+  guild and application emojis, stickers (form upload) and sticker packs,
+  soundboard sounds (play, list, create, edit, delete), auto moderation rules,
+  stage instances, entitlements (get, consume, test entitlements), SKUs and
+  SKU subscriptions, current application (get, edit), activity instances,
+  role connection metadata, poll answer voters and ending polls. Upload sizes
+  (emoji 256 KiB, sticker and sound 512 KiB) are checked before sending.
+- `cordex-http`: request builder types are exported from `cordex_http::endpoint`.
+- `cordex-model`: `Sku`/`SkuType`, `Subscription`/`SubscriptionStatus`,
+  `StickerPack`, `RoleConnectionMetadata`/`RoleConnectionMetadataType`,
+  `ActivityInstance`.
 - `cordex-model`: `FollowedChannel`, `UserGuild`, `Connection`,
   `ApplicationRoleConnection`, `GuildPreview`, `GuildWidget(Settings)`,
   `Onboarding` (+ prompts, options, mode and prompt type), `PruneCount`,
