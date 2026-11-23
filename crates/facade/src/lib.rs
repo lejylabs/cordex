@@ -125,7 +125,7 @@ pub mod prelude {
     pub use cordex_http::Client;
     #[cfg(feature = "interactions")]
     pub use cordex_interactions::{
-        Choice, Command, CommandOption, CommandOptions, InteractionHandle, Reply,
+        Choice, Command, CommandOption, CommandOptions, InteractionHandle, Modal, Reply,
     };
 }
 

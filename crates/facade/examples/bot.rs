@@ -93,16 +93,19 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .command(
             Command::slash("feedback", "Tell us something"),
             |ctx: CommandContext| async move {
-                let field = Label::new(
-                    "Your feedback",
-                    TextInput::paragraph("text").max_length(500),
-                );
-                ctx.modal("feedback", "Feedback", vec![field.into()]).await
+                let modal = Modal::new("feedback", "Feedback")
+                    .text_input("subject", "Subject")
+                    .component(Label::new(
+                        "Your feedback",
+                        TextInput::paragraph("text").max_length(500),
+                    ));
+                ctx.modal(modal).await
             },
         )
         .on_modal("feedback", |ctx: ModalContext| async move {
+            let subject = ctx.value("subject").unwrap_or_default();
             let text = ctx.value("text").unwrap_or_default();
-            ctx.reply_ephemeral(format!("Thanks! You wrote: {text}"))
+            ctx.reply_ephemeral(format!("Thanks! **{subject}**: {text}"))
                 .await
         })
         .on_message(|ctx: MessageContext| async move {

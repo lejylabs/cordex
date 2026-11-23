@@ -771,3 +771,14 @@ fn manager_runs_shards_on_given_runtimes() {
     assert!(conn.url.contains("v=10"));
     drop(manager);
 }
+
+#[test]
+fn fatal_close_message_names_the_fix() {
+    let err = GatewayError::Fatal {
+        code: CloseCode::DisallowedIntents,
+        reason: "Disallowed intent(s).".into(),
+    };
+    let text = err.to_string();
+    assert!(text.contains("Disallowed intent(s)."), "{text}");
+    assert!(text.contains("Privileged Gateway Intents"), "{text}");
+}

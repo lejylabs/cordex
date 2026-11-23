@@ -9,8 +9,7 @@ use cordex_gateway::{ShardId, ShardManager};
 use cordex_http::Client;
 use cordex_interactions::handle::ResponseState;
 use cordex_interactions::options::ResolvedUser;
-use cordex_interactions::{Choice, CommandOptions, InteractionHandle, Reply};
-use cordex_model::component::Component;
+use cordex_interactions::{Choice, CommandOptions, InteractionHandle, Modal, Reply};
 use cordex_model::gateway::event::{Event, Ready};
 use cordex_model::id::Id;
 use cordex_model::id::marker::{ChannelMarker, GuildMarker, UserMarker};
@@ -179,16 +178,11 @@ defer_methods!(CommandContext, ModalContext);
 macro_rules! modal_method {
     ($($ty:ty),+) => {$(
         impl $ty {
-            /// Open a modal; its submit goes to
+            /// Open a [`Modal`]; its submit goes to
             /// [`Bot::on_modal`](super::Bot::on_modal) with the same
-            /// `custom_id`. Must be the first answer.
-            pub async fn modal(
-                &self,
-                custom_id: impl Into<Box<str>>,
-                title: impl Into<Box<str>>,
-                components: Vec<Component>,
-            ) -> Result<()> {
-                Ok(self.handle.modal(custom_id, title, components).await?)
+            /// `custom_id`. Must be the first answer (not after a defer).
+            pub async fn modal(&self, modal: Modal) -> Result<()> {
+                Ok(self.handle.show_modal(modal).await?)
             }
         }
     )+};

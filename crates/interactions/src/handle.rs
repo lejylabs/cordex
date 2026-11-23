@@ -27,6 +27,7 @@ use tokio::sync::Mutex;
 
 use crate::command::Choice;
 use crate::error::InteractionError;
+use crate::modal::Modal;
 use crate::reply::Reply;
 
 /// Time Discord gives for the initial response.
@@ -253,6 +254,13 @@ impl InteractionHandle {
         data.title = Some(title);
         data.components = components;
         self.initial(InteractionCallbackType::Modal, Some(data))
+            .await
+    }
+
+    /// Open a [`Modal`] after checking its limits locally.
+    pub async fn show_modal(&self, modal: Modal) -> Result<(), InteractionError> {
+        modal.validate()?;
+        self.modal(modal.custom_id, modal.title, modal.components)
             .await
     }
 

@@ -44,6 +44,7 @@
 //! `ctx.handle()`, [`on_event`](Bot::on_event) for any event.
 
 mod context;
+mod sync;
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -52,7 +53,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use cordex_gateway::{CloseMode, ManagerEvent, ShardId, ShardManager};
-use cordex_http::Client;
+use cordex_http::{Client, Route};
 use cordex_interactions::handle::{DEFAULT_AUTO_DEFER, ResponseState};
 use cordex_interactions::{Command, InteractionHandle, Reply};
 use cordex_model::gateway::Intents;
@@ -373,8 +374,9 @@ impl Bot {
     }
 }
 
-/// One bulk overwrite with all commands (only when there are any, so a
-/// bot without commands never wipes commands set elsewhere).
+/// One bulk overwrite with all commands, skipped when Discord already
+/// has exactly these (only when there are any, so a bot without commands
+/// never wipes commands set elsewhere).
 async fn register_commands(
     http: Client,
     app: Id<ApplicationMarker>,
@@ -383,6 +385,26 @@ async fn register_commands(
 ) {
     if commands.is_empty() {
         return;
+    }
+    let route = match guild {
+        Some(guild) => Route::raw(
+            "/applications/{application_id}/guilds/{guild_id}/commands",
+            (app, guild),
+        ),
+        None => Route::raw("/applications/{application_id}/commands", app),
+    };
+    match http.get(route).send_json::<Vec<serde_json::Value>>().await {
+        Ok(remote) => {
+            let local: Vec<serde_json::Value> = commands
+                .iter()
+                .filter_map(|c| serde_json::to_value(c).ok())
+                .collect();
+            if local.len() == commands.len() && sync::commands_match(&local, &remote) {
+                tracing::info!(count = commands.len(), ?guild, "commands unchanged");
+                return;
+            }
+        }
+        Err(error) => tracing::debug!(%error, "fetching registered commands failed"),
     }
     let list = commands.iter().cloned();
     let result = match guild {

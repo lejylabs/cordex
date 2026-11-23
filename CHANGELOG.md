@@ -13,7 +13,14 @@ All notable changes are listed here. The project follows
   commands are registered with one bulk overwrite on the first `READY`
   (global or per guild), commands and modals are deferred automatically
   after 2.5 s, handler errors and panics are logged and answered with an
-  ephemeral error message. Optional cache via `Bot::cache`.
+  ephemeral error message. Optional cache via `Bot::cache`. On start the
+  registered commands are compared with the local ones; unchanged commands
+  are not overwritten again.
+- `cordex-interactions`: `Modal` builder (`text_input`, `paragraph`,
+  `component`, local limit checks) and `InteractionHandle::show_modal`.
+- `cordex-gateway`: fatal close errors name the fix (for example 4014: which
+  developer portal switch to turn on, 4004: reset the token);
+  `CloseCode::hint()` in `cordex-model`.
 - `cordex-model`: short constructors for common components
   (`ActionRow::new`, `Button::primary`/`secondary`/`success`/`danger`/`link`,
   `StringSelect::new`, `SelectOption::new`, `TextInput::short`/`paragraph`,

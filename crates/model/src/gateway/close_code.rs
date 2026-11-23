@@ -77,6 +77,30 @@ impl CloseCode {
         }
     }
 
+    /// How to fix a fatal close, for error messages; `None` for codes the
+    /// gateway handles on its own.
+    pub const fn hint(self) -> Option<&'static str> {
+        Some(match self {
+            Self::AuthenticationFailed => {
+                "the bot token is wrong or was reset; copy a new one from the developer portal (Bot > Reset Token)"
+            }
+            Self::DisallowedIntents => {
+                "a privileged intent (MESSAGE_CONTENT, GUILD_MEMBERS or GUILD_PRESENCES) is not enabled; switch it on in the developer portal (Bot > Privileged Gateway Intents) or stop requesting it"
+            }
+            Self::InvalidIntents => {
+                "the intents value is invalid; build it from the `Intents` flags"
+            }
+            Self::ShardingRequired => {
+                "the bot is in too many guilds for one shard; use automatic sharding (the default) or more shards"
+            }
+            Self::InvalidShard => {
+                "the shard id or shard count is invalid; check the shard settings"
+            }
+            Self::InvalidApiVersion => "the gateway API version is not supported; update cordex",
+            _ => return None,
+        })
+    }
+
     /// Whether the docs mark this code as reconnectable.
     pub const fn can_reconnect(self) -> bool {
         !matches!(self.action(), CloseAction::Fatal)
@@ -86,6 +110,16 @@ impl CloseCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_fatal_code_has_a_hint() {
+        for code in [4004, 4010, 4011, 4012, 4013, 4014] {
+            let code = CloseCode::from(code);
+            assert!(!code.can_reconnect());
+            assert!(code.hint().is_some(), "{code:?}");
+        }
+        assert!(CloseCode::from(4000).hint().is_none());
+    }
 
     #[test]
     fn fatal_codes_match_the_docs() {

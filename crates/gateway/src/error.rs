@@ -5,6 +5,12 @@ use std::time::Duration;
 
 use cordex_model::gateway::CloseCode;
 
+/// `" (fix: …)"` for close codes with a known fix.
+fn hint_suffix(code: CloseCode) -> String {
+    code.hint()
+        .map_or_else(String::new, |hint| format!(" (fix: {hint})"))
+}
+
 /// An error from a shard or gateway helper.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -44,7 +50,7 @@ pub enum GatewayError {
     #[error("gateway payload exceeds 4096 bytes")]
     PayloadTooLarge,
     /// Discord closed with a non-reconnectable code.
-    #[error("fatal gateway close {code:?}: {reason}")]
+    #[error("fatal gateway close {code:?}: {reason}{}", hint_suffix(*code))]
     Fatal {
         /// Close code.
         code: CloseCode,
