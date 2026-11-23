@@ -2,7 +2,8 @@
 
 ## Supported versions
 
-Only the latest `0.x` release gets security fixes during the beta.
+Security fixes go into the latest `0.x` release line (currently `0.1`).
+Before 1.0, older minor lines get fixes only for severe issues.
 
 ## Reporting a vulnerability
 

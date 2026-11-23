@@ -39,7 +39,8 @@ cargo xtask coverage   # regenerate docs/coverage.md (needs curl, tar + network)
 cargo xtask bench      # benchmarks vs. benches/baseline.json (before larger merges)
 ```
 
-All three must pass before a pull request is merged; CI runs the same commands.
+`check` and `features` must pass before a pull request is merged (and
+`coverage --check` when models or endpoints change); CI runs the same commands.
 When you add or remove an endpoint, event or enum value, run
 `cargo xtask coverage` and commit the updated `docs/coverage.md`. Every REST
 method in `cordex-http` needs a doc comment with its route, e.g.
@@ -61,6 +62,8 @@ the published crate.
 - **No panics on network input.** No `unwrap`/`expect` in library code; return
   errors instead. Long-running tasks stay behind the panic guard.
 - **No `unsafe`.** `unsafe_code = "forbid"` in every crate.
+- **MSRV is Rust 1.95** (CI job `msrv`). Raising it is a minor release; never
+  downgrade a dependency just to lower it.
 - **Lints are never weakened.** An `#[allow(...)]` needs a `reason = "..."`.
 - **Every public item has docs** (`missing_docs` is on).
 - **Crate layering**: `cordex-model` has no async or network code; the
@@ -72,11 +75,23 @@ the published crate.
 - Tests for new behavior: mock tests (`cordex_http::mock`,
   `cordex_gateway::mock`) instead of live Discord calls.
 
+## Branches and releases
+
+- **Open pull requests against `master`.** There is no separate development
+  branch; `master` is protected (pull request, green CI, linear history).
+- `master` is the next release in progress, not what users run: users get
+  the versions published on crates.io. Every release is a tag (`v0.1.0`, …)
+  with a GitHub release and its `CHANGELOG.md` section.
+- Versioning: before 1.0 a minor release (`0.2.0`) may break the API, a patch
+  release (`0.1.1`) never does. If a fix is needed for an older minor line
+  while the next one is in progress, a `release/0.x` branch is created for it.
+
 ## Pull requests
 
 - One topic per pull request; keep the diff focused.
 - Describe what changes and why; link the issue.
-- Update `CHANGELOG.md` under "unreleased" for user-visible changes.
+- Update `CHANGELOG.md` under "Unreleased" for user-visible changes; mark
+  API breaks with **Breaking**.
 - Pull requests are squash-merged, so the PR title becomes the commit
   message: write it as a short imperative sentence ("Add …", "Fix …").
 - Workflows from first-time and external contributors start after a
