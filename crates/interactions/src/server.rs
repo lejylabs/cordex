@@ -174,7 +174,11 @@ impl InteractionEndpoint {
             return status(StatusCode::UNAUTHORIZED, "stale request timestamp");
         }
 
-        let interaction: Interaction = match serde_json::from_slice(&body) {
+        // `&str` like everywhere else (one serde instantiation per model).
+        let parsed = std::str::from_utf8(&body)
+            .map_err(|e| e.to_string())
+            .and_then(|text| serde_json::from_str::<Interaction>(text).map_err(|e| e.to_string()));
+        let interaction: Interaction = match parsed {
             Ok(i) => i,
             Err(err) => {
                 tracing::warn!(%err, "interaction deserialize failed");

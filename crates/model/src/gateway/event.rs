@@ -262,7 +262,7 @@ pub enum GuildCreate {
 }
 
 /// Available `GUILD_CREATE` payload: a guild plus the extra gateway fields.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[non_exhaustive]
 pub struct AvailableGuild {
     /// Guild object.
@@ -303,6 +303,53 @@ pub struct AvailableGuild {
     /// Guild soundboard sounds.
     #[serde(default)]
     pub soundboard_sounds: Vec<SoundboardSound>,
+}
+
+impl<'de> Deserialize<'de> for AvailableGuild {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Extra {
+            joined_at: Timestamp,
+            #[serde(default)]
+            large: bool,
+            #[serde(default)]
+            unavailable: bool,
+            #[serde(default)]
+            member_count: u32,
+            #[serde(default)]
+            voice_states: Vec<VoiceState>,
+            #[serde(default)]
+            members: Vec<Member>,
+            #[serde(default)]
+            channels: Vec<Channel>,
+            #[serde(default)]
+            threads: Vec<Channel>,
+            #[serde(default)]
+            guild_scheduled_events: Vec<ScheduledEvent>,
+            #[serde(default)]
+            presences: Vec<PresenceUpdate>,
+            #[serde(default)]
+            stage_instances: Vec<StageInstance>,
+            #[serde(default)]
+            soundboard_sounds: Vec<SoundboardSound>,
+        }
+        let (guild, extra): (Guild, Extra) = crate::serde_util::split_flatten(d)?;
+        Ok(Self {
+            guild,
+            joined_at: extra.joined_at,
+            large: extra.large,
+            unavailable: extra.unavailable,
+            member_count: extra.member_count,
+            voice_states: extra.voice_states,
+            members: extra.members,
+            channels: extra.channels,
+            threads: extra.threads,
+            guild_scheduled_events: extra.guild_scheduled_events,
+            presences: extra.presences,
+            stage_instances: extra.stage_instances,
+            soundboard_sounds: extra.soundboard_sounds,
+        })
+    }
 }
 
 /// `GUILD_BAN_ADD` / `GUILD_BAN_REMOVE` payload.
@@ -388,7 +435,7 @@ pub struct ChannelInfoChannel {
 }
 
 /// `INTEGRATION_CREATE` / `INTEGRATION_UPDATE` payload.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub struct IntegrationEvent {
     /// Guild.
@@ -396,6 +443,20 @@ pub struct IntegrationEvent {
     /// The integration.
     #[serde(flatten)]
     pub integration: Integration,
+}
+
+impl<'de> Deserialize<'de> for IntegrationEvent {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Extra {
+            guild_id: Id<GuildMarker>,
+        }
+        let (integration, extra): (Integration, Extra) = crate::serde_util::split_flatten(d)?;
+        Ok(Self {
+            guild_id: extra.guild_id,
+            integration,
+        })
+    }
 }
 
 /// `INTEGRATION_DELETE` payload.

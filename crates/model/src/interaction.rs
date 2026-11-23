@@ -310,7 +310,7 @@ pub struct CommandDataOption {
 }
 
 /// Value of a command option as submitted by the user.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum CommandOptionValue {
     /// Boolean option.
@@ -322,6 +322,29 @@ pub enum CommandOptionValue {
     /// String, snowflake (user/role/channel/mentionable/attachment) or
     /// remaining text.
     String(Box<str>),
+}
+
+impl TryFrom<crate::serde_util::Scalar> for CommandOptionValue {
+    type Error = &'static str;
+
+    fn try_from(value: crate::serde_util::Scalar) -> Result<Self, Self::Error> {
+        use crate::serde_util::Scalar;
+        Ok(match value {
+            Scalar::Bool(b) => Self::Boolean(b),
+            Scalar::Int(i) => Self::Integer(i),
+            Scalar::Float(f) => Self::Number(f),
+            Scalar::Str(s) => Self::String(s),
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for CommandOptionValue {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_any(crate::serde_util::ScalarVisitor(
+            "a boolean, number or string",
+            std::marker::PhantomData,
+        ))
+    }
 }
 
 /// Message component `data`.

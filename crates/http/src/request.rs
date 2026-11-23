@@ -152,7 +152,16 @@ impl Response {
 
     /// Deserialize the body as JSON.
     pub fn json<T: DeserializeOwned>(self) -> Result<T, HttpError> {
-        serde_json::from_slice(&self.body).map_err(|source| HttpError::Deserialize {
+        // Parse from `&str` like the gateway does: one deserializer type for
+        // all models keeps the binary much smaller (no second `SliceRead`
+        // copy of every model's serde code).
+        let parsed = match std::str::from_utf8(&self.body) {
+            Ok(text) => serde_json::from_str(text),
+            Err(_) => Err(<serde_json::Error as serde::de::Error>::custom(
+                "response body is not valid UTF-8",
+            )),
+        };
+        parsed.map_err(|source| HttpError::Deserialize {
             body: self.body,
             source,
         })

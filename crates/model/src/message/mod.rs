@@ -164,7 +164,7 @@ impl Message {
 }
 
 /// A mentioned user; in gateway events with a partial `member`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub struct MentionedUser {
     /// The user.
@@ -174,8 +174,45 @@ pub struct MentionedUser {
     pub member: Option<Box<Member>>,
 }
 
+impl<'de> Deserialize<'de> for MentionedUser {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Extra {
+            #[serde(default)]
+            member: Option<Box<Member>>,
+        }
+        let (user, extra): (User, Extra) = crate::serde_util::split_flatten(d)?;
+        Ok(Self {
+            user,
+            member: extra.member,
+        })
+    }
+}
+
+impl TryFrom<crate::serde_util::Scalar> for Nonce {
+    type Error = &'static str;
+
+    fn try_from(value: crate::serde_util::Scalar) -> Result<Self, Self::Error> {
+        use crate::serde_util::Scalar;
+        match value {
+            Scalar::Int(i) => Ok(Self::Integer(i)),
+            Scalar::Str(s) => Ok(Self::String(s)),
+            Scalar::Bool(_) | Scalar::Float(_) => Err("a nonce is an integer or a string"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Nonce {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_any(crate::serde_util::ScalarVisitor(
+            "an integer or string",
+            std::marker::PhantomData,
+        ))
+    }
+}
+
 /// Message nonce: number or string.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum Nonce {
     /// Integer nonce.

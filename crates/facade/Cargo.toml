@@ -10,6 +10,8 @@ keywords.workspace = true
 categories.workspace = true
 documentation = "https://docs.rs/cordex"
 readme = "README.md"
+# The live test bot stays in the repository only; `examples/bot.rs` ships.
+exclude = ["examples/testbot.rs"]
 
 [lints]
 workspace = true

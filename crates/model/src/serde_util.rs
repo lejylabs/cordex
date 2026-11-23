@@ -148,6 +148,74 @@ macro_rules! str_enum {
 
 pub(crate) use {bitflags_serde_int, bitflags_serde_string, int_enum, str_enum};
 
+/// Replacement for `#[serde(flatten)]` on the deserialize side: keep the
+/// object as raw JSON text and parse it twice, once as `A` and once as `B`
+/// (each ignores the other's keys). `flatten` would buffer the whole
+/// object as a tree of allocations first and generate a second copy of the
+/// inner type's serde code; two linear scans are cheaper and smaller.
+pub(crate) fn split_flatten<'de, D, A, B>(deserializer: D) -> Result<(A, B), D::Error>
+where
+    D: de::Deserializer<'de>,
+    A: de::DeserializeOwned,
+    B: de::DeserializeOwned,
+{
+    let raw = Box::<serde_json::value::RawValue>::deserialize(deserializer)?;
+    let a = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
+    let b = serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
+    Ok((a, b))
+}
+
+/// Visitor for "integer, float or string" values (replaces
+/// `#[serde(untagged)]`, which buffers every value first).
+pub(crate) struct ScalarVisitor<T>(
+    pub(crate) &'static str,
+    pub(crate) std::marker::PhantomData<T>,
+);
+
+/// What a scalar JSON value turned into.
+pub(crate) enum Scalar {
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Str(Box<str>),
+}
+
+impl<T: TryFrom<Scalar, Error = &'static str>> Visitor<'_> for ScalarVisitor<T> {
+    type Value = T;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0)
+    }
+
+    fn visit_bool<E: de::Error>(self, v: bool) -> Result<T, E> {
+        T::try_from(Scalar::Bool(v)).map_err(E::custom)
+    }
+
+    fn visit_i64<E: de::Error>(self, v: i64) -> Result<T, E> {
+        T::try_from(Scalar::Int(v)).map_err(E::custom)
+    }
+
+    fn visit_u64<E: de::Error>(self, v: u64) -> Result<T, E> {
+        // Above i64::MAX only a float can hold it (like the old untagged order).
+        let scalar = i64::try_from(v).map_or_else(
+            |_| {
+                #[allow(clippy::cast_precision_loss, reason = "same as JSON number semantics")]
+                Scalar::Float(v as f64)
+            },
+            Scalar::Int,
+        );
+        T::try_from(scalar).map_err(E::custom)
+    }
+
+    fn visit_f64<E: de::Error>(self, v: f64) -> Result<T, E> {
+        T::try_from(Scalar::Float(v)).map_err(E::custom)
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<T, E> {
+        T::try_from(Scalar::Str(v.into())).map_err(E::custom)
+    }
+}
+
 /// Optional snowflake where Discord uses `"0"` for "none" (e.g. the guild
 /// key of `authorizing_integration_owners` in bot DMs).
 pub(crate) fn id_or_zero<'de, D: de::Deserializer<'de>, T>(

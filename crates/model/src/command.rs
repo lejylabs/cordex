@@ -189,7 +189,7 @@ pub struct CommandOptionChoice {
 }
 
 /// Value of a command option choice.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum CommandOptionChoiceValue {
     /// Integer choice.
@@ -198,6 +198,29 @@ pub enum CommandOptionChoiceValue {
     Number(f64),
     /// String choice (max. 100 characters).
     String(Box<str>),
+}
+
+impl TryFrom<crate::serde_util::Scalar> for CommandOptionChoiceValue {
+    type Error = &'static str;
+
+    fn try_from(value: crate::serde_util::Scalar) -> Result<Self, Self::Error> {
+        use crate::serde_util::Scalar;
+        match value {
+            Scalar::Int(i) => Ok(Self::Integer(i)),
+            Scalar::Float(f) => Ok(Self::Number(f)),
+            Scalar::Str(s) => Ok(Self::String(s)),
+            Scalar::Bool(_) => Err("a choice value is a number or string, not a boolean"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for CommandOptionChoiceValue {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_any(crate::serde_util::ScalarVisitor(
+            "a number or string",
+            std::marker::PhantomData,
+        ))
+    }
 }
 
 /// Guild-wide overwrites for a command (or all commands when `id` is the
