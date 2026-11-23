@@ -1176,3 +1176,23 @@ async fn components_v2_flag_is_set_automatically() {
     let classic: serde_json::Value = serde_json::from_str(&log[1].1).unwrap();
     assert!(classic.get("flags").is_none(), "{classic}");
 }
+
+#[tokio::test]
+async fn interaction_client_fills_in_the_application_id() {
+    let (client, seen) = recording("[]");
+    let app = client.interaction(id(42));
+    assert_eq!(app.application_id().get(), 42);
+    app.global_commands().await.unwrap();
+    app.guild_commands(id(7)).await.unwrap();
+    let _ = app.skus().await;
+    let token = cordex_model::token::InteractionToken::new("tok");
+    let _ = app.delete_response(&token).await;
+    let log = seen.lock();
+    assert_eq!(log[0].0, "GET /api/v10/applications/42/commands");
+    assert_eq!(log[1].0, "GET /api/v10/applications/42/guilds/7/commands");
+    assert_eq!(log[2].0, "GET /api/v10/applications/42/skus");
+    assert_eq!(
+        log[3].0,
+        "DELETE /api/v10/webhooks/42/tok/messages/@original"
+    );
+}

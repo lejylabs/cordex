@@ -6,6 +6,12 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+- **`InteractionClient`**: `client.interaction(app_id)` (or
+  `client.interaction_for_current_app().await`) gives the application-scoped
+  endpoints without repeating the ID: global and guild commands (incl. bulk
+  `set_*_commands`), command permissions, interaction responses and
+  follow-ups, application emojis, entitlements, SKUs, role connection
+  metadata, activity instances.
 - **Builders for every component**, including Components V2 (`Container`,
   `Section`, `TextDisplay`, `Thumbnail`, `MediaGallery`, `FileComponent`,
   `Separator`), user/role/mentionable/channel selects (`SelectMenu::users(..)`

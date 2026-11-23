@@ -136,7 +136,7 @@ pub mod prelude {
     #[cfg(feature = "gateway")]
     pub use cordex_gateway::{CloseMode, EventTypeFlags, Shard, ShardId, ShardManager, Standby};
     #[cfg(feature = "http")]
-    pub use cordex_http::Client;
+    pub use cordex_http::{Client, InteractionClient};
     #[cfg(feature = "interactions")]
     pub use cordex_interactions::{
         Choice, Command, CommandOption, CommandOptions, InteractionHandle, Modal, Reply,

@@ -165,6 +165,7 @@ mod guild;
 mod guild_admin;
 mod identity;
 mod interaction;
+mod interaction_client;
 mod invite;
 mod lobby;
 mod member;
@@ -188,12 +189,15 @@ pub use assets::{
 };
 pub use audit_log::GetAuditLog;
 pub use command::{CommandBody, CommandPayload};
+pub use entitlement::GetEntitlements;
 pub use guild_admin::{
     AddGuildMember, BeginGuildPrune, GetGuildMembers, GetGuildPruneCount, SearchGuildMembers,
     UpdateCurrentMember, UpdateGuild, UpdateGuildWidget, UpdateIncidentActions, UpdateOnboarding,
     UpdateWelcomeScreen,
 };
 pub use identity::{GetApplicationIdentitiesByExternalId, UpdateApplicationIdentityProfile};
+pub use interaction::{CreateFollowupMessage, UpdateInteractionResponse};
+pub use interaction_client::InteractionClient;
 pub use lobby::{
     AddLobbyMember, CreateLobby, CreateOrJoinLobby, GetLobbyMessages, LOBBY_IDLE_TIMEOUT_MAX,
     LOBBY_IDLE_TIMEOUT_MIN, LOBBY_MEMBERS_PER_REQUEST, LOBBY_METADATA_MAX, LinkLobbyChannel,
