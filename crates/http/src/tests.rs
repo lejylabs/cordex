@@ -67,7 +67,7 @@ async fn sends_bot_authorization_and_user_agent() {
     assert_eq!(auth, "Bot test.token.secret");
     assert_eq!(ua, USER_AGENT);
     assert!(ua.starts_with("DiscordBot (https://github.com/lejylabs/cordex, "));
-    assert!(ua.contains("0.1.0"));
+    assert!(ua.contains(env!("CARGO_PKG_VERSION")));
 }
 
 #[tokio::test]

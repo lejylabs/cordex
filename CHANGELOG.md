@@ -6,6 +6,8 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+## 0.1.1 - 2026-11-23
+
 - **`cordex-cache`: per-resource `CachePolicy` (`Off`, `Lazy`, `Eager`).**
   `CacheConfig::lazy(...)` and `CacheConfig::with_policy(..., CachePolicy::Lazy)`
   skip bulk dumps (`GUILD_CREATE`, `GUILD_MEMBERS_CHUNK`, `THREAD_LIST_SYNC`,
