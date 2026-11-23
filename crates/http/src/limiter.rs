@@ -1,5 +1,6 @@
 //! In-process rate limiter and invalid-request guard.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque, hash_map::DefaultHasher};
 use std::fmt;
 use std::future::Future;
@@ -92,7 +93,7 @@ struct ShardInner {
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct RouteKey {
     method: http::Method,
-    template: String,
+    template: Cow<'static, str>,
     channel_id: Option<u64>,
     guild_id: Option<u64>,
     webhook_id: Option<u64>,
@@ -136,7 +137,6 @@ impl BucketKey {
 struct Bucket {
     state: Mutex<BucketState>,
     notify: Notify,
-    last_used: Mutex<Instant>,
 }
 
 struct BucketState {
@@ -144,6 +144,7 @@ struct BucketState {
     limit: i64,
     reset_at: Instant,
     window: Duration,
+    last_used: Instant,
 }
 
 impl Bucket {
@@ -156,9 +157,9 @@ impl Bucket {
                 // Far future: waiters sleep until `record` notifies.
                 reset_at: now + Duration::from_secs(3600),
                 window: Duration::from_secs(1),
+                last_used: now,
             }),
             notify: Notify::new(),
-            last_used: Mutex::new(now),
         })
     }
 
@@ -170,24 +171,20 @@ impl Bucket {
                 limit: 1,
                 reset_at: now,
                 window: Duration::from_secs(1),
+                last_used: now,
             }),
             notify: Notify::new(),
-            last_used: Mutex::new(now),
         })
     }
 
-    fn touch(&self) {
-        *self.last_used.lock() = Instant::now();
-    }
-
     fn unused_since(&self, now: Instant) -> Duration {
-        now.saturating_duration_since(*self.last_used.lock())
+        now.saturating_duration_since(self.state.lock().last_used)
     }
 
     fn try_take(&self) -> Result<(), Duration> {
-        self.touch();
-        let mut st = self.state.lock();
         let now = Instant::now();
+        let mut st = self.state.lock();
+        st.last_used = now;
         if now >= st.reset_at {
             st.remaining = st.limit.max(0);
             st.reset_at = now + st.window;
@@ -204,8 +201,9 @@ impl Bucket {
     }
 
     fn apply(&self, headers: &ParsedHeaders) {
-        self.touch();
+        let now = Instant::now();
         let mut st = self.state.lock();
+        st.last_used = now;
         if headers.limit.is_none()
             && headers.remaining.is_none()
             && headers.reset_after.is_none()
@@ -215,7 +213,7 @@ impl Bucket {
             // the request is done, so let the next one through now instead
             // of waiting for a reset that never comes (a probe bucket's
             // `reset_at` is an hour away).
-            st.reset_at = Instant::now();
+            st.reset_at = now;
             drop(st);
             self.notify.notify_waiters();
             return;
@@ -228,12 +226,13 @@ impl Bucket {
         }
         if let Some(reset_after) = headers.reset_after {
             st.window = reset_after.max(Duration::from_millis(1));
-            st.reset_at = Instant::now() + st.window;
+            st.reset_at = now + st.window;
         } else if headers.retry_after.is_some() && st.remaining <= 0 {
             let wait = headers.retry_after.unwrap_or(Duration::from_secs(1));
             st.window = wait.max(Duration::from_millis(1));
-            st.reset_at = Instant::now() + st.window;
+            st.reset_at = now + st.window;
         }
+        drop(st);
         self.notify.notify_waiters();
     }
 
@@ -724,7 +723,7 @@ mod tests {
     use http::HeaderValue;
     use http::Method;
 
-    fn route(path: &str, channel: u64) -> Route {
+    fn route(path: &'static str, channel: u64) -> Route {
         let mut r = Route::raw(path, channel);
         r.method = Method::GET;
         r

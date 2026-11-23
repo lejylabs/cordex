@@ -188,6 +188,21 @@ pub struct CommandOptionChoice {
     pub value: CommandOptionChoiceValue,
 }
 
+impl CommandOptionChoice {
+    /// Create a choice directly without going through JSON.
+    pub fn new(
+        name: impl Into<Box<str>>,
+        value: CommandOptionChoiceValue,
+        name_localizations: Option<HashMap<Box<str>, Box<str>>>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            name_localizations,
+            value,
+        }
+    }
+}
+
 /// Value of a command option choice.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]

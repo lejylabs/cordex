@@ -523,7 +523,7 @@ pub struct GuildMemberUpdate {
     pub guild_id: Id<GuildMarker>,
     /// Role IDs.
     #[serde(default)]
-    pub roles: Vec<Id<RoleMarker>>,
+    pub roles: Box<[Id<RoleMarker>]>,
     /// User.
     pub user: User,
     /// Nickname.
@@ -545,9 +545,9 @@ pub struct GuildMemberUpdate {
     /// Timeout end.
     pub communication_disabled_until: Option<Timestamp>,
     /// Guild avatar decoration.
-    pub avatar_decoration_data: Option<crate::user::AvatarDecorationData>,
+    pub avatar_decoration_data: Option<Box<crate::user::AvatarDecorationData>>,
     /// Guild collectibles.
-    pub collectibles: Option<crate::user::Collectibles>,
+    pub collectibles: Option<Box<crate::user::Collectibles>>,
     /// Member flags.
     #[serde(default)]
     pub flags: crate::guild::MemberFlags,

@@ -77,13 +77,13 @@ pub struct Guild {
     pub explicit_content_filter: ExplicitContentFilterLevel,
     /// Roles.
     #[serde(default)]
-    pub roles: Vec<Role>,
+    pub roles: Box<[Role]>,
     /// Custom emojis.
     #[serde(default)]
-    pub emojis: Vec<Emoji>,
+    pub emojis: Box<[Emoji]>,
     /// Enabled features.
     #[serde(default)]
-    pub features: Vec<GuildFeature>,
+    pub features: Box<[GuildFeature]>,
     /// MFA requirement for moderation.
     #[serde(default = "MfaLevel::default_value")]
     pub mfa_level: MfaLevel,
@@ -125,20 +125,20 @@ pub struct Guild {
     /// Approximate online members (`with_counts=true`).
     pub approximate_presence_count: Option<u32>,
     /// Welcome screen (invites).
-    pub welcome_screen: Option<WelcomeScreen>,
+    pub welcome_screen: Option<Box<WelcomeScreen>>,
     /// Age restriction level.
     #[serde(default = "NsfwLevel::default_value")]
     pub nsfw_level: NsfwLevel,
     /// Custom stickers.
     #[serde(default)]
-    pub stickers: Vec<Sticker>,
+    pub stickers: Box<[Sticker]>,
     /// Whether the boost progress bar is shown.
     #[serde(default)]
     pub premium_progress_bar_enabled: bool,
     /// Channel for safety alerts (community guilds).
     pub safety_alerts_channel_id: Option<Id<ChannelMarker>>,
     /// Incident actions (raids, DM spam).
-    pub incidents_data: Option<IncidentsData>,
+    pub incidents_data: Option<Box<IncidentsData>>,
 }
 
 impl Guild {

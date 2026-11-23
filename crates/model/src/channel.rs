@@ -30,7 +30,7 @@ pub struct Channel {
     pub position: Option<i32>,
     /// Permission overwrites.
     #[serde(default)]
-    pub permission_overwrites: Vec<PermissionOverwrite>,
+    pub permission_overwrites: Box<[PermissionOverwrite]>,
     /// Name (1–100 characters).
     pub name: Option<Box<str>>,
     /// Topic.
@@ -48,7 +48,7 @@ pub struct Channel {
     pub rate_limit_per_user: Option<u32>,
     /// DM recipients.
     #[serde(default)]
-    pub recipients: Vec<User>,
+    pub recipients: Box<[User]>,
     /// Group DM icon hash.
     pub icon: Option<ImageHash>,
     /// Creator of the group DM or thread.
@@ -70,9 +70,9 @@ pub struct Channel {
     /// Approximate users in a thread (stops at 50).
     pub member_count: Option<u32>,
     /// Thread-specific fields.
-    pub thread_metadata: Option<ThreadMetadata>,
+    pub thread_metadata: Option<Box<ThreadMetadata>>,
     /// Current user's thread membership.
-    pub member: Option<ThreadMember>,
+    pub member: Option<Box<ThreadMember>>,
     /// Default auto archive duration for new threads, in minutes.
     pub default_auto_archive_duration: Option<AutoArchiveDuration>,
     /// Invoking user's permissions (interaction payloads).
@@ -88,12 +88,12 @@ pub struct Channel {
     pub total_message_sent: Option<u32>,
     /// Tags of a forum or media channel.
     #[serde(default)]
-    pub available_tags: Vec<ForumTag>,
+    pub available_tags: Box<[ForumTag]>,
     /// Tags applied to a forum thread.
     #[serde(default)]
-    pub applied_tags: Vec<Id<TagMarker>>,
+    pub applied_tags: Box<[Id<TagMarker>]>,
     /// Default reaction emoji of a forum.
-    pub default_reaction_emoji: Option<DefaultReaction>,
+    pub default_reaction_emoji: Option<Box<DefaultReaction>>,
     /// Initial slowmode for new threads.
     pub default_thread_rate_limit_per_user: Option<u32>,
     /// Default forum sort order.

@@ -224,9 +224,8 @@ impl InteractionHandle {
                 format!("{} autocomplete choices; max. 25", choices.len()).into(),
             ));
         }
-        let choices: Vec<CommandOptionChoice> = serde_json::to_value(&choices)
-            .and_then(serde_json::from_value)
-            .map_err(|e| InteractionError::InvalidResponse(e.to_string().into()))?;
+        let choices: Vec<CommandOptionChoice> =
+            choices.into_iter().map(Choice::into_model).collect();
         let mut data = InteractionCallbackData::default();
         data.choices = choices;
         self.initial(

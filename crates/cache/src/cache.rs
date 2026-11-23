@@ -1,7 +1,7 @@
 //! The in-memory cache.
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::hash::Hash;
+use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::sync::Arc;
 
 use cordex_model::channel::Channel;
@@ -31,10 +31,36 @@ type GuildId = Id<GuildMarker>;
 type ChannelId = Id<ChannelMarker>;
 type UserId = Id<UserMarker>;
 
+/// Fast, zero-dependency integer hasher for `Id<T>` (`NonZeroU64`) snowflake keys.
+#[derive(Default)]
+struct IdHasher(u64);
+
+impl Hasher for IdHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = self
+                .0
+                .wrapping_mul(0x517c_c1b7_2722_0a95)
+                .wrapping_add(u64::from(b));
+        }
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        self.0 = i.wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0 ^ (self.0 >> 32)
+    }
+}
+
+type IdMap<K, V> = HashMap<K, V, BuildHasherDefault<IdHasher>>;
+type IdSet<K> = HashSet<K, BuildHasherDefault<IdHasher>>;
+
 /// Flat map of shared entries.
-type Flat<K, V> = RwLock<HashMap<K, Arc<V>>>;
+type Flat<K, V> = RwLock<IdMap<K, Arc<V>>>;
 /// Entries grouped by guild, so a guild delete drops them in one step.
-type ByGuild<K, V> = RwLock<HashMap<GuildId, HashMap<K, Arc<V>>>>;
+type ByGuild<K, V> = RwLock<IdMap<GuildId, IdMap<K, Arc<V>>>>;
 
 /// Entry counts per resource (metrics).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -125,13 +151,16 @@ pub struct InMemoryCache {
     config: RwLock<CacheConfig>,
     current_user: RwLock<Option<Arc<User>>>,
     guilds: Flat<GuildId, Guild>,
-    unavailable: RwLock<HashSet<GuildId>>,
-    /// Guilds that may have channels or threads in the cache (a superset).
-    /// A first `GUILD_CREATE` then skips scanning every cached channel.
-    channel_guilds: RwLock<HashSet<GuildId>>,
+    unavailable: RwLock<IdSet<GuildId>>,
+    /// Per-guild index of cached channel IDs for `O(guild_channels)` lookups and deletes.
+    guild_channels: RwLock<IdMap<GuildId, IdSet<ChannelId>>>,
+    /// Per-guild index of cached thread IDs for `O(guild_threads)` lookups and deletes.
+    guild_threads: RwLock<IdMap<GuildId, IdSet<ChannelId>>>,
     channels: Flat<ChannelId, Channel>,
     threads: Flat<ChannelId, Channel>,
     users: Flat<UserId, User>,
+    /// Number of guilds in `members` referencing each user, for O(1) `release_user`.
+    user_refs: RwLock<IdMap<UserId, u32>>,
     members: ByGuild<UserId, Member>,
     roles: ByGuild<Id<RoleMarker>, Role>,
     emojis: ByGuild<Id<EmojiMarker>, Emoji>,
@@ -141,7 +170,7 @@ pub struct InMemoryCache {
     presences: ByGuild<UserId, PresenceUpdate>,
     stage_instances: ByGuild<Id<StageMarker>, StageInstance>,
     scheduled_events: ByGuild<Id<ScheduledEventMarker>, ScheduledEvent>,
-    messages: RwLock<HashMap<ChannelId, VecDeque<Arc<Message>>>>,
+    messages: RwLock<IdMap<ChannelId, VecDeque<Arc<Message>>>>,
 }
 
 impl InMemoryCache {
@@ -181,11 +210,13 @@ impl InMemoryCache {
             restrip_flat(&self.channels, |ch| strip::channel(ch, c));
         } else {
             self.channels.write().clear();
+            self.guild_channels.write().clear();
         }
         if c.has(R::THREADS) {
             restrip_flat(&self.threads, |ch| strip::channel(ch, c));
         } else {
             self.threads.write().clear();
+            self.guild_threads.write().clear();
         }
         if c.has(R::USERS) {
             restrip_flat(&self.users, |u| strip::user(u, c));
@@ -199,10 +230,12 @@ impl InMemoryCache {
         if c.has(R::MEMBERS) {
             restrip_by_guild(&self.members, |m| strip::member(m, c));
             if let Some(cap) = c.member_cap() {
-                trim_by_guild(&self.members, cap);
+                let removed = trim_by_guild_returning(&self.members, cap);
+                self.release_users(&removed);
             }
         } else {
             self.members.write().clear();
+            self.user_refs.write().clear();
         }
         clear_unless(c.has(R::ROLES), &self.roles);
         clear_unless(c.has(R::EMOJIS), &self.emojis);
@@ -294,35 +327,67 @@ impl InMemoryCache {
             Event::ChannelCreate(ch) | Event::ChannelUpdate(ch) if c.has(R::CHANNELS) => {
                 let mut ch = (**ch).clone();
                 strip::channel(&mut ch, c);
-                self.note_channel_guild(ch.guild_id);
+                if let Some(gid) = ch.guild_id {
+                    self.guild_channels
+                        .write()
+                        .entry(gid)
+                        .or_default()
+                        .insert(ch.id);
+                }
                 self.channels.write().insert(ch.id, Arc::new(ch));
             }
             Event::ChannelDelete(ch) => {
-                self.channels.write().remove(&ch.id);
+                if let Some(removed) = self.channels.write().remove(&ch.id)
+                    && let Some(gid) = removed.guild_id.or(ch.guild_id)
+                    && let Some(set) = self.guild_channels.write().get_mut(&gid)
+                {
+                    set.remove(&ch.id);
+                }
                 self.messages.write().remove(&ch.id);
             }
             Event::ThreadCreate(ch) | Event::ThreadUpdate(ch) if c.has(R::THREADS) => {
                 let mut ch = (**ch).clone();
                 strip::channel(&mut ch, c);
-                self.note_channel_guild(ch.guild_id);
+                if let Some(gid) = ch.guild_id {
+                    self.guild_threads
+                        .write()
+                        .entry(gid)
+                        .or_default()
+                        .insert(ch.id);
+                }
                 self.threads.write().insert(ch.id, Arc::new(ch));
             }
             Event::ThreadDelete(ch) => {
-                self.threads.write().remove(&ch.id);
+                if let Some(removed) = self.threads.write().remove(&ch.id)
+                    && let Some(gid) = removed.guild_id.or(ch.guild_id)
+                    && let Some(set) = self.guild_threads.write().get_mut(&gid)
+                {
+                    set.remove(&ch.id);
+                }
                 self.messages.write().remove(&ch.id);
             }
             Event::ThreadListSync(sync) if c.is_eager(R::THREADS) => {
-                self.note_channel_guild(Some(sync.guild_id));
                 let mut threads = self.threads.write();
-                threads.retain(|_, t| {
-                    t.guild_id != Some(sync.guild_id)
-                        || !(sync.channel_ids.is_empty()
+                let mut idx = self.guild_threads.write();
+                let set = idx.entry(sync.guild_id).or_default();
+                let mut removed = Vec::new();
+                for &tid in set.iter() {
+                    if let Some(t) = threads.get(&tid)
+                        && (sync.channel_ids.is_empty()
                             || t.parent_id.is_some_and(|p| sync.channel_ids.contains(&p)))
-                });
+                    {
+                        removed.push(tid);
+                    }
+                }
+                for tid in removed {
+                    threads.remove(&tid);
+                    set.remove(&tid);
+                }
                 for t in &sync.threads {
                     let mut t = t.clone();
                     t.guild_id.get_or_insert(sync.guild_id);
                     strip::channel(&mut t, c);
+                    set.insert(t.id);
                     threads.insert(t.id, Arc::new(t));
                 }
             }
@@ -334,10 +399,14 @@ impl InMemoryCache {
             Event::GuildMemberUpdate(u) => self.member_update(u, c),
             Event::GuildMemberRemove(r) => {
                 if c.has(R::MEMBERS) {
-                    if let Some(g) = self.members.write().get_mut(&r.guild_id) {
-                        g.remove(&r.user.id);
+                    let removed = self
+                        .members
+                        .write()
+                        .get_mut(&r.guild_id)
+                        .is_some_and(|g| g.remove(&r.user.id).is_some());
+                    if removed {
+                        self.release_users(&[r.user.id]);
                     }
-                    self.release_user(r.user.id);
                 }
             }
             Event::GuildMembersChunk(chunk) if c.is_eager(R::MEMBERS) => {
@@ -468,17 +537,23 @@ impl InMemoryCache {
             strip::guild(&mut guild, c);
             self.guilds.write().insert(gid, Arc::new(guild));
         }
-        let had_channels = (c.is_eager(R::CHANNELS) || c.is_eager(R::THREADS))
-            && !self.channel_guilds.write().insert(gid);
         if c.is_eager(R::CHANNELS) {
-            replace_guild_channels(&self.channels, gid, &g.channels, had_channels, c);
+            replace_guild_channels(&self.channels, &self.guild_channels, gid, &g.channels, c);
         }
         if c.is_eager(R::THREADS) {
-            replace_guild_channels(&self.threads, gid, &g.threads, had_channels, c);
+            replace_guild_channels(&self.threads, &self.guild_threads, gid, &g.threads, c);
         }
         if c.is_eager(R::MEMBERS) {
-            self.members.write().remove(&gid);
+            let old_users: Vec<UserId> = self
+                .members
+                .write()
+                .remove(&gid)
+                .map(|m| m.into_keys().collect())
+                .unwrap_or_default();
             self.insert_member_batch(gid, &g.members, c, c.is_eager(R::USERS));
+            if !old_users.is_empty() {
+                self.release_users(&old_users);
+            }
         }
         if c.is_eager(R::ROLES) {
             replace_guild(
@@ -540,39 +615,33 @@ impl InMemoryCache {
         }
     }
 
-    fn note_channel_guild(&self, gid: Option<GuildId>) {
-        if let Some(gid) = gid
-            && !self.channel_guilds.read().contains(&gid)
-        {
-            self.channel_guilds.write().insert(gid);
-        }
-    }
-
     /// Guild left or deleted: drop it and everything that belongs to it.
     fn remove_guild(&self, gid: GuildId) {
         self.guilds.write().remove(&gid);
         self.unavailable.write().remove(&gid);
-        let mut gone_channels: HashSet<ChannelId> = HashSet::new();
-        self.channels.write().retain(|id, ch| {
-            let keep = ch.guild_id != Some(gid);
-            if !keep {
-                gone_channels.insert(*id);
+        let gone_channels = self.guild_channels.write().remove(&gid).unwrap_or_default();
+        if !gone_channels.is_empty() {
+            let mut channels = self.channels.write();
+            for cid in &gone_channels {
+                channels.remove(cid);
             }
-            keep
-        });
-        self.threads.write().retain(|id, t| {
-            let keep = t.guild_id != Some(gid);
-            if !keep {
-                gone_channels.insert(*id);
+        }
+        let gone_threads = self.guild_threads.write().remove(&gid).unwrap_or_default();
+        if !gone_threads.is_empty() {
+            let mut threads = self.threads.write();
+            for tid in &gone_threads {
+                threads.remove(tid);
             }
-            keep
-        });
-        self.channel_guilds.write().remove(&gid);
+        }
         {
             let mut messages = self.messages.write();
-            messages.retain(|cid, ring| {
-                !gone_channels.contains(cid) && ring.front().is_none_or(|m| m.guild_id != Some(gid))
-            });
+            for cid in gone_channels.iter().chain(gone_threads.iter()) {
+                messages.remove(cid);
+            }
+            // Also drop messages of channels that were cached without CHANNELS/THREADS.
+            if gone_channels.is_empty() && gone_threads.is_empty() {
+                messages.retain(|_, ring| ring.front().is_none_or(|m| m.guild_id != Some(gid)));
+            }
         }
         let users: Vec<UserId> = self
             .members
@@ -580,8 +649,8 @@ impl InMemoryCache {
             .remove(&gid)
             .map(|m| m.into_keys().collect())
             .unwrap_or_default();
-        for u in users {
-            self.release_user(u);
+        if !users.is_empty() {
+            self.release_users(&users);
         }
         self.roles.write().remove(&gid);
         self.emojis.write().remove(&gid);
@@ -604,19 +673,22 @@ impl InMemoryCache {
             return;
         }
         let uid = user.id;
-        let inserted = {
+        let (inserted, is_new) = {
             let mut members = self.members.write();
             let guild = members.entry(gid).or_default();
             if !guild.contains_key(&uid) && c.member_cap().is_some_and(|cap| guild.len() >= cap) {
-                false
+                (false, false)
             } else {
                 let mut member = m.clone();
                 member.guild_id = Some(gid);
                 strip::member(&mut member, c);
-                guild.insert(uid, Arc::new(member));
-                true
+                let is_new = guild.insert(uid, Arc::new(member)).is_none();
+                (true, is_new)
             }
         };
+        if is_new {
+            *self.user_refs.write().entry(uid).or_insert(0) += 1;
+        }
         if inserted && c.has(ResourceType::USERS) {
             let mut user = user.clone();
             strip::user(&mut user, c);
@@ -638,6 +710,7 @@ impl InMemoryCache {
             return;
         }
         let mut users = Vec::with_capacity(if with_users { list.len() } else { 0 });
+        let mut new_uids = Vec::with_capacity(list.len());
         {
             let mut members = self.members.write();
             let guild = members.entry(gid).or_default();
@@ -654,7 +727,9 @@ impl InMemoryCache {
                 let mut member = m.clone();
                 member.guild_id = Some(gid);
                 strip::member(&mut member, c);
-                guild.insert(uid, Arc::new(member));
+                if guild.insert(uid, Arc::new(member)).is_none() {
+                    new_uids.push(uid);
+                }
                 if with_users {
                     let mut user = user.clone();
                     strip::user(&mut user, c);
@@ -662,8 +737,13 @@ impl InMemoryCache {
                 }
             }
         }
-        // Separate lock scope: `release_user` takes `users` and then reads
-        // `members`, so never hold both here.
+        if !new_uids.is_empty() {
+            let mut refs = self.user_refs.write();
+            refs.reserve(new_uids.len());
+            for uid in new_uids {
+                *refs.entry(uid).or_insert(0) += 1;
+            }
+        }
         if !users.is_empty() {
             self.users.write().extend(users);
         }
@@ -671,6 +751,7 @@ impl InMemoryCache {
 
     fn member_update(&self, u: &GuildMemberUpdate, c: &CacheConfig) {
         let mut stored_member = false;
+        let mut is_new = false;
         if c.has(ResourceType::MEMBERS) {
             let mut members = self.members.write();
             let guild = members.entry(u.guild_id).or_default();
@@ -703,9 +784,12 @@ impl InMemoryCache {
             } else if c.member_cap().is_none_or(|cap| guild.len() < cap) {
                 let mut m = u.to_member();
                 strip::member(&mut m, c);
-                guild.insert(u.user.id, Arc::new(m));
+                is_new = guild.insert(u.user.id, Arc::new(m)).is_none();
                 stored_member = true;
             }
+        }
+        if is_new {
+            *self.user_refs.write().entry(u.user.id).or_insert(0) += 1;
         }
         if c.has(ResourceType::USERS)
             && (stored_member || self.users.read().contains_key(&u.user.id))
@@ -716,19 +800,30 @@ impl InMemoryCache {
         }
     }
 
-    /// Drop a user once no guild has a member entry for it any more.
-    fn release_user(&self, uid: UserId) {
-        if self
-            .current_user
-            .read()
-            .as_ref()
-            .is_some_and(|u| u.id == uid)
+    /// Decrement refcounts in O(1) per removed member and drop users with 0
+    /// remaining guild memberships (never dropping the bot's `current_user`).
+    fn release_users(&self, uids: &[UserId]) {
+        let bot_id = self.current_user.read().as_ref().map(|u| u.id);
+        let mut to_drop = Vec::new();
         {
-            return;
+            let mut refs = self.user_refs.write();
+            for &uid in uids {
+                if let Some(count) = refs.get_mut(&uid) {
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        refs.remove(&uid);
+                        if bot_id != Some(uid) {
+                            to_drop.push(uid);
+                        }
+                    }
+                }
+            }
         }
-        let still_member = self.members.read().values().any(|g| g.contains_key(&uid));
-        if !still_member {
-            self.users.write().remove(&uid);
+        if !to_drop.is_empty() {
+            let mut users = self.users.write();
+            for uid in to_drop {
+                users.remove(&uid);
+            }
         }
     }
 
@@ -908,11 +1003,18 @@ impl InMemoryCache {
 
     /// Channels of a guild.
     pub fn guild_channels(&self, guild: GuildId) -> Vec<Arc<Channel>> {
-        self.channels
+        let ids: Vec<ChannelId> = self
+            .guild_channels
             .read()
-            .values()
-            .filter(|c| c.guild_id == Some(guild))
-            .cloned()
+            .get(&guild)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        if ids.is_empty() {
+            return Vec::new();
+        }
+        let channels = self.channels.read();
+        ids.into_iter()
+            .filter_map(|id| channels.get(&id).cloned())
             .collect()
     }
 
@@ -923,11 +1025,18 @@ impl InMemoryCache {
 
     /// Threads of a guild.
     pub fn guild_threads(&self, guild: GuildId) -> Vec<Arc<Channel>> {
-        self.threads
+        let ids: Vec<ChannelId> = self
+            .guild_threads
             .read()
-            .values()
-            .filter(|t| t.guild_id == Some(guild))
-            .cloned()
+            .get(&guild)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
+        if ids.is_empty() {
+            return Vec::new();
+        }
+        let threads = self.threads.read();
+        ids.into_iter()
+            .filter_map(|id| threads.get(&id).cloned())
             .collect()
     }
 
@@ -1136,21 +1245,29 @@ impl InMemoryCache {
 
 fn replace_guild_channels(
     map: &Flat<ChannelId, Channel>,
+    index: &RwLock<IdMap<GuildId, IdSet<ChannelId>>>,
     gid: GuildId,
     list: &[Channel],
-    had_existing: bool,
     c: &CacheConfig,
 ) {
-    let mut channels = map.write();
-    if had_existing {
-        channels.retain(|_, ch| ch.guild_id != Some(gid));
+    let old_ids = index.write().remove(&gid).unwrap_or_default();
+    let mut new_ids = IdSet::with_capacity_and_hasher(list.len(), BuildHasherDefault::default());
+    {
+        let mut channels = map.write();
+        for cid in old_ids {
+            channels.remove(&cid);
+        }
+        channels.reserve(list.len());
+        for ch in list {
+            let mut ch = ch.clone();
+            ch.guild_id = Some(gid);
+            strip::channel(&mut ch, c);
+            new_ids.insert(ch.id);
+            channels.insert(ch.id, Arc::new(ch));
+        }
     }
-    channels.reserve(list.len());
-    for ch in list {
-        let mut ch = ch.clone();
-        ch.guild_id = Some(gid);
-        strip::channel(&mut ch, c);
-        channels.insert(ch.id, Arc::new(ch));
+    if !new_ids.is_empty() {
+        index.write().insert(gid, new_ids);
     }
 }
 
@@ -1166,7 +1283,7 @@ fn replace_guild<K: Eq + Hash, V>(
     gid: GuildId,
     items: impl Iterator<Item = (K, V)>,
 ) {
-    let entries: HashMap<K, Arc<V>> = items.map(|(k, v)| (k, Arc::new(v))).collect();
+    let entries: IdMap<K, Arc<V>> = items.map(|(k, v)| (k, Arc::new(v))).collect();
     map.write().insert(gid, entries);
 }
 
@@ -1201,13 +1318,20 @@ fn restrip_by_guild<K, V: Clone>(map: &ByGuild<K, V>, f: impl Fn(&mut V)) {
     }
 }
 
-fn trim_by_guild<K: Clone + Eq + Hash, V>(map: &ByGuild<K, V>, cap: usize) {
+fn trim_by_guild_returning<K: Clone + Eq + Hash, V>(map: &ByGuild<K, V>, cap: usize) -> Vec<K> {
+    let mut removed = Vec::new();
     for g in map.write().values_mut() {
         if g.len() > cap {
             let extra: Vec<K> = g.keys().skip(cap).cloned().collect();
             for k in extra {
                 g.remove(&k);
+                removed.push(k);
             }
         }
     }
+    removed
+}
+
+fn trim_by_guild<K: Clone + Eq + Hash, V>(map: &ByGuild<K, V>, cap: usize) {
+    let _ = trim_by_guild_returning(map, cap);
 }

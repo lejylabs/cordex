@@ -61,10 +61,11 @@ impl EventPipe {
 
     pub(crate) async fn wait_space(&self) {
         loop {
+            let notified = self.notify_space.notified();
             if self.has_space() {
                 return;
             }
-            self.notify_space.notified().await;
+            notified.await;
         }
     }
 
@@ -135,29 +136,18 @@ impl EventPipe {
         }
     }
 
-    pub(crate) fn try_pop(&self) -> Option<Result<Event, GatewayError>> {
-        let mut inner = self.lock();
-        let item = inner.items.pop_front();
-        let closed = inner.closed;
-        drop(inner);
-        if item.is_some() {
-            self.notify_space.notify_one();
-        }
-        let _ = closed;
-        item
-    }
-
-    pub(crate) fn is_closed(&self) -> bool {
-        self.lock().closed
-    }
-
     pub(crate) async fn pop(&self) -> Option<Result<Event, GatewayError>> {
         loop {
             let notified = self.notify_recv.notified();
-            if let Some(item) = self.try_pop() {
+            let (item, closed) = {
+                let mut inner = self.lock();
+                (inner.items.pop_front(), inner.closed)
+            };
+            if let Some(item) = item {
+                self.notify_space.notify_one();
                 return Some(item);
             }
-            if self.is_closed() {
+            if closed {
                 return None;
             }
             notified.await;

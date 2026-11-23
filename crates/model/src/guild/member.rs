@@ -36,7 +36,7 @@ pub struct Member {
     pub banner: Option<ImageHash>,
     /// Role IDs.
     #[serde(default)]
-    pub roles: Vec<Id<RoleMarker>>,
+    pub roles: Box<[Id<RoleMarker>]>,
     /// When the user joined; `None` for guest members.
     pub joined_at: Option<Timestamp>,
     /// When the user started boosting.
@@ -58,9 +58,9 @@ pub struct Member {
     /// Timeout end.
     pub communication_disabled_until: Option<Timestamp>,
     /// Guild avatar decoration.
-    pub avatar_decoration_data: Option<AvatarDecorationData>,
+    pub avatar_decoration_data: Option<Box<AvatarDecorationData>>,
     /// Guild collectibles.
-    pub collectibles: Option<Collectibles>,
+    pub collectibles: Option<Box<Collectibles>>,
 }
 
 impl Member {

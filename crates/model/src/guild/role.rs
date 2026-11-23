@@ -42,7 +42,7 @@ pub struct Role {
     #[serde(default)]
     pub mentionable: bool,
     /// Tags.
-    pub tags: Option<RoleTags>,
+    pub tags: Option<Box<RoleTags>>,
     /// Role flags.
     #[serde(default)]
     pub flags: RoleFlags,

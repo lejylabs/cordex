@@ -255,6 +255,21 @@ impl Choice {
             .insert(locale.as_ref().into(), name.as_ref().into());
         self
     }
+
+    pub(crate) fn into_model(self) -> cordex_model::command::CommandOptionChoice {
+        use cordex_model::command::{CommandOptionChoice, CommandOptionChoiceValue};
+        let value = match self.value {
+            ChoiceValue::String(s) => CommandOptionChoiceValue::String(s),
+            ChoiceValue::Integer(i) => CommandOptionChoiceValue::Integer(i),
+            ChoiceValue::Number(n) => CommandOptionChoiceValue::Number(n),
+        };
+        let locs = if self.name_localizations.is_empty() {
+            None
+        } else {
+            Some(self.name_localizations.into_iter().collect())
+        };
+        CommandOptionChoice::new(self.name, value, locs)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

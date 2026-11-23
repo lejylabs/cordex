@@ -279,14 +279,17 @@ pub(crate) fn discord_from_body(status: StatusCode, body: &Bytes) -> HttpError {
         };
     }
 
-    match serde_json::from_slice::<Body>(body) {
-        Ok(parsed) => HttpError::Discord {
+    match std::str::from_utf8(body)
+        .ok()
+        .and_then(|s| serde_json::from_str::<Body>(s).ok())
+    {
+        Some(parsed) => HttpError::Discord {
             status,
             code: parsed.code.unwrap_or(0),
             message: parsed.message.unwrap_or_default(),
             errors: parsed.errors,
         },
-        Err(_) => HttpError::Discord {
+        None => HttpError::Discord {
             status,
             code: 0,
             message: String::from_utf8_lossy(body).into_owned().into_boxed_str(),

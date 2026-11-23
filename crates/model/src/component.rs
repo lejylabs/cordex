@@ -121,12 +121,19 @@ impl<'de> Deserialize<'de> for Component {
             kind: u8,
         }
 
-        // Keep the component raw, read `type`, then parse the matching struct.
+        // Keep the component raw, peek `"type"` at top-level without a full
+        // first-pass parse (falling back to serde for escaped/unusual JSON),
+        // then parse the matching struct.
         let raw = Box::<RawValue>::deserialize(deserializer)?;
         let json = raw.get();
-        let kind = serde_json::from_str::<Kind>(json)
-            .map_err(D::Error::custom)?
-            .kind;
+        let kind = match peek_component_type(json) {
+            Some(k) => k,
+            None => {
+                serde_json::from_str::<Kind>(json)
+                    .map_err(D::Error::custom)?
+                    .kind
+            }
+        };
         let parsed = match kind {
             1 => serde_json::from_str(json).map(Self::ActionRow),
             2 => serde_json::from_str(json).map(Self::Button),
@@ -152,6 +159,72 @@ impl<'de> Deserialize<'de> for Component {
         };
         parsed.map_err(D::Error::custom)
     }
+}
+
+/// Fast top-level scan for `"type": <u8>` in a JSON object so nested
+/// components (containers, action rows, sections) skip a full first-pass parse.
+fn peek_component_type(json: &str) -> Option<u8> {
+    let b = json.as_bytes();
+    let mut i = 0;
+    while i < b.len() && b[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if b.get(i) != Some(&b'{') {
+        return None;
+    }
+    i += 1;
+    let mut depth: u32 = 1;
+    while i < b.len() {
+        match b[i] {
+            b'"' => {
+                let key_start = i + 1;
+                i += 1;
+                while i < b.len() {
+                    if b[i] == b'\\' {
+                        i += 2;
+                    } else if b[i] == b'"' {
+                        break;
+                    } else {
+                        i += 1;
+                    }
+                }
+                let key_end = i;
+                i += 1;
+                if depth == 1 && &b[key_start..key_end.min(b.len())] == b"type" {
+                    while i < b.len() && b[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if b.get(i) == Some(&b':') {
+                        i += 1;
+                        while i < b.len() && b[i].is_ascii_whitespace() {
+                            i += 1;
+                        }
+                        let num_start = i;
+                        while i < b.len() && b[i].is_ascii_digit() {
+                            i += 1;
+                        }
+                        if i > num_start {
+                            return std::str::from_utf8(&b[num_start..i]).ok()?.parse().ok();
+                        }
+                        return None;
+                    }
+                }
+            }
+            b'{' | b'[' => {
+                depth += 1;
+                i += 1;
+            }
+            b'}' | b']' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    break;
+                }
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    None
 }
 
 impl Serialize for Component {

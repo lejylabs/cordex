@@ -178,7 +178,7 @@ bitflags_serde_int!(ActivityFlags, u64);
 pub struct PresenceUpdate {
     /// User; often only `id` is present.
     #[serde(default)]
-    pub user: Option<User>,
+    pub user: Option<Box<User>>,
     /// Guild; omitted on some `GUILD_CREATE` partials.
     pub guild_id: Option<Id<GuildMarker>>,
     /// Status.
@@ -186,7 +186,7 @@ pub struct PresenceUpdate {
     pub status: Status,
     /// Current activities.
     #[serde(default)]
-    pub activities: Vec<PresenceActivity>,
+    pub activities: Box<[PresenceActivity]>,
     /// Per-platform status.
     #[serde(default)]
     pub client_status: ClientStatus,

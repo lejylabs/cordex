@@ -161,6 +161,7 @@ struct Session<'a, C: Connector, Conn> {
     user_q: VecDeque<UserCommand>,
     members: HashMap<Box<str>, PendingMembers>,
     json_buf: Vec<u8>,
+    zlib_out: Vec<u8>,
     active_since: Option<Instant>,
 }
 
@@ -382,6 +383,7 @@ async fn run_session<C: Connector>(
         user_q: VecDeque::new(),
         members: HashMap::new(),
         json_buf: Vec::with_capacity(256),
+        zlib_out: Vec::with_capacity(4096),
         active_since: None,
     };
 
@@ -499,22 +501,56 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
             }
             Ok(Some(Incoming::Binary(bytes))) => {
                 AtomicCounters::add(&self.shared.counters.bytes_received, bytes.len());
-                match self.zlib.push(&bytes) {
+                #[cfg(feature = "metrics")]
+                metrics::counter!("cordex_gateway_bytes_received_total")
+                    .increment(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+                // Fast path: 99.9% of frames are a single complete zlib-stream
+                // message; inflate straight into the reused `zlib_out` buffer
+                // with zero extra copies or heap allocations.
+                let mut out = std::mem::take(&mut self.zlib_out);
+                match self.zlib.try_inflate_single(&bytes, &mut out) {
                     Err(err) => {
+                        crate::zlib::shrink_output(&mut out);
+                        self.zlib_out = out;
                         tracing::error!(shard = self.shared.shard.number(), %err, "zlib");
                         Some(self.reconnect_close_now(true, true).await)
                     }
-                    Ok(messages) => {
-                        for json in messages {
-                            AtomicCounters::add(
-                                &self.shared.counters.bytes_decompressed,
-                                json.len(),
-                            );
-                            if let Some(end) = self.on_json(&json).await {
-                                return Some(end);
+                    Ok(true) => {
+                        AtomicCounters::add(&self.shared.counters.bytes_decompressed, out.len());
+                        #[cfg(feature = "metrics")]
+                        metrics::counter!("cordex_gateway_bytes_decompressed_total")
+                            .increment(u64::try_from(out.len()).unwrap_or(u64::MAX));
+                        let end = match std::str::from_utf8(&out) {
+                            Ok(json) => self.on_json(json).await,
+                            Err(_) => None,
+                        };
+                        crate::zlib::shrink_output(&mut out);
+                        self.zlib_out = out;
+                        end
+                    }
+                    Ok(false) => {
+                        self.zlib_out = out;
+                        match self.zlib.push(&bytes) {
+                            Err(err) => {
+                                tracing::error!(shard = self.shared.shard.number(), %err, "zlib");
+                                Some(self.reconnect_close_now(true, true).await)
+                            }
+                            Ok(messages) => {
+                                for json in messages {
+                                    AtomicCounters::add(
+                                        &self.shared.counters.bytes_decompressed,
+                                        json.len(),
+                                    );
+                                    #[cfg(feature = "metrics")]
+                                    metrics::counter!("cordex_gateway_bytes_decompressed_total")
+                                        .increment(u64::try_from(json.len()).unwrap_or(u64::MAX));
+                                    if let Some(end) = self.on_json(&json).await {
+                                        return Some(end);
+                                    }
+                                }
+                                None
                             }
                         }
-                        None
                     }
                 }
             }
@@ -827,9 +863,7 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
                     return Some(self.shutdown(mode, Some(done)).await);
                 }
                 UserCommand::Payload { bytes, done } => {
-                    self.json_buf.clear();
-                    self.json_buf.extend_from_slice(&bytes);
-                    let result = self.send_user_now().await;
+                    let result = self.send_user_bytes(bytes.into()).await;
                     let send_ok = result.is_none();
                     let _ = done.send(if send_ok {
                         Ok(())
@@ -841,9 +875,7 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
                     }
                 }
                 UserCommand::RequestMembers { nonce, bytes, done } => {
-                    self.json_buf.clear();
-                    self.json_buf.extend_from_slice(&bytes);
-                    let result = self.send_user_now().await;
+                    let result = self.send_user_bytes(bytes.into()).await;
                     if let Some(end) = result {
                         let _ = done.send(Err(GatewayError::Stopped));
                         return Some(end);
@@ -887,12 +919,25 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
         None
     }
 
+    async fn send_user_bytes(&mut self, bytes: Bytes) -> Option<SessionEnd> {
+        let now = Instant::now();
+        if let Some(end) = self.send_bytes(bytes).await {
+            return Some(end);
+        }
+        self.outbound.record(now);
+        None
+    }
+
     async fn send_buf(&mut self) -> Option<SessionEnd> {
-        if self.json_buf.len() > MAX_PAYLOAD_BYTES {
+        let bytes = Bytes::copy_from_slice(&self.json_buf);
+        self.send_bytes(bytes).await
+    }
+
+    async fn send_bytes(&mut self, bytes: Bytes) -> Option<SessionEnd> {
+        if bytes.len() > MAX_PAYLOAD_BYTES {
             tracing::error!("outbound payload too large");
             return None;
         }
-        let bytes = Bytes::copy_from_slice(&self.json_buf);
         match self.conn.send(Outgoing::Text(bytes)).await {
             Ok(()) => None,
             Err(err) => {

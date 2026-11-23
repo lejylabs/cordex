@@ -193,7 +193,7 @@ fn full_replay_snapshot() {
     assert_eq!(cache.current_user().unwrap().id.get(), BOT);
     let guild = cache.guild(g).unwrap();
     assert!(guild.roles.is_empty(), "roles live in their own store");
-    assert_ne!(guild.features, [] as [cordex_model::guild::GuildFeature; 0]);
+    assert!(!guild.features.is_empty());
     let channel = cache.channel(Id::new(TEXT).unwrap()).unwrap();
     assert_eq!(
         channel.guild_id,
@@ -389,10 +389,7 @@ fn member_lifecycle_and_user_release() {
     cache.update(&ev("GUILD_MEMBER_UPDATE", &update));
     let m = cache.member(g, bob).unwrap();
     assert_eq!(m.nick.as_deref(), Some("bobby"));
-    assert_eq!(
-        m.roles,
-        [] as [cordex_model::Id<cordex_model::id::marker::RoleMarker>; 0]
-    );
+    assert!(m.roles.is_empty());
 
     cache.update(&ev(
         "GUILD_MEMBER_REMOVE",

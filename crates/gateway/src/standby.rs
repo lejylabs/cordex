@@ -8,6 +8,7 @@
 
 use std::future::Future;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use cordex_model::gateway::Event;
@@ -39,10 +40,16 @@ struct Waiter {
     sink: Sink,
 }
 
+#[derive(Default)]
+struct StandbyInner {
+    waiters: Mutex<Vec<Waiter>>,
+    count: AtomicUsize,
+}
+
 /// Shared list of event waiters. Cheap to clone (`Arc`).
 #[derive(Clone, Default)]
 pub struct Standby {
-    inner: Arc<Mutex<Vec<Waiter>>>,
+    inner: Arc<StandbyInner>,
 }
 
 impl Standby {
@@ -53,14 +60,18 @@ impl Standby {
 
     /// Whether anyone is waiting.
     pub fn is_empty(&self) -> bool {
-        self.inner.lock().is_empty()
+        self.inner.count.load(Ordering::Acquire) == 0
     }
 
     /// Offer `event` to waiters. Clones it only when at least one predicate
     /// matches. Returns how many waiters received it.
     pub fn process(&self, event: &Event) -> usize {
-        let mut guard = self.inner.lock();
+        if self.inner.count.load(Ordering::Acquire) == 0 {
+            return 0;
+        }
+        let mut guard = self.inner.waiters.lock();
         if guard.is_empty() {
+            self.inner.count.store(0, Ordering::Release);
             return 0;
         }
         let mut sent = 0;
@@ -98,6 +109,7 @@ impl Standby {
                 },
             }
         }
+        self.inner.count.store(guard.len(), Ordering::Release);
         sent
     }
 
@@ -111,10 +123,13 @@ impl Standby {
         F: Fn(&Event) -> bool + Send + Sync + 'static,
     {
         let (tx, rx) = oneshot::channel();
-        self.inner.lock().push(Waiter {
+        let mut guard = self.inner.waiters.lock();
+        guard.push(Waiter {
             pred: Arc::new(pred),
             sink: Sink::Once(tx),
         });
+        self.inner.count.store(guard.len(), Ordering::Release);
+        drop(guard);
         async move {
             match tokio::time::timeout(timeout, rx).await {
                 Ok(Ok(event)) => Some(event),
@@ -130,10 +145,13 @@ impl Standby {
         F: Fn(&Event) -> bool + Send + Sync + 'static,
     {
         let (tx, rx) = mpsc::channel(STANDBY_STREAM_CAPACITY);
-        self.inner.lock().push(Waiter {
+        let mut guard = self.inner.waiters.lock();
+        guard.push(Waiter {
             pred: Arc::new(pred),
             sink: Sink::Stream(tx),
         });
+        self.inner.count.store(guard.len(), Ordering::Release);
+        drop(guard);
         rx
     }
 }
@@ -141,7 +159,7 @@ impl Standby {
 impl std::fmt::Debug for Standby {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Standby")
-            .field("waiters", &self.inner.lock().len())
+            .field("waiters", &self.inner.count.load(Ordering::Relaxed))
             .finish()
     }
 }

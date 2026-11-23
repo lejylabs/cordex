@@ -129,11 +129,11 @@ pub struct User {
     /// Public account flags.
     pub public_flags: Option<UserFlags>,
     /// Avatar decoration.
-    pub avatar_decoration_data: Option<AvatarDecorationData>,
+    pub avatar_decoration_data: Option<Box<AvatarDecorationData>>,
     /// Collectibles (nameplate).
-    pub collectibles: Option<Collectibles>,
+    pub collectibles: Option<Box<Collectibles>>,
     /// Primary guild (server tag).
-    pub primary_guild: Option<PrimaryGuild>,
+    pub primary_guild: Option<Box<PrimaryGuild>>,
 }
 
 impl User {

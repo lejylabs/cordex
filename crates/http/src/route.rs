@@ -1,5 +1,6 @@
 //! Route identity for REST requests and the rate limiter.
 
+use std::borrow::Cow;
 use std::fmt::{self, Write};
 
 use cordex_model::id::Id;
@@ -52,7 +53,7 @@ impl fmt::Debug for MajorParameters {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Route {
     pub(crate) method: Method,
-    pub(crate) template: String,
+    pub(crate) template: Cow<'static, str>,
     pub(crate) path: String,
     pub(crate) major: MajorParameters,
     pub(crate) global_exempt: bool,
@@ -80,7 +81,7 @@ impl fmt::Debug for Route {
 
 impl Route {
     /// A path template with no parameters, method set later by [`crate::Client::request`].
-    pub fn new(template: impl AsRef<str>) -> Self {
+    pub fn new(template: impl Into<Cow<'static, str>>) -> Self {
         Self::raw(template, ())
     }
 
@@ -101,14 +102,14 @@ impl Route {
     /// assert_eq!(route.path(), "/guilds/1/onboarding");
     /// assert_eq!(route.major().guild_id, Some(1));
     /// ```
-    pub fn raw(template: impl AsRef<str>, params: impl IntoPathParams) -> Self {
-        let template = template.as_ref();
+    pub fn raw(template: impl Into<Cow<'static, str>>, params: impl IntoPathParams) -> Self {
+        let template = template.into();
         let mut values = Vec::new();
         params.into_path_params(&mut values);
-        let (path, major, global_exempt) = substitute(template, &values);
+        let (path, major, global_exempt) = substitute(&template, &values);
         Self {
             method: Method::GET,
-            template: template.to_owned(),
+            template,
             path,
             major,
             global_exempt,

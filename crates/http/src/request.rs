@@ -209,7 +209,9 @@ fn parse_429(raw: &RawResponse) -> RetryAfter {
         global: Option<bool>,
     }
 
-    let body: Option<Body> = serde_json::from_slice(&raw.body).ok();
+    let body: Option<Body> = std::str::from_utf8(&raw.body)
+        .ok()
+        .and_then(|s| serde_json::from_str(s).ok());
     let from_body = body.as_ref().and_then(|b| {
         b.retry_after.and_then(|v| {
             if v.is_finite() && v >= 0.0 {

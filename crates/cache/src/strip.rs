@@ -26,7 +26,7 @@ pub(crate) fn user(u: &mut User, c: &CacheConfig) {
 pub(crate) fn member(m: &mut Member, c: &CacheConfig) {
     m.user = None;
     if !c.has_part(CacheParts::MEMBER_ROLES) {
-        m.roles = Vec::new();
+        m.roles = Box::default();
     }
     if !c.has_part(CacheParts::MEMBER_PROFILE) {
         m.nick = None;
@@ -39,17 +39,17 @@ pub(crate) fn member(m: &mut Member, c: &CacheConfig) {
 
 /// Roles, emojis and stickers are own resources and not kept twice.
 pub(crate) fn guild(g: &mut Guild, c: &CacheConfig) {
-    g.roles = Vec::new();
-    g.emojis = Vec::new();
-    g.stickers = Vec::new();
+    g.roles = Box::default();
+    g.emojis = Box::default();
+    g.stickers = Box::default();
     if !c.has_part(CacheParts::GUILD_FEATURES) {
-        g.features = Vec::new();
+        g.features = Box::default();
     }
 }
 
 pub(crate) fn channel(ch: &mut Channel, c: &CacheConfig) {
     if !c.has_part(CacheParts::CHANNEL_OVERWRITES) {
-        ch.permission_overwrites = Vec::new();
+        ch.permission_overwrites = Box::default();
     }
     // Thread member of the bot and DM recipients are not cached data here.
     ch.member = None;
@@ -60,13 +60,13 @@ pub(crate) fn message(msg: &mut Message, c: &CacheConfig) {
         msg.content = Box::from("");
     }
     if !c.has_part(CacheParts::MESSAGE_EMBEDS) {
-        msg.embeds = Vec::new();
+        msg.embeds = Box::default();
     }
     if !c.has_part(CacheParts::MESSAGE_ATTACHMENTS) {
-        msg.attachments = Vec::new();
+        msg.attachments = Box::default();
     }
     if !c.has_part(CacheParts::MESSAGE_COMPONENTS) {
-        msg.components = Vec::new();
+        msg.components = Box::default();
     }
     // Nested copies would grow without bound; look them up by id instead.
     msg.referenced_message = None;
@@ -89,7 +89,7 @@ pub(crate) fn voice_state(v: &mut VoiceState, c: &CacheConfig) {
 
 pub(crate) fn presence(p: &mut PresenceUpdate, c: &CacheConfig) {
     if !c.has_part(CacheParts::PRESENCE_ACTIVITIES) {
-        p.activities = Vec::new();
+        p.activities = Box::default();
     }
     // Presence users are partial (often only the id); the id is the key.
     p.user = None;

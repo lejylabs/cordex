@@ -68,7 +68,8 @@ impl Multipart {
     /// Builds the body and `Content-Type` header (with boundary).
     pub fn encode(&self) -> Result<(HeaderValue, Bytes), HttpError> {
         let boundary = format!("----cordex{}", fastrand::u64(..));
-        let mut out = BytesMut::new();
+        let files_bytes: usize = self.files.iter().map(|f| f.data.len() + 256).sum();
+        let mut out = BytesMut::with_capacity(self.payload_json.len() + files_bytes + 256);
         write_part(
             &mut out,
             &boundary,
@@ -111,7 +112,8 @@ pub(crate) fn encode_form(
     file: &File,
 ) -> Result<(HeaderValue, Bytes), HttpError> {
     let boundary = format!("----cordex{}", fastrand::u64(..));
-    let mut out = BytesMut::new();
+    let fields_bytes: usize = fields.iter().map(|(k, v)| k.len() + v.len() + 128).sum();
+    let mut out = BytesMut::with_capacity(fields_bytes + file.data.len() + 256);
     for (name, value) in fields {
         write_part(&mut out, &boundary, name, None, None, value.as_bytes());
     }

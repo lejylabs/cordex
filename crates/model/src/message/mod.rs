@@ -68,22 +68,22 @@ pub struct Message {
     pub mention_everyone: bool,
     /// Mentioned users (with partial `member` in gateway events).
     #[serde(default)]
-    pub mentions: Vec<MentionedUser>,
+    pub mentions: Box<[MentionedUser]>,
     /// Mentioned roles.
     #[serde(default)]
-    pub mention_roles: Vec<Id<RoleMarker>>,
+    pub mention_roles: Box<[Id<RoleMarker>]>,
     /// Mentioned channels (crossposts only).
     #[serde(default)]
-    pub mention_channels: Vec<ChannelMention>,
+    pub mention_channels: Box<[ChannelMention]>,
     /// Attachments.
     #[serde(default)]
-    pub attachments: Vec<Attachment>,
+    pub attachments: Box<[Attachment]>,
     /// Embeds.
     #[serde(default)]
-    pub embeds: Vec<Embed>,
+    pub embeds: Box<[Embed]>,
     /// Reactions.
     #[serde(default)]
-    pub reactions: Vec<Reaction>,
+    pub reactions: Box<[Reaction]>,
     /// Nonce for verifying a sent message.
     pub nonce: Option<Nonce>,
     /// Whether the message is pinned.
@@ -95,7 +95,7 @@ pub struct Message {
     #[serde(rename = "type")]
     pub kind: MessageType,
     /// Rich Presence activity.
-    pub activity: Option<MessageActivity>,
+    pub activity: Option<Box<MessageActivity>>,
     /// Rich Presence application (partial).
     pub application: Option<Box<Application>>,
     /// Application of an interaction or webhook message.
@@ -104,10 +104,10 @@ pub struct Message {
     #[serde(default)]
     pub flags: MessageFlags,
     /// Source of a reply, crosspost, pin, forward, …
-    pub message_reference: Option<MessageReference>,
+    pub message_reference: Option<Box<MessageReference>>,
     /// Forwarded message content.
     #[serde(default)]
-    pub message_snapshots: Vec<MessageSnapshot>,
+    pub message_snapshots: Box<[MessageSnapshot]>,
     /// The replied-to message; `None` inside if it was deleted.
     pub referenced_message: Option<Box<Message>>,
     /// Interaction that created the message.
@@ -118,28 +118,28 @@ pub struct Message {
     pub thread: Option<Box<Channel>>,
     /// Components.
     #[serde(default)]
-    pub components: Vec<Component>,
+    pub components: Box<[Component]>,
     /// Stickers.
     #[serde(default)]
-    pub sticker_items: Vec<StickerItem>,
+    pub sticker_items: Box<[StickerItem]>,
     /// Deprecated full stickers.
     #[serde(default)]
-    pub stickers: Vec<Sticker>,
+    pub stickers: Box<[Sticker]>,
     /// Approximate position in a thread.
     pub position: Option<u32>,
     /// Type of the channel the message was sent in (`MESSAGE_CREATE` only).
     #[serde(default)]
     pub channel_type: Option<crate::channel::ChannelType>,
     /// Role subscription purchase/renewal data.
-    pub role_subscription_data: Option<RoleSubscriptionData>,
+    pub role_subscription_data: Option<Box<RoleSubscriptionData>>,
     /// Users, members, channels and roles referenced in components.
     pub resolved: Option<Box<Resolved>>,
     /// Poll.
     pub poll: Option<Box<Poll>>,
     /// Call in a DM.
-    pub call: Option<MessageCall>,
+    pub call: Option<Box<MessageCall>>,
     /// Shared client theme.
-    pub shared_client_theme: Option<SharedClientTheme>,
+    pub shared_client_theme: Option<Box<SharedClientTheme>>,
 }
 
 impl Message {

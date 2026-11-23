@@ -8,6 +8,15 @@ All notable changes are listed here. The project follows
 
 - **`cordex-http`: HTTP/2 via ALPN enabled by default** (`http2_adaptive_window(true)`), falling back to HTTP/1.1 automatically; `ClientBuilder::http1_only(true)` forces HTTP/1.1.
 - **Optional `metrics` feature** on `cordex-http`, `cordex-gateway` and `cordex`: exports HTTP and gateway counters through the `metrics` crate (off by default).
+- **Performance pass:**
+  - `cordex-gateway`: zero-copy single-frame `zlib-stream` fast path (`ZlibStream::try_inflate_single` + reused `zlib_out` buffer in `Session`), zero-copy outbound `Bytes` in `Session::flush_user`, lock-free `AtomicUsize` fast path in `Standby::process`, single-lock `EventPipe::pop` and race-free `wait_space`.
+  - `cordex-cache`: `O(1)` `release_users` via refcount map, per-guild `guild_channels`/`guild_threads` indexes (`O(guild_channels)` instead of full-cache scans), and a zero-dependency integer `IdHasher` for `Id<T>` keys.
+  - `cordex-http`: merged `last_used` into `BucketState` (halving mutex locks and `Instant::now()` calls per request), `Cow<'static, str>` route templates (`Route::raw` / `Route::new`), pre-sized `Multipart::encode` / `encode_form` buffers, and removed remaining `serde_json::from_slice` calls.
+  - `cordex-interactions`: direct `Choice::into_model()` conversion in `autocomplete` (eliminating the `serde_json::Value` round-trip).
+  - `cordex-model`: fast top-level `"type"` peek in `Component::deserialize` before falling back to serde.
+- **Breaking (for `0.2.0`) — smaller model memory footprint:**
+  - `cordex-model`: changed read-only list fields on `Message`, `Channel`, `Guild`, `Member`, `GuildMemberUpdate` and `PresenceUpdate` from `Vec<T>` to `Box<[T]>` (saving 8 bytes per field plus spare capacity), and boxed rare optional sub-structs on `User`, `Member`, `GuildMemberUpdate`, `Role`, `Guild`, `Channel`, `Message` and `PresenceUpdate`.
+  - `cordex-http`: `Route::new` / `Route::raw` now take `impl Into<Cow<'static, str>>` so static route templates avoid heap allocations.
 
 ## 0.1.1 - 2026-11-23
 

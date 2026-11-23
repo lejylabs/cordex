@@ -38,57 +38,132 @@ impl ZlibStream {
     /// Feed a WebSocket binary frame. Completed JSON documents are returned
     /// in order (a frame may contain several, or only part of one).
     pub fn push(&mut self, data: &[u8]) -> Result<Vec<Box<str>>, GatewayError> {
+        let mut out = Vec::new();
+        let mut buf = Vec::with_capacity(4096);
+        self.push_each(data, &mut buf, |json| out.push(Box::from(json)))?;
+        Ok(out)
+    }
+
+    /// Fast-path single-message inflate: when `pending` is empty and `data`
+    /// is exactly one complete zlib-stream frame, inflates directly from
+    /// `data` into `out` with zero intermediate copies or heap allocations.
+    ///
+    /// Returns `Ok(true)` if `out` holds the single completed UTF-8 JSON
+    /// document, or `Ok(false)` if the caller should fall back to
+    /// [`Self::push`] (split frame or multiple messages in one frame).
+    pub(crate) fn try_inflate_single(
+        &mut self,
+        data: &[u8],
+        out: &mut Vec<u8>,
+    ) -> Result<bool, GatewayError> {
+        if !self.pending.is_empty() || data.len() < 4 || !data.ends_with(&ZLIB_SUFFIX) {
+            return Ok(false);
+        }
+        // Only take the fast path when there is no earlier ZLIB_SUFFIX inside `data`.
+        if find_suffix(&data[..data.len() - 1]).is_some() {
+            return Ok(false);
+        }
+        if data.len() > self.max_message {
+            return Err(GatewayError::zlib("compressed message exceeds size cap"));
+        }
+        self.inflate_into(data, out)?;
+        let _ = std::str::from_utf8(out)
+            .map_err(|_| GatewayError::zlib("decompressed payload is not UTF-8"))?;
+        Ok(true)
+    }
+
+    /// Feed a frame and invoke `f` with each completed UTF-8 JSON document,
+    /// reusing `out` as the decompression buffer (zero per-message heap
+    /// allocations).
+    pub(crate) fn push_each(
+        &mut self,
+        data: &[u8],
+        out: &mut Vec<u8>,
+        mut f: impl FnMut(&str),
+    ) -> Result<(), GatewayError> {
+        if self.try_inflate_single(data, out)? {
+            if let Ok(json) = std::str::from_utf8(out) {
+                f(json);
+            }
+            shrink_output(out);
+            return Ok(());
+        }
         if self.pending.len().saturating_add(data.len()) > self.max_message {
             return Err(GatewayError::zlib("compressed message exceeds size cap"));
         }
         self.pending.extend_from_slice(data);
 
-        let mut messages = Vec::new();
-        while let Some(end) = find_suffix(&self.pending) {
-            let chunk: Vec<u8> = self.pending.drain(..=end).collect();
-            messages.push(self.inflate_chunk(&chunk)?);
+        let mut start = 0;
+        while let Some(rel_end) = find_suffix(&self.pending[start..]) {
+            let end = start + rel_end;
+            // Inflate directly from the slice without allocating a temporary `Vec<u8>`.
+            let res = inflate_slice(
+                &mut self.inflate,
+                &self.pending[start..=end],
+                out,
+                self.max_message,
+            );
+            start = end + 1;
+            res?;
+            let json = std::str::from_utf8(out)
+                .map_err(|_| GatewayError::zlib("decompressed payload is not UTF-8"))?;
+            f(json);
+        }
+        if start > 0 {
+            self.pending.drain(..start);
         }
         self.maybe_shrink();
-        Ok(messages)
+        shrink_output(out);
+        Ok(())
     }
 
-    fn inflate_chunk(&mut self, chunk: &[u8]) -> Result<Box<str>, GatewayError> {
-        self.output.clear();
-        let mut src = chunk;
-        loop {
-            if self.output.len() > self.max_message {
-                return Err(GatewayError::zlib("decompressed message exceeds size cap"));
-            }
-            let in_before = self.inflate.total_in();
-            let status = self
-                .inflate
-                .decompress_vec(src, &mut self.output, FlushDecompress::Sync)
-                .map_err(GatewayError::zlib)?;
-            let used = consumed(self.inflate.total_in(), in_before);
-            src = src.get(used..).unwrap_or(&[]);
-            match status {
-                Status::Ok | Status::StreamEnd | Status::BufError if src.is_empty() => break,
-                Status::BufError => self.output.reserve(4096),
-                Status::Ok | Status::StreamEnd => {}
-            }
-        }
-        if self.output.len() > self.max_message {
-            return Err(GatewayError::zlib("decompressed message exceeds size cap"));
-        }
-        let json = std::str::from_utf8(&self.output)
-            .map_err(|_| GatewayError::zlib("decompressed payload is not UTF-8"))?;
-        Ok(json.into())
+    fn inflate_into(&mut self, chunk: &[u8], out: &mut Vec<u8>) -> Result<(), GatewayError> {
+        inflate_slice(&mut self.inflate, chunk, out, self.max_message)
     }
 
     fn maybe_shrink(&mut self) {
         if self.pending.capacity() > SHRINK_AFTER && self.pending.len() < SHRINK_TO {
             self.pending.shrink_to(SHRINK_TO);
         }
-        if self.output.capacity() > SHRINK_AFTER {
-            self.output.clear();
-            self.output.shrink_to(SHRINK_TO);
+        shrink_output(&mut self.output);
+    }
+}
+
+pub(crate) fn shrink_output(out: &mut Vec<u8>) {
+    if out.capacity() > SHRINK_AFTER {
+        out.clear();
+        out.shrink_to(SHRINK_TO);
+    }
+}
+
+fn inflate_slice(
+    inflate: &mut Decompress,
+    chunk: &[u8],
+    out: &mut Vec<u8>,
+    max_message: usize,
+) -> Result<(), GatewayError> {
+    out.clear();
+    let mut src = chunk;
+    loop {
+        if out.len() > max_message {
+            return Err(GatewayError::zlib("decompressed message exceeds size cap"));
+        }
+        let in_before = inflate.total_in();
+        let status = inflate
+            .decompress_vec(src, out, FlushDecompress::Sync)
+            .map_err(GatewayError::zlib)?;
+        let used = consumed(inflate.total_in(), in_before);
+        src = src.get(used..).unwrap_or(&[]);
+        match status {
+            Status::Ok | Status::StreamEnd | Status::BufError if src.is_empty() => break,
+            Status::BufError => out.reserve(4096),
+            Status::Ok | Status::StreamEnd => {}
         }
     }
+    if out.len() > max_message {
+        return Err(GatewayError::zlib("decompressed message exceeds size cap"));
+    }
+    Ok(())
 }
 
 fn consumed(total_in: u64, before: u64) -> usize {
