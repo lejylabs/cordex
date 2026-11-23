@@ -1,5 +1,4 @@
-//! Discord interactions: command builders, responses and the HTTP
-//! interaction endpoint with signature verification.
+#![doc = include_str!("../README.md")]
 
 pub mod command;
 pub mod error;

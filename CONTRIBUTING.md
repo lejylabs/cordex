@@ -5,13 +5,25 @@ Thanks for helping! Bug reports, docs fixes and code are all welcome.
 ## Before you start
 
 - **Questions and quick help**: ask on the [cordex Discord server](https://discord.gg/Xj9nRKyKNV).
-
 - **Bugs**: open an issue with the bug template (version, what you did, what
   happened, logs with tokens removed).
 - **Features or API changes**: open an issue first so we can agree on the
   design before you spend time on code.
 - **Security problems**: never in a public issue, see [SECURITY.md](SECURITY.md).
 - Small fixes (typos, docs, obvious bugs) can go straight to a pull request.
+
+## Project layout
+
+| Path | Content |
+|---|---|
+| `crates/model` | `cordex-model`: models and pure helpers (no async) |
+| `crates/http` | `cordex-http`: REST client and rate limiter |
+| `crates/gateway` | `cordex-gateway`: shards, shard manager, standby |
+| `crates/interactions` | `cordex-interactions`: commands, responses, HTTP endpoint |
+| `crates/cache` | `cordex-cache`: optional cache |
+| `crates/facade` | `cordex`: facade, simple layer `Bot`, backfill, examples |
+| `xtask` | `cargo xtask` quality gate, feature matrix, coverage tool |
+| `docs/coverage.md` | generated API coverage report |
 
 ## Setup
 
@@ -30,8 +42,18 @@ All three must pass before a pull request is merged; CI runs the same commands.
 When you add or remove an endpoint, event or enum value, run
 `cargo xtask coverage` and commit the updated `docs/coverage.md`. Every REST
 method in `cordex-http` needs a doc comment with its route, e.g.
-`` /// `GET /channels/{channel_id}` ``; the coverage tool reads these. New model types for a docs table go into the
-`FIELDS` / `FLAGS` / `ENUMS` lists in `xtask/src/coverage.rs`.
+`` /// `GET /channels/{channel_id}` ``; the coverage tool reads these. New
+model types for a docs table go into the `FIELDS` / `FLAGS` / `ENUMS` lists
+in `xtask/src/coverage.rs`.
+
+Each crate's `README.md` is also its rustdoc front page, so the examples in
+it are compiled and run as doctests: keep them working. The root `README.md`
+is copied to `crates/facade/README.md` (`cargo xtask layout-check` checks it).
+
+For a live test against Discord, `crates/facade/examples/testbot.rs` reads
+`DISCORD_TOKEN` from a `.env` file
+(`cargo run -p cordex --example testbot --features cache`); it is not part of
+the published crate.
 
 ## Rules for code
 

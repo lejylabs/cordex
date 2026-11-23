@@ -1,6 +1,6 @@
 [package]
 name = "cordex-http"
-description = "Discord REST client with rate limiting."
+description = "Discord REST client for cordex: all endpoints typed, per-route and global rate limits, invalid request guard."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

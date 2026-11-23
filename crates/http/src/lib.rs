@@ -1,5 +1,4 @@
-//! Discord REST client: routes, rate limiter, invalid request guard and
-//! retries.
+#![doc = include_str!("../README.md")]
 
 pub mod endpoint;
 pub mod error;

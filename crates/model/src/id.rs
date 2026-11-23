@@ -61,6 +61,17 @@ impl<T> Id<T> {
         (self.get() >> 22) + DISCORD_EPOCH_MS
     }
 
+    /// Creation time as a [`Timestamp`](crate::Timestamp) (e.g. for
+    /// `created_at().markdown(TimestampStyle::Relative)`).
+    pub const fn created_at(self) -> crate::Timestamp {
+        // 42-bit timestamp + epoch always fits in i64.
+        #[allow(
+            clippy::cast_possible_wrap,
+            reason = "at most 2^42 + epoch, far below i64::MAX"
+        )]
+        crate::Timestamp::from_millis(self.timestamp_ms() as i64)
+    }
+
     /// Smallest ID created at `timestamp_ms` (Unix milliseconds), for
     /// `before`/`after` pagination: `(timestamp_ms - DISCORD_EPOCH) << 22`.
     /// `None` before the Discord epoch or past the 42-bit timestamp range.

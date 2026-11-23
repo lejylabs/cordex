@@ -1,6 +1,6 @@
 [package]
 name = "cordex"
-description = "Independent Discord bot API library (facade crate)."
+description = "Fast, independent Discord bot library for Rust: gateway, sharding, REST, interactions, optional cache and a simple Bot layer."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

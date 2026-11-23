@@ -1,6 +1,6 @@
 [package]
 name = "cordex-gateway"
-description = "Discord gateway shards and shard manager."
+description = "Discord gateway for cordex: shards, automatic sharding, identify queue, event filter, standby."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

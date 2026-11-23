@@ -1,10 +1,4 @@
-//! Discord API v10 models: snowflakes, flags, REST resources and gateway
-//! payloads.
-//!
-//! No async or network dependencies; checked by `cargo xtask layout-check`.
-//!
-//! Reference: <https://github.com/discord/discord-api-docs> (the official
-//! developer documentation wins over every other source).
+#![doc = include_str!("../README.md")]
 
 pub mod application;
 pub mod audit_log;

@@ -1,6 +1,6 @@
 [package]
 name = "cordex-cache"
-description = "Optional in-memory cache fed by gateway events."
+description = "Optional in-memory cache for cordex: every resource and part switchable, off by default."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

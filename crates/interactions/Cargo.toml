@@ -1,6 +1,6 @@
 [package]
 name = "cordex-interactions"
-description = "Discord interaction builders, responses and HTTP endpoint."
+description = "Discord interactions for cordex: command builders, responses with auto-defer, modals, HTTP endpoint."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

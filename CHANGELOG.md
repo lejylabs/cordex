@@ -6,6 +6,16 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+- **Smaller and faster model parsing:** `#[serde(flatten)]` and
+  `#[serde(untagged)]` are gone from the deserialize side (`GUILD_CREATE` is
+  no longer buffered as a value tree and parsed twice; scalar option values
+  use a visitor), and REST/HTTP-interaction bodies are parsed from `&str` like
+  gateway payloads. Release binary of `examples/bot.rs`: 9.85 → 9.16 MiB.
+- `Id::created_at()` returns the creation time as a `Timestamp`.
+- **Docs:** new README for the project and for every crate (badges, overview,
+  examples), each README is the crate's rustdoc front page and its examples
+  run as doctests; clearer crates.io descriptions; CONTRIBUTING with project
+  layout; the live test bot is no longer in the published `cordex` package.
 - **Social SDK REST and models (measured coverage 100 %):** lobbies
   (`POST`/`PUT`/`GET`/`PATCH`/`DELETE /lobbies`, members, bulk update,
   channel linking, messages, moderation metadata, linked-channel invites)

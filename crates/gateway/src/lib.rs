@@ -1,5 +1,4 @@
-//! Discord gateway: shard connection, zlib-stream, heartbeat, resume and
-//! sharding.
+#![doc = include_str!("../README.md")]
 
 pub mod connection;
 pub mod error;

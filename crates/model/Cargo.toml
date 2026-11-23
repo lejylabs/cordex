@@ -1,6 +1,6 @@
 [package]
 name = "cordex-model"
-description = "Discord API models, snowflakes, flags and gateway payloads."
+description = "Discord API v10 models for cordex: objects, events, flags, snowflakes, embeds, CDN URLs, mentions, permissions."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
