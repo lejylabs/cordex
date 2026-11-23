@@ -489,6 +489,12 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
             Ok(Some(Incoming::Text(text))) => {
                 AtomicCounters::add(&self.shared.counters.bytes_received, text.len());
                 AtomicCounters::add(&self.shared.counters.bytes_decompressed, text.len());
+                #[cfg(feature = "metrics")]
+                {
+                    let n = u64::try_from(text.len()).unwrap_or(u64::MAX);
+                    metrics::counter!("cordex_gateway_bytes_received_total").increment(n);
+                    metrics::counter!("cordex_gateway_bytes_decompressed_total").increment(n);
+                }
                 self.on_json(&text).await
             }
             Ok(Some(Incoming::Binary(bytes))) => {
@@ -555,6 +561,8 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
         match envelope.op {
             OpCode::Dispatch => {
                 AtomicCounters::add(&self.shared.counters.dispatches, 1);
+                #[cfg(feature = "metrics")]
+                metrics::counter!("cordex_gateway_dispatches_total").increment(1);
                 self.on_dispatch(&envelope)
             }
             OpCode::Heartbeat => self.send_heartbeat().await,
@@ -652,6 +660,8 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
         }
         if name == "RESUMED" {
             AtomicCounters::add(&self.shared.counters.resumes, 1);
+            #[cfg(feature = "metrics")]
+            metrics::counter!("cordex_gateway_resumes_total").increment(1);
             self.shared.set_state(ShardState::Active);
             self.phase_deadline = None;
             self.active_since = Some(Instant::now());
@@ -786,6 +796,8 @@ impl<C: Connector, Conn: Connection> Session<'_, C, Conn> {
             return Some(end);
         }
         AtomicCounters::add(&self.shared.counters.identifies, 1);
+        #[cfg(feature = "metrics")]
+        metrics::counter!("cordex_gateway_identifies_total").increment(1);
         self.phase_deadline = Some(Instant::now() + READY_TIMEOUT);
         None
     }

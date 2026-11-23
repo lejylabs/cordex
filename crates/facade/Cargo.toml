@@ -42,6 +42,8 @@ cache = ["dep:cordex-cache"]
 interactions-verify = ["interactions", "cordex-interactions/verify"]
 # Standalone hyper endpoint for HTTP interactions.
 interactions-server = ["interactions-verify", "cordex-interactions/server"]
+# Export HTTP and gateway counters through the `metrics` crate.
+metrics = ["cordex-http?/metrics", "cordex-gateway?/metrics"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }

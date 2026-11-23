@@ -189,6 +189,7 @@ Most bots only need `cordex`. The parts work on their own too:
 | `cache` | no | In-memory cache (`cordex-cache`) and `cordex::backfill` |
 | `interactions-verify` | no | `verify_signature()` for HTTP interactions in any web framework |
 | `interactions-server` | no | Standalone hyper endpoint for HTTP interactions |
+| `metrics` | no | Export HTTP and gateway counters through the `metrics` crate |
 
 TLS uses rustls with aws-lc-rs and the platform certificate verifier. The
 library sets no global allocator; applications may use `mimalloc`.

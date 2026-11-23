@@ -82,6 +82,31 @@ impl ClientCounters {
     pub(crate) fn bump(counter: &AtomicU64) {
         counter.fetch_add(1, Ordering::Relaxed);
     }
+
+    pub(crate) fn inc_requests(&self) {
+        Self::bump_named(&self.requests, "cordex_http_requests_total");
+    }
+
+    pub(crate) fn inc_timeouts(&self) {
+        Self::bump_named(&self.timeouts, "cordex_http_timeouts_total");
+    }
+
+    pub(crate) fn inc_transport_errors(&self) {
+        Self::bump_named(&self.transport_errors, "cordex_http_transport_errors_total");
+    }
+
+    fn bump_named(
+        counter: &AtomicU64,
+        #[allow(
+            unused_variables,
+            reason = "only used when the metrics feature is enabled"
+        )]
+        name: &'static str,
+    ) {
+        counter.fetch_add(1, Ordering::Relaxed);
+        #[cfg(feature = "metrics")]
+        metrics::counter!(name).increment(1);
+    }
 }
 
 /// Counters of one [`Client`] (and its clones) since it was built, plus
@@ -221,6 +246,7 @@ pub struct ClientBuilder {
     limiter: Option<Arc<dyn RateLimiter>>,
     transport: Option<Arc<dyn Transport>>,
     default_allowed_mentions: Option<AllowedMentions>,
+    http1_only: bool,
 }
 
 impl ClientBuilder {
@@ -242,6 +268,7 @@ impl ClientBuilder {
             limiter: None,
             transport: None,
             default_allowed_mentions: None,
+            http1_only: false,
         }
     }
 
@@ -340,6 +367,16 @@ impl ClientBuilder {
         self
     }
 
+    /// Force HTTP/1.1 only instead of negotiating HTTP/2 via ALPN.
+    ///
+    /// By default (`false`), TLS negotiates HTTP/2 when the server offers it
+    /// and falls back to HTTP/1.1 otherwise.
+    #[must_use]
+    pub fn http1_only(mut self, yes: bool) -> Self {
+        self.http1_only = yes;
+        self
+    }
+
     /// Build the client (installs rustls unless a mock transport was set).
     pub fn build(self) -> Result<Client, HttpError> {
         let authorization = authorization_header(self.auth_scheme, &self.token)?;
@@ -357,7 +394,11 @@ impl ClientBuilder {
 
         let transport = match self.transport {
             Some(t) => t,
-            None => Arc::new(HyperTransport::new(self.connect_timeout, self.max_body)?),
+            None => Arc::new(HyperTransport::new(
+                self.connect_timeout,
+                self.max_body,
+                self.http1_only,
+            )?),
         };
         let limiter = self
             .limiter

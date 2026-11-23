@@ -36,23 +36,34 @@ pub(crate) struct HyperTransport {
 }
 
 impl HyperTransport {
-    pub(crate) fn new(connect_timeout: Duration, max_body: usize) -> Result<Self, HttpError> {
+    pub(crate) fn new(
+        connect_timeout: Duration,
+        max_body: usize,
+        http1_only: bool,
+    ) -> Result<Self, HttpError> {
         let mut http = HttpConnector::new();
         http.set_nodelay(true);
         http.set_connect_timeout(Some(connect_timeout));
         http.enforce_http(false);
 
-        let https = hyper_rustls::HttpsConnectorBuilder::new()
+        let tls = hyper_rustls::HttpsConnectorBuilder::new()
             .with_provider_and_platform_verifier(rustls::crypto::aws_lc_rs::default_provider())
             .map_err(HttpError::transport)?
-            .https_or_http()
-            .enable_http1()
-            .wrap_connector(http);
+            .https_or_http();
+        let https = if http1_only {
+            tls.enable_http1().wrap_connector(http)
+        } else {
+            tls.enable_all_versions().wrap_connector(http)
+        };
 
-        let client = HyperClient::builder(TokioExecutor::new())
+        let mut builder = HyperClient::builder(TokioExecutor::new());
+        builder
             .pool_idle_timeout(Duration::from_secs(30))
-            .pool_timer(TokioTimer::new())
-            .build(https);
+            .pool_timer(TokioTimer::new());
+        if !http1_only {
+            builder.http2_adaptive_window(true);
+        }
+        let client = builder.build(https);
 
         Ok(Self { client, max_body })
     }

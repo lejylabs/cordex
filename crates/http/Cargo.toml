@@ -14,8 +14,13 @@ readme = "README.md"
 [lints]
 workspace = true
 
+[features]
+# Export client counters through the `metrics` crate.
+metrics = ["dep:metrics"]
+
 [dependencies]
 cordex-model.workspace = true
+metrics = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

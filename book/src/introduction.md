@@ -34,6 +34,7 @@ cargo generate lejylabs/cordex-template
 | `cache` | no | Opt-in in-memory cache (`cordex-cache`) + `cordex::backfill` |
 | `interactions-verify` | no | Ed25519 `verify_signature()` for any web framework |
 | `interactions-server` | no | Standalone Hyper HTTP interaction endpoint |
+| `metrics` | no | Export HTTP and gateway counters through the `metrics` crate |
 
 ## Quick start
 

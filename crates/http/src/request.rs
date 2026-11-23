@@ -321,16 +321,16 @@ async fn execute(builder: RequestBuilder) -> Result<Response, HttpError> {
             &query,
         )?;
 
-        ClientCounters::bump(&inner.counters.requests);
+        inner.counters.inc_requests();
         let timed =
             tokio::time::timeout(inner.request_timeout, inner.transport.send(request)).await;
         let raw = match timed {
             Err(_) => {
-                ClientCounters::bump(&inner.counters.timeouts);
+                inner.counters.inc_timeouts();
                 return Err(HttpError::Timeout);
             }
             Ok(Err(err)) => {
-                ClientCounters::bump(&inner.counters.transport_errors);
+                inner.counters.inc_transport_errors();
                 if is_idempotent(&route.method) && retries < inner.max_retries {
                     retries += 1;
                     let wait = jittered_backoff(retries - 1);
