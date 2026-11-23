@@ -6,6 +6,8 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+## 0.1.3 - 2026-11-23
+
 - **Ergonomics additions (`cordex`, `cordex-model`):**
   - **Shared bot state:** `Bot::data(value)` and `Context::data::<T>() -> Option<&T>` store arbitrary `Send + Sync + 'static` state by type without extra locking.
   - **Global error handler & pre-command hook:** `Bot::on_error(|ctx, err| ...)` catches every handler `Err` centrally; `Bot::before_command(|ctx| ...)` runs before every command handler (return `Ok(false)` to block execution).

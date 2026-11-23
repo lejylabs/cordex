@@ -20,7 +20,7 @@ Questions, feedback or help: join the [cordex Discord server][discord link].
 
 ```toml
 [dependencies]
-cordex = "0.1.2"
+cordex = "0.1.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -138,8 +138,11 @@ One small file per task in [`crates/facade/examples`][examples]:
 
 - **Simple layer** (`cordex::bot`): `Bot` with plain async closures for
   commands, autocomplete, buttons, select menus, modals, messages and any
-  event; `ctx.wait_for_button` / `button_clicks` / `wait_for_message` /
-  `wait_for_reaction`; automatic resharding while running when Discord
+  event; typed shared state (`Bot::data` / `ctx.data::<T>()`), `on_error` and
+  `before_command` hooks, graceful shutdown (`run_until_ctrl_c()` /
+  `run_until()`), `ctx.paginate(...)`, `ctx.send(...)` / `ctx.dm(...)`,
+  `ctx.wait_for_button` / `button_clicks` / `wait_for_message` /
+  `wait_for_reaction`, and automatic resharding while running when Discord
   recommends more shards.
 - **Gateway**: zlib-stream compression, heartbeat with zombie detection,
   resume and reconnect, close codes with fix hints, outbound rate limit,
@@ -161,9 +164,10 @@ One small file per task in [`crates/facade/examples`][examples]:
 - **Components**: builders for every component, including the Components V2
   layout (container, section, text display, thumbnail, media gallery, file,
   separator); the `IS_COMPONENTS_V2` flag is set automatically.
-- **Helpers**: embed builder with Discord's limits, CDN URLs (avatars, icons,
-  emojis, stickers), mentions and timestamp markdown, mention parsing,
-  webhook URL parsing, permission calculator, default allowed mentions.
+- **Helpers**: `MessageBuilder` with Markdown escaping, embed builder with
+  Discord's limits, CDN URLs (avatars, icons, emojis, stickers), mentions and
+  timestamp markdown, mention parsing, webhook URL parsing, permission
+  calculator, default allowed mentions.
 
 ## Crates
 

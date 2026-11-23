@@ -13,9 +13,9 @@ and flag of the official bot API, plus helpers that need no network.
   a round trip.
 - **Small and fast**: large payloads are boxed, `Event` stays at most 48 bytes,
   `GUILD_CREATE` is read without buffering it twice.
-- **Helpers**: embed builder with Discord's limits, CDN URLs, mentions and
-  timestamp markdown, mention parsing, permission calculator, webhook URL
-  parsing.
+- **Helpers**: `MessageBuilder` with Markdown escaping, embed builder with
+  Discord's limits, CDN URLs, mentions and timestamp markdown, mention parsing,
+  permission calculator, webhook URL parsing.
 - **No async, no network**: usable in any project.
 
 Most bots use the facade crate [`cordex`][facade], which re-exports this crate.

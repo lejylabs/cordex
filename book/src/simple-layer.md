@@ -65,4 +65,55 @@ async fn confirm(ctx: CommandContext) -> cordex::Result<()> {
 }
 ```
 
-For polls or pagination, use `ctx.button_clicks(msg.id, timeout)` to iterate over all clicks until the timeout expires.
+For polls or custom flows, use `ctx.button_clicks(msg.id, timeout)` to iterate over all clicks until the timeout expires. For standard multi-page responses, use the built-in paginator:
+
+```rust,no_run
+use std::time::Duration;
+use cordex::prelude::*;
+
+async fn help(ctx: CommandContext) -> cordex::Result<()> {
+    let pages = [Reply::new("Page 1"), Reply::new("Page 2"), Reply::new("Page 3")];
+    ctx.paginate(pages, Duration::from_secs(60)).await
+}
+```
+
+`paginate` renders `◀` / `1 / N` / `▶` buttons, restricts navigation to the invoking user, and disables the buttons once the timeout expires.
+
+## Shared state, hooks & graceful shutdown
+
+Attach arbitrary `Send + Sync + 'static` values to `Bot` with `.data(...)` and read them from any handler via `ctx.data::<T>()`. Use `.before_command(...)` for shared guards/cooldowns, `.on_error(...)` for centralized error reporting, and `.run_until_ctrl_c()` (or `.run_until(future)`) to shut down all shards cleanly:
+
+```rust,no_run
+use cordex::prelude::*;
+
+struct Config {
+    admin_only: bool,
+}
+
+async fn run(token: String) -> cordex::Result<()> {
+    Bot::new(token)
+        .data(Config { admin_only: false })
+        .before_command(|ctx: CommandContext| async move {
+            if ctx.data::<Config>().is_some_and(|c| c.admin_only) {
+                ctx.reply_ephemeral("Maintenance mode.").await?;
+                return Ok(false);
+            }
+            Ok(true)
+        })
+        .on_error(|_ctx, err| async move {
+            eprintln!("handler failed: {err}");
+        })
+        .command(Command::slash("ping", "Replies with pong"), |ctx: CommandContext| async move {
+            let text = MessageBuilder::new()
+                .push_bold("Pong!")
+                .push(" Hi ")
+                .push_safe(ctx.user().map_or("there", |u| u.username.as_ref()))
+                .build();
+            ctx.reply(text).await
+        })
+        .run_until_ctrl_c()
+        .await
+}
+```
+
+For quick outbound messages outside an interaction reply, use `ctx.send(channel_id, "Hello!")` or `ctx.dm(user_id, "Check your DMs!")`.

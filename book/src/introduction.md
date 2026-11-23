@@ -13,7 +13,7 @@ Add `cordex` and `tokio` to your `Cargo.toml` (Rust 1.95 or newer):
 
 ```toml
 [dependencies]
-cordex = "0.1.2"
+cordex = "0.1.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -28,6 +28,7 @@ cargo generate lejylabs/cordex-template
 | Feature | Default | Enables |
 |---|---|---|
 | `http` | yes | REST client (`cordex-http`) |
+| `http2` | yes | Negotiate HTTP/2 via ALPN on the REST client (disable for smaller binaries) |
 | `gateway` | yes | Shards, manager, `Standby` (`cordex-gateway`) |
 | `interactions` | yes | Command/modal builders, `InteractionHandle` |
 | `bot` | yes | Simple layer (`cordex::bot::Bot`) |
