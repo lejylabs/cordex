@@ -16,7 +16,7 @@ use cordex_model::id::Id;
 use cordex_model::id::marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker};
 use cordex_model::interaction::{
     CommandData, CommandOptionValue, Interaction, InteractionData, InteractionType,
-    MessageComponentData, ModalSubmitData, SubmittedComponent,
+    MessageComponentData, ModalSubmitData, SubmittedComponent, SubmittedValue,
 };
 use cordex_model::message::Attachment;
 use cordex_model::{Channel, Message, Role, User};
@@ -578,13 +578,25 @@ impl ModalContext {
             .map_or("", |(_, arg)| arg)
     }
 
-    /// Value of the text input with this `custom_id` (searches nested
-    /// rows and labels).
+    /// Value of the text input or radio group with this `custom_id`
+    /// (searches nested rows and labels). `None` for an empty radio group.
     pub fn value(&self, custom_id: &str) -> Option<&str> {
-        find_component(&self.data.components, custom_id).and_then(|c| c.value.as_deref())
+        find_component(&self.data.components, custom_id)
+            .and_then(|c| c.value.as_ref())
+            .and_then(SubmittedValue::as_str)
     }
 
-    /// Selected values of the select/checkbox group with this `custom_id`.
+    /// Whether the checkbox with this `custom_id` is checked (`false` if
+    /// it is missing).
+    pub fn checked(&self, custom_id: &str) -> bool {
+        find_component(&self.data.components, custom_id)
+            .and_then(|c| c.value.as_ref())
+            .and_then(SubmittedValue::as_bool)
+            .unwrap_or(false)
+    }
+
+    /// Selected values of the select or checkbox group with this
+    /// `custom_id`.
     pub fn values(&self, custom_id: &str) -> &[Box<str>] {
         find_component(&self.data.components, custom_id).map_or(&[], |c| &c.values)
     }

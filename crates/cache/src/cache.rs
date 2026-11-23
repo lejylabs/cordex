@@ -414,6 +414,13 @@ impl InMemoryCache {
                     g.remove(&e.id);
                 }
             }
+            // Without the presences intent `GUILD_CREATE` carries almost no
+            // members; the invoking member of an interaction is complete.
+            Event::InteractionCreate(i) => {
+                if let (Some(gid), Some(member)) = (i.guild_id, i.member.as_deref()) {
+                    self.insert_member(gid, member, c);
+                }
+            }
             Event::MessageCreate(m) => self.message_create(m, c),
             Event::MessageUpdate(m) => self.message_update(m, c),
             Event::MessageDelete(d) => {

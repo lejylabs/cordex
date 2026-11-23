@@ -52,9 +52,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .on_modal("feedback", |ctx: ModalContext| async move {
             let text = ctx.value("text").unwrap_or_default();
-            let rating = ctx.values("rating").first().map_or("-", |v| &**v);
-            ctx.reply_ephemeral(format!("Thanks! Rating: {rating}\n> {text}"))
-                .await
+            let rating = ctx.value("rating").unwrap_or("-");
+            let contact = if ctx.checked("contact") { "yes" } else { "no" };
+            ctx.reply_ephemeral(format!(
+                "Thanks! Rating: {rating}, contact: {contact}\n> {text}"
+            ))
+            .await
         })
         .run()
         .await?;

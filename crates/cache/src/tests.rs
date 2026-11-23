@@ -610,3 +610,26 @@ fn permissions_from_cache() {
         Err(PermissionCacheError::OverwritesOff)
     );
 }
+
+#[test]
+fn interaction_member_is_cached() {
+    let cache = replay(all());
+    let g = Id::new(GUILD).unwrap();
+    let carol = Id::new(777).unwrap();
+    assert!(cache.member(g, carol).is_none());
+    let interaction = json!({"id": id(1), "application_id": id(BOT), "type": 2, "token": "t",
+        "version": 1, "guild_id": id(GUILD), "member": member(777),
+        "data": {"id": id(3), "name": "perms", "type": 1}});
+    cache.update(&ev("INTERACTION_CREATE", &interaction));
+    assert_eq!(cache.member(g, carol).unwrap().nick.as_deref(), Some("nick"));
+
+    // DMs (no guild) and a disabled member resource store nothing.
+    let mut dm = interaction.clone();
+    dm.as_object_mut().unwrap().remove("guild_id");
+    dm["member"] = member(778);
+    cache.update(&ev("INTERACTION_CREATE", &dm));
+    assert!(cache.member(g, Id::new(778).unwrap()).is_none());
+    let off = replay(CacheConfig::new().resources(ResourceType::GUILDS));
+    off.update(&ev("INTERACTION_CREATE", &interaction));
+    assert!(off.member(g, carol).is_none());
+}

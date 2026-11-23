@@ -6,6 +6,12 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+- **Fix: modal submits with a checkbox failed to parse.** Discord sends a
+  checkbox `value` as a boolean; `SubmittedComponent::value` is now a
+  `SubmittedValue` (`Text` / `Bool`, with `as_str` / `as_bool`). New
+  `ModalContext::checked(id)`; a radio group's choice is read with
+  `ModalContext::value(id)` (Discord sends one `value`, not `values`).
+  Found in the live test.
 - **Benchmarks:** `cargo xtask bench` runs criterion benches (gateway parsing,
   filtered events, cache update and lookup) and a dhat allocation bench, and
   compares with `benches/baseline.json` (warning at > 10 % slower). Results

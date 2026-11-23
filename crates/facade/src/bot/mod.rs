@@ -36,7 +36,8 @@
 //!   resumes happen inside the gateway.
 //! - **Commands** are registered with one bulk overwrite on the first
 //!   `READY` (global, or per guild with [`guild_commands`](Bot::guild_commands)),
-//!   skipped when Discord already has the same definitions.
+//!   skipped when Discord already has the same definitions
+//!   ([`register_commands(false)`](Bot::register_commands) turns it off).
 //! - **Interactions** are deferred automatically after 2.5 s if a
 //!   handler has not answered yet; `ctx.reply` then edits the deferred
 //!   response.
@@ -140,6 +141,7 @@ pub struct Bot {
     shards: Option<u32>,
     commands: Vec<Command>,
     guild_commands: Option<Id<GuildMarker>>,
+    register_commands: bool,
     handlers: Handlers,
     error_message: Option<Box<str>>,
     auto_defer: bool,
@@ -169,6 +171,7 @@ impl Bot {
             shards: None,
             commands: Vec::new(),
             guild_commands: None,
+            register_commands: true,
             handlers: Handlers::default(),
             error_message: Some(DEFAULT_ERROR_MESSAGE.into()),
             auto_defer: true,
@@ -230,6 +233,15 @@ impl Bot {
     /// this is handy while developing; global commands are the default.
     pub fn guild_commands(mut self, guild: Id<GuildMarker>) -> Self {
         self.guild_commands = Some(guild);
+        self
+    }
+
+    /// Switch the automatic command registration off (default on). The
+    /// handlers still run; use this when commands are registered
+    /// elsewhere, e.g. by a deploy step or another process of the same
+    /// application.
+    pub fn register_commands(mut self, enabled: bool) -> Self {
+        self.register_commands = enabled;
         self
     }
 
@@ -427,7 +439,7 @@ impl Bot {
         });
         let commands: Arc<[Command]> = self.commands.into();
         let guild_commands = self.guild_commands;
-        let registered = AtomicBool::new(false);
+        let registered = AtomicBool::new(!self.register_commands);
 
         shared.manager().start().await?;
 

@@ -293,6 +293,8 @@ const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
                 "GUILD_MEMBER_UPDATE",
                 "GUILD_MEMBER_REMOVE",
                 "GUILD_MEMBERS_CHUNK",
+                // The invoking member arrives with every guild interaction.
+                "INTERACTION_CREATE",
             ],
         ),
         (

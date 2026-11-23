@@ -392,9 +392,9 @@ pub struct SubmittedComponent {
     pub id: Option<u32>,
     /// Developer `custom_id`.
     pub custom_id: Option<Box<str>>,
-    /// Text-input / checkbox value.
-    pub value: Option<Box<str>>,
-    /// Selected values (selects, file uploads, radio/checkbox groups).
+    /// Text-input or radio-group value (string), checkbox state (bool).
+    pub value: Option<SubmittedValue>,
+    /// Selected values (selects, file uploads, checkbox groups).
     #[serde(default)]
     pub values: Vec<Box<str>>,
     /// Nested components (legacy action rows).
@@ -402,6 +402,67 @@ pub struct SubmittedComponent {
     pub components: Vec<SubmittedComponent>,
     /// Wrapped component (Label, type 18).
     pub component: Option<Box<SubmittedComponent>>,
+}
+
+/// `value` of a [`SubmittedComponent`]: a string for text inputs and radio
+/// groups, a boolean for checkboxes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubmittedValue {
+    /// Text input or radio group.
+    Text(Box<str>),
+    /// Checkbox (`true` = checked).
+    Bool(bool),
+}
+
+impl SubmittedValue {
+    /// The string value, `None` for a checkbox.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::Text(text) => Some(text),
+            Self::Bool(_) => None,
+        }
+    }
+
+    /// The checkbox state, `None` for a string value.
+    pub const fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(checked) => Some(*checked),
+            Self::Text(_) => None,
+        }
+    }
+}
+
+impl Serialize for SubmittedValue {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Text(text) => serializer.serialize_str(text),
+            Self::Bool(checked) => serializer.serialize_bool(*checked),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SubmittedValue {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = SubmittedValue;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a string or a boolean")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(SubmittedValue::Text(v.into()))
+            }
+
+            fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Self::Value, E> {
+                Ok(SubmittedValue::Bool(v))
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
 }
 
 impl<'de> Deserialize<'de> for Interaction {
@@ -796,5 +857,36 @@ mod tests {
             panic!("command data expected");
         };
         assert_eq!(&*data.name, "ping");
+    }
+
+    #[test]
+    fn modal_submit_radio_and_checkbox_values() {
+        let json = r#"{
+            "id":"1","application_id":"2","type":5,"token":"t","version":1,
+            "data":{"custom_id":"feedback","components":[
+                {"id":1,"type":18,"component":{"id":2,"type":4,"custom_id":"text","value":"hi"}},
+                {"id":3,"type":18,"component":{"id":4,"type":21,"custom_id":"rating","value":"okay"}},
+                {"id":5,"type":18,"component":{"id":6,"type":21,"custom_id":"none","value":null}},
+                {"id":7,"type":18,"component":{"id":8,"type":23,"custom_id":"contact","value":true}}
+            ]}
+        }"#;
+        let interaction: Interaction = serde_json::from_str(json).unwrap();
+        let InteractionData::ModalSubmit(data) = interaction.data.unwrap() else {
+            panic!("expected modal submit data");
+        };
+        let value = |i: usize| data.components[i].component.as_ref().unwrap().value.clone();
+        assert_eq!(value(0).unwrap().as_str(), Some("hi"));
+        assert_eq!(value(1).unwrap().as_str(), Some("okay"));
+        assert_eq!(value(2), None);
+        let checkbox = value(3).unwrap();
+        assert_eq!(checkbox.as_bool(), Some(true));
+        assert_eq!(checkbox.as_str(), None);
+        assert_eq!(SubmittedValue::Text("x".into()).as_bool(), None);
+        assert_eq!(serde_json::to_string(&checkbox).unwrap(), "true");
+        assert_eq!(
+            serde_json::to_string(&SubmittedValue::Text("x".into())).unwrap(),
+            r#""x""#
+        );
+        assert!(serde_json::from_str::<SubmittedValue>("1").is_err());
     }
 }
