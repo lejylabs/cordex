@@ -1,8 +1,8 @@
 //! `cargo xtask coverage`: compare the library with the official API docs.
 //!
 //! The docs come from `discord/discord-api-docs` at the commit pinned in
-//! `docs/discord-api-docs.rev` (checked out into `target/discord-api-docs`
-//! with `git`). Measured today:
+//! `docs/discord-api-docs.rev`, downloaded as a tarball by hash into
+//! `target/discord-api-docs/<sha>` (needs `curl` and `tar`). Measured today:
 //!
 //! - REST endpoints (`<Route method="…">` in the docs, the
 //!   `` `METHOD /path` `` doc comments in `cordex-http`),
@@ -376,8 +376,13 @@ pub(crate) fn coverage(args: &[String]) -> Result<(), String> {
     let pinned = read(&root.join(REV_FILE))?.trim().to_owned();
     let wanted = rev_arg.clone().unwrap_or_else(|| pinned.clone());
 
-    let docs = root.join("target").join("discord-api-docs");
-    let rev = fetch_docs(&docs, if wanted == "latest" { "HEAD" } else { &wanted })?;
+    let cache = root.join("target").join("discord-api-docs");
+    let rev = if wanted == "latest" {
+        latest_rev()?
+    } else {
+        wanted
+    };
+    let docs = fetch_docs(&cache, &rev)?;
     let areas = measure(&root, &docs.join("developers"))?;
     let report = render(&rev, &areas);
     print_summary(&rev, &areas);
@@ -400,14 +405,10 @@ pub(crate) fn coverage(args: &[String]) -> Result<(), String> {
         if rev != pinned {
             println!("docs changed: {DOCS_REPO}/compare/{pinned}...{rev}");
             // Measure the pinned docs too and describe the difference.
-            let old_rev = fetch_docs(&docs, &pinned)?;
-            let old = measure(&root, &docs.join("developers"))?;
-            let pages = git(
-                &docs,
-                &["diff", "--name-only", &old_rev, &rev, "--", "developers"],
-            )
-            .unwrap_or_default();
-            let changes = render_changes(&old_rev, &rev, &old, &areas, &pages);
+            let old_docs = fetch_docs(&cache, &pinned)?;
+            let old = measure(&root, &old_docs.join("developers"))?;
+            let pages = changed_pages(&old_docs, &docs)?;
+            let changes = render_changes(&pinned, &rev, &old, &areas, &pages);
             let out = root.join("target").join("docs-changes.md");
             write(&out, &changes)?;
             println!("changes: {}", out.display());
@@ -430,52 +431,104 @@ fn short(rev: &str) -> &str {
     rev.get(..12).unwrap_or(rev)
 }
 
-fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
+fn run_tool(dir: &Path, program: &str, args: &[&str]) -> Result<String, String> {
+    let out = Command::new(program)
         .args(args)
         .current_dir(dir)
         .output()
-        .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
+        .map_err(|e| format!("{program} {}: {e}", args.join(" ")))?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
     } else {
         Err(format!(
-            "git {} failed: {}",
+            "{program} {} failed: {}",
             args.join(" "),
             String::from_utf8_lossy(&out.stderr).trim()
         ))
     }
 }
 
-/// Shallow checkout of one docs commit; returns its full hash.
-fn fetch_docs(dir: &Path, rev: &str) -> Result<String, String> {
-    if !dir.join(".git").exists() {
-        fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        git(dir, &["init", "-q"])?;
-        git(dir, &["remote", "add", "origin", DOCS_REPO])?;
+/// Hash of the newest docs commit (GitHub API, no git objects needed).
+fn latest_rev() -> Result<String, String> {
+    let sha = run_tool(
+        Path::new("."),
+        "curl",
+        &[
+            "-sSfL",
+            "-H",
+            "Accept: application/vnd.github.sha",
+            "https://api.github.com/repos/discord/discord-api-docs/commits/HEAD",
+        ],
+    )?;
+    if sha.len() == 40 && sha.chars().all(|c| c.is_ascii_hexdigit()) {
+        Ok(sha)
+    } else {
+        Err(format!(
+            "unexpected answer for the latest docs commit: {sha}"
+        ))
     }
-    let have = git(dir, &["rev-parse", "HEAD"]).unwrap_or_default();
-    if have == rev {
-        return Ok(have);
+}
+
+/// Download and unpack one docs commit into `cache/<sha>` (once) and
+/// return that folder. A tarball by hash avoids git negotiation, which
+/// some CI runners route through stale caches.
+fn fetch_docs(cache: &Path, rev: &str) -> Result<PathBuf, String> {
+    if rev.len() != 40 || !rev.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!(
+            "docs revision must be a full commit hash, got {rev:?}"
+        ));
     }
-    // Fetching a commit by hash is not allowed by every server/client
-    // setup ("not our ref"), so fall back to the branch tip and then to
-    // the full history without file contents.
-    if git(dir, &["fetch", "-q", "--depth", "1", "origin", rev]).is_err() {
-        git(dir, &["fetch", "-q", "--depth", "1", "origin", "HEAD"])?;
-        let tip = git(dir, &["rev-parse", "FETCH_HEAD"])?;
-        if rev != "HEAD" && tip != rev {
-            git(
-                dir,
-                &["fetch", "-q", "--filter=blob:none", "--unshallow", "origin"],
-            )
-            .or_else(|_| git(dir, &["fetch", "-q", "--filter=blob:none", "origin"]))?;
-            git(dir, &["checkout", "-q", "--detach", rev])?;
-            return git(dir, &["rev-parse", "HEAD"]);
+    let dir = cache.join(rev);
+    if dir.join("developers").is_dir() {
+        return Ok(dir);
+    }
+    let tmp = cache.join(format!("{rev}.partial"));
+    let _ = fs::remove_dir_all(&tmp);
+    fs::create_dir_all(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    let url = format!("https://codeload.github.com/discord/discord-api-docs/tar.gz/{rev}");
+    // Relative paths only: GNU tar reads `C:` in a path as a remote host.
+    run_tool(&tmp, "curl", &["-sSfL", "-o", "docs.tar.gz", &url])?;
+    run_tool(
+        &tmp,
+        "tar",
+        &["-xzf", "docs.tar.gz", "--strip-components=1"],
+    )?;
+    let _ = fs::remove_file(tmp.join("docs.tar.gz"));
+    if !tmp.join("developers").is_dir() {
+        return Err(format!(
+            "{url} has no developers/ folder (docs restructured?)"
+        ));
+    }
+    let _ = fs::remove_dir_all(&dir);
+    fs::rename(&tmp, &dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    Ok(dir)
+}
+
+/// `developers/…` pages that differ between two unpacked docs commits.
+fn changed_pages(old: &Path, new: &Path) -> Result<String, String> {
+    let mut old_files = Vec::new();
+    let mut new_files = Vec::new();
+    mdx_files(&old.join("developers"), &mut old_files)?;
+    mdx_files(&new.join("developers"), &mut new_files)?;
+    let rel = |root: &Path, file: &Path| {
+        file.strip_prefix(root)
+            .map_or_else(|_| file.display().to_string(), |p| p.display().to_string())
+            .replace('\\', "/")
+    };
+    let mut pages = BTreeSet::new();
+    for file in &new_files {
+        let name = rel(new, file);
+        if fs::read(file).ok() != fs::read(old.join(&name)).ok() {
+            pages.insert(name);
         }
     }
-    git(dir, &["checkout", "-q", "--detach", "FETCH_HEAD"])?;
-    git(dir, &["rev-parse", "HEAD"])
+    for file in &old_files {
+        let name = rel(old, file);
+        if !new.join(&name).exists() {
+            pages.insert(name);
+        }
+    }
+    Ok(pages.into_iter().collect::<Vec<_>>().join("\n"))
 }
 
 fn measure(root: &Path, docs: &Path) -> Result<Vec<Area>, String> {

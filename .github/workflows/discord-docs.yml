@@ -38,9 +38,16 @@ jobs:
 
       - name: Compare pinned and latest docs commit
         id: rev
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           pinned="$(tr -d '[:space:]' < docs/discord-api-docs.rev)"
-          latest="$(git ls-remote https://github.com/discord/discord-api-docs HEAD | cut -f1)"
+          # GitHub API instead of git: runner git caches can be stale.
+          latest="$(gh api repos/discord/discord-api-docs/commits/HEAD --jq .sha)"
+          if ! printf '%s' "$latest" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "could not read the latest docs commit: $latest" >&2
+            exit 1
+          fi
           echo "pinned=$pinned" >> "$GITHUB_OUTPUT"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
           if [ "$pinned" = "$latest" ]; then

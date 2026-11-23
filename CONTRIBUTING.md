@@ -23,7 +23,7 @@ Thanks for helping! Bug reports, docs fixes and code are all welcome.
 ```bash
 cargo xtask check      # fmt, clippy, tests, docs, cargo-deny, layout rules
 cargo xtask features   # every supported feature combination
-cargo xtask coverage   # regenerate docs/coverage.md (needs git + network)
+cargo xtask coverage   # regenerate docs/coverage.md (needs curl, tar + network)
 ```
 
 All three must pass before a pull request is merged; CI runs the same commands.
