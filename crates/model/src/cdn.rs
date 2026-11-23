@@ -48,29 +48,41 @@ impl ImageFormat {
     }
 }
 
-/// A CDN URL with optional size (`?size=` must be a power of two, 16–4096).
+/// A CDN URL; set a size with [`CdnUrl::size`] and a format with
+/// [`CdnUrl::format`], then format it with `to_string()`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CdnUrl {
+    base: &'static str,
+    /// Path without the extension.
     path: String,
+    ext: &'static str,
     size: Option<u16>,
 }
+
+/// Base URL of GIF stickers (they are not on the CDN host).
+pub const MEDIA_BASE: &str = "https://media.discordapp.net";
 
 impl CdnUrl {
     fn hashed(path: &str, hash: &ImageHash, format: ImageFormat) -> Self {
         Self {
-            path: format!("{path}/{hash}.{}", format.ext()),
+            base: CDN_BASE,
+            path: format!("{path}/{hash}"),
+            ext: format.ext(),
             size: None,
         }
     }
 
-    fn static_path(path: impl Into<String>) -> Self {
+    fn fixed(base: &'static str, path: impl Into<String>, ext: &'static str) -> Self {
         Self {
+            base,
             path: path.into(),
+            ext,
             size: None,
         }
     }
 
-    /// Requested pixel size (16–4096, power of two). Invalid sizes are ignored.
+    /// Image size: a power of two from 16 to 4096 (other values are
+    /// ignored).
     #[must_use]
     pub fn size(mut self, size: u16) -> Self {
         if (16..=4096).contains(&size) && size.is_power_of_two() {
@@ -78,12 +90,25 @@ impl CdnUrl {
         }
         self
     }
+
+    /// Another image format (e.g. `Webp` for smaller files). Ignored for
+    /// default avatars, Lottie and GIF stickers, which exist in one format
+    /// only.
+    #[must_use]
+    pub fn format(mut self, format: ImageFormat) -> Self {
+        if self.base == CDN_BASE && !self.path.starts_with("/embed/") && self.ext != "json" {
+            self.ext = format.ext();
+        }
+        self
+    }
 }
 
 impl fmt::Display for CdnUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(CDN_BASE)?;
+        f.write_str(self.base)?;
         f.write_str(&self.path)?;
+        f.write_str(".")?;
+        f.write_str(self.ext)?;
         if let Some(size) = self.size {
             write!(f, "?size={size}")?;
         }
@@ -117,7 +142,7 @@ pub fn default_avatar(user_id: Id<UserMarker>, discriminator: &str) -> CdnUrl {
     } else {
         discriminator.parse::<u64>().unwrap_or(0) % 5
     };
-    CdnUrl::static_path(format!("/embed/avatars/{index}.png"))
+    CdnUrl::fixed(CDN_BASE, format!("/embed/avatars/{index}"), "png")
 }
 
 /// Member guild avatar.
@@ -177,17 +202,20 @@ pub fn role_icon(role_id: Id<RoleMarker>, hash: &ImageHash) -> CdnUrl {
 /// Custom emoji image (`gif` when animated).
 pub fn emoji(emoji_id: Id<EmojiMarker>, animated: bool) -> CdnUrl {
     let ext = if animated { "gif" } else { "png" };
-    CdnUrl::static_path(format!("/emojis/{emoji_id}.{ext}"))
+    CdnUrl::fixed(CDN_BASE, format!("/emojis/{emoji_id}"), ext)
 }
 
 /// Sticker image. Lottie stickers use `.json`.
 pub fn sticker(sticker_id: Id<StickerMarker>, format: StickerFormatType) -> CdnUrl {
-    let ext = match format {
-        StickerFormatType::Gif => "gif",
-        StickerFormatType::Lottie => "json",
-        StickerFormatType::Png | StickerFormatType::Apng | StickerFormatType::Unknown(_) => "png",
-    };
-    CdnUrl::static_path(format!("/stickers/{sticker_id}.{ext}"))
+    let path = format!("/stickers/{sticker_id}");
+    match format {
+        // GIF stickers are served from the media host, not the CDN.
+        StickerFormatType::Gif => CdnUrl::fixed(MEDIA_BASE, path, "gif"),
+        StickerFormatType::Lottie => CdnUrl::fixed(CDN_BASE, path, "json"),
+        StickerFormatType::Png | StickerFormatType::Apng | StickerFormatType::Unknown(_) => {
+            CdnUrl::fixed(CDN_BASE, path, "png")
+        }
+    }
 }
 
 /// Application icon.
@@ -230,7 +258,34 @@ mod tests {
         );
         let legacy = default_avatar(id, "1337").to_string();
         assert!(legacy.ends_with("/embed/avatars/2.png"));
-        assert_eq!(CdnUrl::static_path("/x.png").size(15).size, None);
-        assert_eq!(CdnUrl::static_path("/x.png").size(32).size, Some(32));
+        assert_eq!(CdnUrl::fixed(CDN_BASE, "/x", "png").size(15).size, None);
+        assert_eq!(CdnUrl::fixed(CDN_BASE, "/x", "png").size(32).size, Some(32));
+    }
+
+    #[test]
+    fn formats_and_sticker_hosts() {
+        let guild = Id::<GuildMarker>::new(1).unwrap();
+        let hash = ImageHash::new("1269e74af4df7417b13759eae50c83dc");
+        assert_eq!(
+            guild_icon(guild, &hash)
+                .format(ImageFormat::Webp)
+                .size(64)
+                .to_string(),
+            "https://cdn.discordapp.com/icons/1/1269e74af4df7417b13759eae50c83dc.webp?size=64"
+        );
+        let sticker_id = Id::<StickerMarker>::new(5).unwrap();
+        assert_eq!(
+            sticker(sticker_id, StickerFormatType::Gif).to_string(),
+            "https://media.discordapp.net/stickers/5.gif"
+        );
+        assert_eq!(
+            sticker(sticker_id, StickerFormatType::Lottie)
+                .format(ImageFormat::Png)
+                .to_string(),
+            "https://cdn.discordapp.com/stickers/5.json"
+        );
+        let user = Id::<UserMarker>::new(80_351_110_224_678_912).unwrap();
+        let def = default_avatar(user, "0").format(ImageFormat::Webp);
+        assert_eq!(def.ext, "png");
     }
 }

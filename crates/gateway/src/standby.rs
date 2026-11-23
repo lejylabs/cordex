@@ -1,8 +1,10 @@
 //! Wait for the next matching gateway event (Twilight's `standby`).
 //!
 //! Registered waiters are checked in [`Standby::process`]; the event is
-//! cloned only when a waiter matches. Dropped or timed-out waiters are
-//! removed on the next event.
+//! cloned only when a waiter matches. Waiters whose receiver is gone
+//! (timed out, dropped) are removed on the next event, whether or not it
+//! matches, so the list never grows without bound. Predicates run under a
+//! short lock: keep them cheap and non-blocking.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -14,9 +16,22 @@ use tokio::sync::{mpsc, oneshot};
 
 type Pred = Arc<dyn Fn(&Event) -> bool + Send + Sync>;
 
+/// Buffer of a [`Standby::wait_for_stream`] receiver; events beyond it are
+/// dropped (with a warning) instead of growing memory.
+pub const STANDBY_STREAM_CAPACITY: usize = 256;
+
 enum Sink {
     Once(oneshot::Sender<Event>),
-    Stream(mpsc::UnboundedSender<Event>),
+    Stream(mpsc::Sender<Event>),
+}
+
+impl Sink {
+    fn is_closed(&self) -> bool {
+        match self {
+            Self::Once(tx) => tx.is_closed(),
+            Self::Stream(tx) => tx.is_closed(),
+        }
+    }
 }
 
 struct Waiter {
@@ -51,6 +66,10 @@ impl Standby {
         let mut sent = 0;
         let mut i = 0;
         while i < guard.len() {
+            if guard[i].sink.is_closed() {
+                guard.swap_remove(i);
+                continue;
+            }
             if !(guard[i].pred)(event) {
                 i += 1;
                 continue;
@@ -64,14 +83,19 @@ impl Standby {
                         sent += 1;
                     }
                 }
-                Sink::Stream(tx) => {
-                    if tx.send(event.clone()).is_err() {
-                        guard.swap_remove(i);
-                    } else {
+                Sink::Stream(tx) => match tx.try_send(event.clone()) {
+                    Ok(()) => {
                         sent += 1;
                         i += 1;
                     }
-                }
+                    Err(mpsc::error::TrySendError::Full(_)) => {
+                        tracing::warn!("standby stream is full; event dropped");
+                        i += 1;
+                    }
+                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                        guard.swap_remove(i);
+                    }
+                },
             }
         }
         sent
@@ -99,12 +123,13 @@ impl Standby {
         }
     }
 
-    /// Stream of matching events until the receiver is dropped.
-    pub fn wait_for_stream<F>(&self, pred: F) -> mpsc::UnboundedReceiver<Event>
+    /// Stream of matching events until the receiver is dropped. Buffers up
+    /// to [`STANDBY_STREAM_CAPACITY`] events; read them promptly.
+    pub fn wait_for_stream<F>(&self, pred: F) -> mpsc::Receiver<Event>
     where
         F: Fn(&Event) -> bool + Send + Sync + 'static,
     {
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(STANDBY_STREAM_CAPACITY);
         self.inner.lock().push(Waiter {
             pred: Arc::new(pred),
             sink: Sink::Stream(tx),
@@ -139,6 +164,34 @@ mod tests {
         assert!(fut.await.is_none());
         // Expired waiter is dropped; next process removes nothing harmful.
         assert_eq!(standby.process(&resumed()), 0);
+    }
+
+    #[tokio::test]
+    async fn expired_waiters_are_removed_even_without_a_match() {
+        let standby = Standby::new();
+        for _ in 0..10 {
+            let fut = standby.wait_for(Duration::from_millis(1), |_| false);
+            assert!(fut.await.is_none());
+        }
+        let stream = standby.wait_for_stream(|_| false);
+        drop(stream);
+        assert!(!standby.is_empty());
+        // One unrelated event clears all dead waiters.
+        assert_eq!(standby.process(&resumed()), 0);
+        assert!(standby.is_empty());
+    }
+
+    #[tokio::test]
+    async fn stream_receives_until_dropped() {
+        let standby = Standby::new();
+        let mut stream = standby.wait_for_stream(|e| matches!(e, Event::Resumed));
+        assert_eq!(standby.process(&resumed()), 1);
+        assert_eq!(standby.process(&resumed()), 1);
+        assert!(stream.recv().await.is_some());
+        assert!(stream.recv().await.is_some());
+        drop(stream);
+        assert_eq!(standby.process(&resumed()), 0);
+        assert!(standby.is_empty());
     }
 
     #[tokio::test]

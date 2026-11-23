@@ -117,8 +117,12 @@ pub fn parse_mentions(text: &str) -> Vec<ParsedMention> {
         };
         if let Some(parsed) = parse_one(&text[i + 1..end]) {
             out.push(parsed);
+            i = end + 1;
+        } else {
+            // Not a mention (e.g. "a < b <@1>"): keep scanning after this
+            // `<` so a real mention before the next `>` is not skipped.
+            i += 1;
         }
-        i = end + 1;
     }
     out
 }
@@ -160,7 +164,8 @@ fn parse_one(inner: &str) -> Option<ParsedMention> {
 
 fn parse_timestamp(rest: &str) -> Option<ParsedMention> {
     let (num, style) = match rest.split_once(':') {
-        Some((n, s)) if s.len() == 1 => (n, TimestampStyle::from_char(s.as_bytes()[0])),
+        // An unknown style letter is not rendered by Discord either.
+        Some((n, s)) if s.len() == 1 => (n, Some(TimestampStyle::from_char(s.as_bytes()[0])?)),
         None => (rest, None),
         Some(_) => return None,
     };
@@ -194,5 +199,15 @@ mod tests {
         assert_eq!(found[0], ParsedMention::User(user));
         assert_eq!(found[7], ParsedMention::Everyone);
         assert_eq!(found[8], ParsedMention::Here);
+    }
+
+    #[test]
+    fn stray_angle_brackets_do_not_hide_mentions() {
+        let user = Id::<UserMarker>::new(1).unwrap();
+        assert_eq!(
+            parse_mentions("if a < b <@1> then <<@1>> and <not a mention>"),
+            vec![ParsedMention::User(user), ParsedMention::User(user)]
+        );
+        assert_eq!(parse_mentions("<@abc> <#> <t:x:R> <t:1:X> <"), Vec::new());
     }
 }

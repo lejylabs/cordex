@@ -561,3 +561,52 @@ fn insert_members_respects_switches_and_cap() {
     assert_eq!(off.insert_members(g, [parse(1)]), 0);
     assert_eq!(off.stats().users, 0);
 }
+
+#[test]
+fn permissions_from_cache() {
+    use cordex_model::Permissions;
+
+    use crate::PermissionCacheError;
+
+    let mut g = guild_create();
+    g["owner_id"] = id(BOT);
+    let mut everyone = fixture("role");
+    everyone["id"] = id(GUILD);
+    everyone["permissions"] = json!("3072"); // VIEW_CHANNEL | SEND_MESSAGES
+    let mut role = fixture("role");
+    role["id"] = id(10);
+    role["permissions"] = json!("0");
+    g["roles"] = json!([everyone, role]);
+    let cache = InMemoryCache::new(all());
+    cache.update(&ev("GUILD_CREATE", &g));
+
+    let (guild, alice) = (Id::new(GUILD).unwrap(), Id::new(ALICE).unwrap());
+    // The text channel denies SEND_MESSAGES to @everyone.
+    let text = cache
+        .permissions(guild, alice, Id::new(TEXT).unwrap())
+        .unwrap();
+    assert_eq!(text, Permissions::VIEW_CHANNEL);
+    // Threads use the parent channel's overwrites.
+    let thread = cache
+        .permissions(guild, alice, Id::new(THREAD).unwrap())
+        .unwrap();
+    assert_eq!(thread, Permissions::VIEW_CHANNEL);
+    // The owner gets everything.
+    let owner = cache
+        .permissions(guild, Id::new(BOT).unwrap(), Id::new(TEXT).unwrap())
+        .unwrap_err();
+    assert_eq!(owner, PermissionCacheError::Member); // owner is not a cached member here
+
+    let no_roles = InMemoryCache::new(all().without_parts(CacheParts::MEMBER_ROLES));
+    no_roles.update(&ev("GUILD_CREATE", &g));
+    assert_eq!(
+        no_roles.permissions(guild, alice, Id::new(TEXT).unwrap()),
+        Err(PermissionCacheError::MemberRolesOff)
+    );
+    let no_overwrites = InMemoryCache::new(all().without_parts(CacheParts::CHANNEL_OVERWRITES));
+    no_overwrites.update(&ev("GUILD_CREATE", &g));
+    assert_eq!(
+        no_overwrites.permissions(guild, alice, Id::new(TEXT).unwrap()),
+        Err(PermissionCacheError::OverwritesOff)
+    );
+}

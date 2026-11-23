@@ -92,6 +92,12 @@ pub fn apply_implicit(permissions: Permissions, timed_out: bool) -> Permissions 
 }
 
 /// Guild permissions plus channel overwrites and implicit rules.
+///
+/// For a thread pass the overwrites of its parent channel (threads have
+/// none of their own). Owners and administrators get every bit and are
+/// exempt from timeouts. Not modelled: the voice rule that a missing
+/// `CONNECT` hides further permissions, and `SEND_MESSAGES_IN_THREADS`
+/// taking the place of `SEND_MESSAGES` inside threads.
 pub fn channel_permissions(
     is_owner: bool,
     everyone: Permissions,
@@ -103,6 +109,11 @@ pub fn channel_permissions(
     timed_out: bool,
 ) -> Permissions {
     let guild = guild_permissions(is_owner, everyone, role_permissions);
+    if guild == Permissions::all() {
+        // Owner or `ADMINISTRATOR`: overwrites, implicit rules and
+        // timeouts do not apply (topics/permissions.mdx).
+        return guild;
+    }
     let with_overwrites = apply_overwrites(guild, overwrites, everyone_id, member_id, member_roles);
     apply_implicit(with_overwrites, timed_out)
 }
@@ -184,5 +195,50 @@ mod tests {
             Permissions::VIEW_CHANNEL | Permissions::READ_MESSAGE_HISTORY
         );
         assert!(apply_implicit(Permissions::SEND_MESSAGES, false).is_empty());
+    }
+
+    #[test]
+    fn admins_and_owners_ignore_timeouts_and_overwrites() {
+        let everyone = id_generic(1);
+        let member = id_user(3);
+        let deny_all = [ow(
+            member.cast(),
+            OverwriteType::Member,
+            Permissions::empty(),
+            Permissions::all(),
+        )];
+        for (owner, base) in [
+            (true, Permissions::empty()),
+            (false, Permissions::ADMINISTRATOR),
+        ] {
+            let bits = channel_permissions(owner, base, [], &deny_all, everyone, member, &[], true);
+            assert_eq!(bits, Permissions::all());
+        }
+        // A normal timed-out member keeps only view + history.
+        let bits = channel_permissions(
+            false,
+            Permissions::VIEW_CHANNEL
+                | Permissions::SEND_MESSAGES
+                | Permissions::READ_MESSAGE_HISTORY,
+            [],
+            &[],
+            everyone,
+            member,
+            &[],
+            true,
+        );
+        assert_eq!(
+            bits,
+            Permissions::VIEW_CHANNEL | Permissions::READ_MESSAGE_HISTORY
+        );
+    }
+
+    #[test]
+    fn send_dependent_bits_need_send_messages() {
+        let bits = apply_implicit(
+            Permissions::VIEW_CHANNEL | Permissions::EMBED_LINKS | Permissions::ATTACH_FILES,
+            false,
+        );
+        assert_eq!(bits, Permissions::VIEW_CHANNEL);
     }
 }

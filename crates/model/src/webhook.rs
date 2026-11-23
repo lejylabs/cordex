@@ -81,10 +81,20 @@ pub fn parse_webhook_url(url: &str) -> Result<(Id<WebhookMarker>, WebhookToken),
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))
         .ok_or(ParseError::WebhookUrl)?;
+    // Query strings (`?wait=true`, `?thread_id=…`) and fragments are not part
+    // of the token.
+    let rest = rest.split(['?', '#']).next().unwrap_or(rest);
     let (host, path) = rest.split_once('/').ok_or(ParseError::WebhookUrl)?;
     if !matches!(
         host,
-        "discord.com" | "www.discord.com" | "ptb.discord.com" | "canary.discord.com"
+        "discord.com"
+            | "www.discord.com"
+            | "ptb.discord.com"
+            | "canary.discord.com"
+            | "discordapp.com"
+            | "www.discordapp.com"
+            | "ptb.discordapp.com"
+            | "canary.discordapp.com"
     ) {
         return Err(ParseError::WebhookUrl);
     }
@@ -164,5 +174,10 @@ mod tests {
         assert_eq!(id.get(), 123);
         assert_eq!(token.expose(), "tok");
         assert!(parse_webhook_url("https://example.com/api/webhooks/1/t").is_err());
+        let (id, token) =
+            parse_webhook_url("https://discordapp.com/api/webhooks/7/tok?wait=true").unwrap();
+        assert_eq!(id.get(), 7);
+        assert_eq!(token.expose(), "tok");
+        assert!(parse_webhook_url("https://discord.com/api/webhooks/7/").is_err());
     }
 }

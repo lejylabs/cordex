@@ -22,6 +22,26 @@ All notable changes are listed here. The project follows
   (`permission_calc` and `cache.permissions`),
   `ClientBuilder::default_allowed_mentions` / `Bot::default_allowed_mentions`,
   `parse_webhook_url`.
+- Fixes found in review of the Phase 8 work:
+  - `cache.permissions`: threads use the parent channel's overwrites; errors
+    instead of wrong results when `MEMBER_ROLES` / `CHANNEL_OVERWRITES` are
+    off or a member role is not cached; owners and administrators are exempt
+    from timeouts (also in `permission_calc::channel_permissions`).
+  - `Standby`: waiters that timed out or were dropped are removed on the next
+    event even if it does not match (no unbounded growth); stream waiters use
+    a bounded buffer (`STANDBY_STREAM_CAPACITY`, extra events are dropped with
+    a warning).
+  - `ctx.wait_for_button` returns a `ComponentContext` (answer with
+    `update`/`reply`); a component taken by a waiter is no longer routed to
+    `on_component` handlers too (no double answer). Docs say which events
+    and intents each `wait_for_*` needs.
+  - CDN: GIF stickers use `media.discordapp.net`; `CdnUrl::format` picks
+    `webp`/`jpg`/`png`/`gif`.
+  - `parse_mentions` no longer skips a mention after a stray `<`; unknown
+    timestamp styles are not parsed.
+  - Embed fields reject empty names and values (`EmbedError::Empty`).
+  - `parse_webhook_url` accepts `discordapp.com` hosts and ignores query
+    strings.
 - **All gateway receive events are typed** (82/82): new `VOICE_CHANNEL_STATUS_UPDATE`,
   `VOICE_CHANNEL_START_TIME_UPDATE`, `CHANNEL_INFO`, `INTEGRATION_CREATE` /
   `UPDATE` / `DELETE`, `SUBSCRIPTION_CREATE` / `UPDATE` / `DELETE` and

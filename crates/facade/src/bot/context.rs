@@ -15,8 +15,8 @@ use cordex_model::gateway::event::{Event, MessageReactionAdd, Ready};
 use cordex_model::id::Id;
 use cordex_model::id::marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker};
 use cordex_model::interaction::{
-    CommandData, CommandOptionValue, Interaction, InteractionType, MessageComponentData,
-    ModalSubmitData, SubmittedComponent,
+    CommandData, CommandOptionValue, Interaction, InteractionData, InteractionType,
+    MessageComponentData, ModalSubmitData, SubmittedComponent,
 };
 use cordex_model::message::Attachment;
 use cordex_model::{Channel, Message, Role, User};
@@ -70,6 +70,11 @@ impl Context {
     }
 
     /// Wait for the next event matching `pred`, or `None` after `timeout`.
+    ///
+    /// Only events the bot parses arrive here: those of registered handlers,
+    /// the cache, and [`Bot::parse_events`](super::Bot::parse_events). Their
+    /// intents must be on too ([`Bot::intents`](super::Bot::intents)),
+    /// otherwise the wait simply times out.
     pub async fn wait_for<F>(&self, timeout: Duration, pred: F) -> Option<Event>
     where
         F: Fn(&Event) -> bool + Send + Sync + 'static,
@@ -77,13 +82,17 @@ impl Context {
         self.shared.standby.wait_for(timeout, pred).await
     }
 
-    /// Wait for a component interaction on `message`.
+    /// Wait for a button press or select on `message_id`, answerable like in
+    /// an `on_component` handler (`ctx.update(..)`, `ctx.reply(..)`). The
+    /// interaction is not passed to `on_component` handlers as well.
+    /// `INTERACTION_CREATE` is parsed when any command or component handler
+    /// is registered (or via [`Bot::parse_events`](super::Bot::parse_events)).
     pub async fn wait_for_button(
         &self,
         message_id: Id<MessageMarker>,
         timeout: Duration,
-    ) -> Option<Interaction> {
-        match self
+    ) -> Option<ComponentContext> {
+        let event = self
             .wait_for(timeout, move |event| match event {
                 Event::InteractionCreate(i) => {
                     i.kind == InteractionType::MessageComponent
@@ -91,14 +100,26 @@ impl Context {
                 }
                 _ => false,
             })
-            .await
-        {
-            Some(Event::InteractionCreate(i)) => Some(*i),
-            _ => None,
-        }
+            .await?;
+        let Event::InteractionCreate(mut interaction) = event else {
+            return None;
+        };
+        let Some(InteractionData::MessageComponent(data)) = interaction.data.take() else {
+            return None;
+        };
+        let handle = InteractionHandle::new(self.shared.http.clone(), &interaction);
+        Some(ComponentContext {
+            ctx: self.clone(),
+            interaction,
+            data,
+            handle,
+        })
     }
 
-    /// Wait for a message in `channel` matching `pred`.
+    /// Wait for a message in `channel` matching `pred`. Needs
+    /// `MESSAGE_CREATE` parsed (an `on_message` handler or
+    /// [`Bot::parse_events`](super::Bot::parse_events)) and the message
+    /// intents.
     pub async fn wait_for_message<F>(
         &self,
         channel: Id<ChannelMarker>,
@@ -120,7 +141,9 @@ impl Context {
         }
     }
 
-    /// Wait for a reaction on `message`.
+    /// Wait for a reaction on `message_id`. Needs `MESSAGE_REACTION_ADD`
+    /// parsed ([`Bot::parse_events`](super::Bot::parse_events)) and the
+    /// `GUILD_MESSAGE_REACTIONS` / `DIRECT_MESSAGE_REACTIONS` intents.
     pub async fn wait_for_reaction(
         &self,
         message_id: Id<MessageMarker>,

@@ -492,7 +492,15 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
     if let Some(cache) = &shared.cache {
         cache.update(&event);
     }
-    shared.standby.process(&event);
+    let taken = shared.standby.process(&event) > 0;
+    // A component interaction a waiter took (`ctx.wait_for_button`) is
+    // answered there; routing it to `on_component` too would answer twice.
+    if taken
+        && let Event::InteractionCreate(interaction) = &event
+        && interaction.kind == InteractionType::MessageComponent
+    {
+        return;
+    }
     let handlers = &shared.handlers;
     if handlers.event.is_empty() {
         route_owned(ctx, event);

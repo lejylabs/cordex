@@ -24,7 +24,7 @@ use cordex_model::user::User;
 use cordex_model::voice::VoiceState;
 use parking_lot::RwLock;
 
-use crate::config::{CacheConfig, ResourceType};
+use crate::config::{CacheConfig, CacheParts, ResourceType};
 use crate::strip;
 
 type GuildId = Id<GuildMarker>;
@@ -80,10 +80,16 @@ pub enum PermissionCacheError {
     Guild,
     /// Member is not cached.
     Member,
-    /// Channel (or thread) is not cached.
+    /// Channel (or the parent channel of a thread) is not cached.
     Channel,
-    /// `@everyone` role is not cached.
+    /// `@everyone` or one of the member's roles is not cached.
     Roles,
+    /// [`CacheParts::MEMBER_ROLES`](crate::CacheParts::MEMBER_ROLES) is
+    /// off, so the member's roles are unknown.
+    MemberRolesOff,
+    /// [`CacheParts::CHANNEL_OVERWRITES`](crate::CacheParts::CHANNEL_OVERWRITES)
+    /// is off, so the channel overwrites are unknown.
+    OverwritesOff,
 }
 
 impl std::fmt::Display for PermissionCacheError {
@@ -93,6 +99,10 @@ impl std::fmt::Display for PermissionCacheError {
             Self::Member => "member is not cached",
             Self::Channel => "channel is not cached",
             Self::Roles => "roles are not cached",
+            Self::MemberRolesOff => "member roles are not cached (enable CacheParts::MEMBER_ROLES)",
+            Self::OverwritesOff => {
+                "channel overwrites are not cached (enable CacheParts::CHANNEL_OVERWRITES)"
+            }
         })
     }
 }
@@ -858,22 +868,37 @@ impl InMemoryCache {
         use cordex_model::permission_calc;
         use cordex_model::timestamp::Timestamp;
 
+        {
+            let config = self.config.read();
+            if !config.has_part(CacheParts::MEMBER_ROLES) {
+                return Err(PermissionCacheError::MemberRolesOff);
+            }
+            if !config.has_part(CacheParts::CHANNEL_OVERWRITES) {
+                return Err(PermissionCacheError::OverwritesOff);
+            }
+        }
         let g = self.guild(guild).ok_or(PermissionCacheError::Guild)?;
         let member = self
             .member(guild, user)
             .ok_or(PermissionCacheError::Member)?;
-        let ch = self
+        let mut ch = self
             .channel(channel)
             .or_else(|| self.thread(channel))
             .ok_or(PermissionCacheError::Channel)?;
+        // Threads have no overwrites; Discord uses the parent channel's.
+        if ch.is_thread() {
+            let parent = ch.parent_id.ok_or(PermissionCacheError::Channel)?;
+            ch = self.channel(parent).ok_or(PermissionCacheError::Channel)?;
+        }
         let everyone_role = self
             .role(guild, guild.cast())
             .ok_or(PermissionCacheError::Roles)?;
-        let role_perms: Vec<_> = member
+        let role_perms = member
             .roles
             .iter()
-            .filter_map(|id| self.role(guild, *id).map(|r| r.permissions))
-            .collect();
+            .map(|id| self.role(guild, *id).map(|r| r.permissions))
+            .collect::<Option<Vec<_>>>()
+            .ok_or(PermissionCacheError::Roles)?;
         let owner_id = g.owner_id.ok_or(PermissionCacheError::Guild)?;
         let now_ms = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
             Ok(d) => i64::try_from(d.as_millis()).unwrap_or(i64::MAX),

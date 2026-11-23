@@ -37,6 +37,12 @@ pub enum EmbedError {
         /// Documented maximum.
         max: usize,
     },
+    /// A required text (field name or value) is empty.
+    #[error("embed {field} must not be empty")]
+    Empty {
+        /// Field name.
+        field: &'static str,
+    },
     /// More than [`FIELD_COUNT_LIMIT`] fields.
     #[error("an embed can have at most {FIELD_COUNT_LIMIT} fields")]
     TooManyFields,
@@ -499,6 +505,16 @@ impl EmbedField {
     ) -> Result<Self, EmbedError> {
         let name = name.into();
         let value = value.into();
+        if name.trim().is_empty() {
+            return Err(EmbedError::Empty {
+                field: "field name",
+            });
+        }
+        if value.trim().is_empty() {
+            return Err(EmbedError::Empty {
+                field: "field value",
+            });
+        }
         check_len("field name", &name, FIELD_NAME_LIMIT)?;
         check_len("field value", &value, FIELD_VALUE_LIMIT)?;
         Ok(Self {
@@ -512,6 +528,23 @@ impl EmbedField {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_field_texts_are_rejected() {
+        assert_eq!(
+            Embed::new().field("", "v", false).unwrap_err(),
+            EmbedError::Empty {
+                field: "field name"
+            }
+        );
+        assert_eq!(
+            Embed::new().field("n", " ", false).unwrap_err(),
+            EmbedError::Empty {
+                field: "field value"
+            }
+        );
+        assert!(Embed::new().field("n", "v", true).is_ok());
+    }
 
     #[test]
     fn builder_sets_fields_and_rejects_limits() {

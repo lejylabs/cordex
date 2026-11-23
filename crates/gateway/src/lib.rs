@@ -30,7 +30,7 @@ pub use identify::{
 pub use manager::{ManagerEvents, ShardManager, ShardManagerBuilder};
 pub use shard::{GatewayBotSource, Shard, ShardBuilder};
 pub use spawn::{CurrentRuntime, RuntimeHandles, ShardTask, Spawner};
-pub use standby::Standby;
+pub use standby::{STANDBY_STREAM_CAPACITY, Standby};
 pub use types::{
     Backpressure, CloseMode, DEFAULT_GATEWAY_URL, HEARTBEAT_RESERVE, LIBRARY_NAME, Latency,
     MAX_PAYLOAD_BYTES, ManagerEvent, OUTBOUND_LIMIT, OUTBOUND_WINDOW, ResumeInfo, ShardId,
