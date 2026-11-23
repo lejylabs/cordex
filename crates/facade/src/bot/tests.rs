@@ -21,12 +21,12 @@ fn lookup_prefers_exact_id_then_prefix() {
 #[test]
 fn intents_follow_handlers() {
     let bot = Bot::new("t");
-    assert_eq!(bot.intents, Intents::GUILDS);
+    assert_eq!(bot.intents, Intents::empty());
 
     let bot = Bot::new("t").on_message(|_ctx: MessageContext| async { Ok(()) });
     assert_eq!(
         bot.intents,
-        Intents::GUILDS | Intents::GUILD_MESSAGES | Intents::DIRECT_MESSAGES
+        Intents::GUILD_MESSAGES | Intents::DIRECT_MESSAGES
     );
     assert!(!bot.intents.contains(Intents::MESSAGE_CONTENT));
 
@@ -88,4 +88,48 @@ async fn handler_errors_and_panics_are_contained() {
     assert!(!guarded("t", failing).await);
     let panicking: BoxFuture = Box::pin(async { panic!("boom") });
     assert!(!guarded("t", panicking).await);
+}
+
+#[test]
+fn only_handled_events_are_parsed() {
+    let none = Bot::new("t").event_types();
+    assert!(none.is_empty());
+
+    let commands = Bot::new("t")
+        .command(Command::slash("ping", "x"), |_ctx: CommandContext| async {
+            Ok(())
+        })
+        .event_types();
+    assert!(commands.wants("INTERACTION_CREATE"));
+    assert!(!commands.wants("MESSAGE_CREATE"));
+    assert!(!commands.wants("GUILD_CREATE"));
+    assert!(!commands.wants("PRESENCE_UPDATE"));
+
+    let messages = Bot::new("t")
+        .on_message(|_ctx: MessageContext| async { Ok(()) })
+        .event_types();
+    assert!(messages.wants("MESSAGE_CREATE"));
+    assert!(!messages.wants("INTERACTION_CREATE"));
+
+    let all = Bot::new("t")
+        .on_event(|_ctx: EventContext| async { Ok(()) })
+        .event_types();
+    assert_eq!(all, EventTypeFlags::all());
+}
+
+#[cfg(feature = "cache")]
+#[test]
+fn cache_adds_its_events_and_guilds_intent() {
+    use cordex_cache::{CacheConfig, ResourceType};
+
+    let empty = Bot::new("t").cache(CacheConfig::new());
+    assert_eq!(empty.intents, Intents::empty());
+    assert!(empty.event_types().is_empty());
+
+    let bot = Bot::new("t").cache(CacheConfig::new().resources(ResourceType::CHANNELS));
+    assert!(bot.intents.contains(Intents::GUILDS));
+    let flags = bot.event_types();
+    assert!(flags.wants("GUILD_CREATE"));
+    assert!(flags.wants("CHANNEL_CREATE"));
+    assert!(!flags.wants("MESSAGE_CREATE"));
 }

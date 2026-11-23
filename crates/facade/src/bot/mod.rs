@@ -24,14 +24,19 @@
 //!
 //! What it does for you:
 //!
-//! - **Intents** follow from the handlers (`GUILDS` always, message
-//!   intents with [`on_message`](Bot::on_message)). Privileged ones only
-//!   when asked for ([`message_content`](Bot::message_content),
-//!   [`intents`](Bot::intents)).
+//! - **Intents** follow from the handlers: none for a pure command bot
+//!   (interactions need no intent), message intents with
+//!   [`on_message`](Bot::on_message), `GUILDS` with [`cache`](Bot::cache).
+//!   Privileged ones only when asked for
+//!   ([`message_content`](Bot::message_content), [`intents`](Bot::intents)).
+//! - **Only needed events are parsed:** the gateway event filter is set
+//!   from the handlers and the cache config, everything else is skipped
+//!   after reading its name.
 //! - **Shards** are automatic (Discord's recommendation); reconnects and
 //!   resumes happen inside the gateway.
 //! - **Commands** are registered with one bulk overwrite on the first
-//!   `READY` (global, or per guild with [`guild_commands`](Bot::guild_commands)).
+//!   `READY` (global, or per guild with [`guild_commands`](Bot::guild_commands)),
+//!   skipped when Discord already has the same definitions.
 //! - **Interactions** are deferred automatically after 2.5 s if a
 //!   handler has not answered yet; `ctx.reply` then edits the deferred
 //!   response.
@@ -48,16 +53,19 @@ mod sync;
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
+use std::task::{Context as TaskContext, Poll};
 
-use cordex_gateway::{CloseMode, ManagerEvent, ShardId, ShardManager};
+use cordex_gateway::{CloseMode, EventTypeFlags, ManagerEvent, ShardId, ShardManager};
 use cordex_http::{Client, Route};
 use cordex_interactions::handle::{DEFAULT_AUTO_DEFER, ResponseState};
 use cordex_interactions::{Command, InteractionHandle, Reply};
+use cordex_model::Message;
 use cordex_model::gateway::Intents;
-use cordex_model::gateway::event::Event;
+use cordex_model::gateway::event::{Event, Ready};
 use cordex_model::id::Id;
 use cordex_model::id::marker::{ApplicationMarker, GuildMarker, UserMarker};
 use cordex_model::interaction::{Interaction, InteractionData, InteractionType};
@@ -136,7 +144,7 @@ impl Bot {
     pub fn new(token: impl Into<String>) -> Self {
         Self {
             token: token.into(),
-            intents: Intents::GUILDS,
+            intents: Intents::empty(),
             shards: None,
             commands: Vec::new(),
             guild_commands: None,
@@ -191,7 +199,14 @@ impl Bot {
     /// Cache with this config, fed from every event. Reach it with
     /// `ctx.cache()`. Off unless called.
     #[cfg(feature = "cache")]
+    ///
+    /// Adds the `GUILDS` intent (guild data comes with `GUILD_CREATE`);
+    /// privileged intents for members or presences stay your choice
+    /// ([`intents`](Self::intents)).
     pub fn cache(mut self, config: cordex_cache::CacheConfig) -> Self {
+        if !config.wanted_events().is_empty() {
+            self.intents |= Intents::GUILDS;
+        }
         self.cache = Some(config);
         self
     }
@@ -296,6 +311,32 @@ impl Bot {
         self
     }
 
+    /// Events worth parsing: only what a handler or the cache reads. The
+    /// gateway skips the rest after reading the event name (READY always
+    /// arrives).
+    fn event_types(&self) -> EventTypeFlags {
+        let h = &self.handlers;
+        if !h.event.is_empty() {
+            return EventTypeFlags::all();
+        }
+        let mut names: Vec<&str> = Vec::new();
+        if !(h.commands.is_empty()
+            && h.autocomplete.is_empty()
+            && h.components.is_empty()
+            && h.modals.is_empty())
+        {
+            names.push("INTERACTION_CREATE");
+        }
+        if !h.message.is_empty() {
+            names.push("MESSAGE_CREATE");
+        }
+        #[cfg(feature = "cache")]
+        if let Some(config) = &self.cache {
+            names.extend(config.wanted_events());
+        }
+        names.into_iter().collect()
+    }
+
     /// Check the commands, connect and handle events until a shard fails
     /// fatally (bad token, disallowed intents, …); that error is returned.
     pub async fn run(self) -> Result<()> {
@@ -310,7 +351,9 @@ impl Bot {
         }
 
         let http = Client::new(&self.token)?;
-        let builder = ShardManager::builder(&self.token, self.intents).http(http.clone());
+        let builder = ShardManager::builder(&self.token, self.intents)
+            .http(http.clone())
+            .event_types(self.event_types());
         let builder = match self.shards {
             Some(n) => builder.shards(0..n, n),
             None => builder.automatic(),
@@ -427,49 +470,80 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
         cache.update(&event);
     }
     let handlers = &shared.handlers;
-    if !handlers.event.is_empty() {
-        let event = Arc::new(event.clone());
-        for handler in &handlers.event {
-            spawn_guarded(
-                "event",
-                handler(EventContext {
-                    ctx: ctx.clone(),
-                    event: Arc::clone(&event),
-                }),
-            );
-        }
+    if handlers.event.is_empty() {
+        route_owned(ctx, event);
+        return;
     }
+    // `on_event` handlers share one `Arc<Event>`; the typed handlers get
+    // copies of only the parts they read.
+    let event = Arc::new(event);
+    for handler in &handlers.event {
+        spawn_guarded(
+            "event",
+            handler(EventContext {
+                ctx: ctx.clone(),
+                event: Arc::clone(&event),
+            }),
+        );
+    }
+    match &*event {
+        Event::Ready(ready) => route_ready(&ctx, || Arc::new(Ready::clone(ready)), ready.user.id),
+        Event::MessageCreate(message) => route_message(&ctx, || Arc::new(Message::clone(message))),
+        Event::InteractionCreate(interaction) => route_interaction(ctx, interaction.clone()),
+        _ => {}
+    }
+}
+
+fn route_owned(ctx: Context, event: Event) {
     match event {
         Event::Ready(ready) => {
-            let _ = shared.me.set(ready.user.id);
-            let ready = Arc::from(ready);
-            for handler in &handlers.ready {
-                spawn_guarded(
-                    "ready",
-                    handler(ReadyContext {
-                        ctx: ctx.clone(),
-                        ready: Arc::clone(&ready),
-                    }),
-                );
-            }
+            let id = ready.user.id;
+            route_ready(&ctx, || Arc::from(ready), id);
         }
-        Event::MessageCreate(message) if !handlers.message.is_empty() => {
-            if shared.me.get() == Some(&message.author.id) {
-                return;
-            }
-            let message = Arc::from(message);
-            for handler in &handlers.message {
-                spawn_guarded(
-                    "message",
-                    handler(MessageContext {
-                        ctx: ctx.clone(),
-                        message: Arc::clone(&message),
-                    }),
-                );
-            }
-        }
+        Event::MessageCreate(message) => route_message(&ctx, || Arc::from(message)),
         Event::InteractionCreate(interaction) => route_interaction(ctx, interaction),
         _ => {}
+    }
+}
+
+/// `ready` is only called when a handler needs the payload.
+fn route_ready(ctx: &Context, ready: impl FnOnce() -> Arc<Ready>, me: Id<UserMarker>) {
+    let _ = ctx.shared.me.set(me);
+    let handlers = &ctx.shared.handlers.ready;
+    if handlers.is_empty() {
+        return;
+    }
+    let ready = ready();
+    for handler in handlers {
+        spawn_guarded(
+            "ready",
+            handler(ReadyContext {
+                ctx: ctx.clone(),
+                ready: Arc::clone(&ready),
+            }),
+        );
+    }
+}
+
+/// `message` is only called when a handler wants it (not for the bot's own
+/// messages).
+fn route_message(ctx: &Context, message: impl FnOnce() -> Arc<Message>) {
+    let handlers = &ctx.shared.handlers.message;
+    if handlers.is_empty() {
+        return;
+    }
+    let message = message();
+    if ctx.shared.me.get() == Some(&message.author.id) {
+        return;
+    }
+    for handler in handlers {
+        spawn_guarded(
+            "message",
+            handler(MessageContext {
+                ctx: ctx.clone(),
+                message: Arc::clone(&message),
+            }),
+        );
     }
 }
 
@@ -563,19 +637,39 @@ fn spawn_guarded(what: &'static str, future: BoxFuture) {
     tokio::spawn(guarded(what, future));
 }
 
-/// Await a handler in its own task; `true` when it returned `Ok`.
+/// Await a handler and log a failure; `true` when it returned `Ok`.
+/// Panics are caught while polling, so no extra task is needed.
 async fn guarded(what: &'static str, future: BoxFuture) -> bool {
-    match tokio::spawn(future).await {
+    match (CatchUnwind { future }).await {
         Ok(Ok(())) => true,
         Ok(Err(error)) => {
             tracing::warn!(%error, "{what} handler failed");
             false
         }
-        Err(join) if join.is_panic() => {
+        Err(_) => {
             tracing::error!("{what} handler panicked");
             false
         }
-        Err(_) => false,
+    }
+}
+
+/// Polls a handler future and turns a panic into `Err`.
+struct CatchUnwind {
+    future: BoxFuture,
+}
+
+impl Future for CatchUnwind {
+    type Output = std::thread::Result<Result<()>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Self::Output> {
+        let future = &mut self.get_mut().future;
+        // A panicked future is never polled again: the result is returned
+        // right away and the future dropped with this struct.
+        match std::panic::catch_unwind(AssertUnwindSafe(|| future.as_mut().poll(cx))) {
+            Ok(Poll::Pending) => Poll::Pending,
+            Ok(Poll::Ready(result)) => Poll::Ready(Ok(result)),
+            Err(panic) => Poll::Ready(Err(panic)),
+        }
     }
 }
 
