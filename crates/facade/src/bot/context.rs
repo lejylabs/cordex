@@ -63,6 +63,33 @@ impl Context {
         self.shared.me.get().copied()
     }
 
+    /// Shared state registered with [`Bot::data`](super::Bot::data).
+    pub fn data<T: Send + Sync + 'static>(&self) -> Option<&T> {
+        self.shared
+            .data
+            .get(&std::any::TypeId::of::<T>())
+            .and_then(|value| value.downcast_ref::<T>())
+    }
+
+    /// Send a plain text message to `channel`.
+    pub async fn send(
+        &self,
+        channel: Id<ChannelMarker>,
+        content: impl Into<String>,
+    ) -> Result<Message> {
+        Ok(self
+            .http()
+            .create_message(channel)
+            .content(content.into())?
+            .await?)
+    }
+
+    /// Open a DM channel with `user` and send a plain text message.
+    pub async fn dm(&self, user: Id<UserMarker>, content: impl Into<String>) -> Result<Message> {
+        let channel = self.http().create_dm(user).await?;
+        self.send(channel.id, content).await
+    }
+
     /// The cache, if the bot was built with [`Bot::cache`](super::Bot::cache).
     #[cfg(feature = "cache")]
     pub fn cache(&self) -> Option<&cordex_cache::InMemoryCache> {
@@ -348,6 +375,7 @@ macro_rules! modal_method {
 modal_method!(CommandContext, ComponentContext);
 
 /// A slash, user or message command.
+#[derive(Clone)]
 pub struct CommandContext {
     pub(super) ctx: Context,
     pub(super) interaction: Box<Interaction>,
@@ -433,6 +461,64 @@ impl CommandContext {
     /// Target of a message context-menu command.
     pub fn target_message(&self) -> Result<&Message> {
         Ok(self.options().target_message()?)
+    }
+
+    /// Show `pages` with `◀` / `▶` pagination buttons until `timeout` expires
+    /// (then disables the buttons). Only the invoking user can change pages;
+    /// other users receive a short ephemeral notice.
+    pub async fn paginate(
+        &self,
+        pages: impl IntoIterator<Item = Reply>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let pages: Vec<Reply> = pages.into_iter().collect();
+        if pages.is_empty() {
+            return Ok(());
+        }
+        if pages.len() == 1 {
+            return self.reply(pages[0].clone()).await;
+        }
+        let author = self.user().map(|u| u.id);
+        let mut index = 0usize;
+        let total = pages.len();
+
+        let page_reply = |idx: usize, disabled: bool| {
+            let mut prev = cordex_model::component::Button::secondary("cordex_page:prev", "◀");
+            if disabled || idx == 0 {
+                prev = prev.disabled();
+            }
+            let indicator = cordex_model::component::Button::secondary(
+                "cordex_page:indicator",
+                format!("{} / {total}", idx + 1),
+            )
+            .disabled();
+            let mut next = cordex_model::component::Button::secondary("cordex_page:next", "▶");
+            if disabled || idx + 1 >= total {
+                next = next.disabled();
+            }
+            let row = cordex_model::component::ActionRow::new([prev, indicator, next]);
+            pages[idx].clone().components(vec![row.into()])
+        };
+
+        self.defer().await?;
+        let message = self.edit(page_reply(index, false)).await?;
+        let mut clicks = self.button_clicks(message.id, timeout);
+        while let Some(click) = clicks.next().await {
+            if author.is_some() && click.user().map(|u| u.id) != author {
+                let _ = click
+                    .reply_ephemeral("Only the command author can change pages.")
+                    .await;
+                continue;
+            }
+            match click.custom_id() {
+                "cordex_page:prev" if index > 0 => index -= 1,
+                "cordex_page:next" if index + 1 < total => index += 1,
+                _ => continue,
+            }
+            let _ = click.update(page_reply(index, false)).await;
+        }
+        let _ = self.edit(page_reply(index, true)).await;
+        Ok(())
     }
 }
 

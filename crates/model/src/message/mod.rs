@@ -2,12 +2,14 @@
 
 pub mod allowed_mentions;
 pub mod attachment;
+pub mod builder;
 pub mod embed;
 
 use serde::{Deserialize, Serialize};
 
 pub use allowed_mentions::{AllowedMentionType, AllowedMentions};
 pub use attachment::{Attachment, AttachmentFlags};
+pub use builder::MessageBuilder;
 pub use embed::{
     AUTHOR_LIMIT, DESCRIPTION_LIMIT, Embed, EmbedAuthor, EmbedError, EmbedField, EmbedFlags,
     EmbedFooter, EmbedMedia, EmbedMediaFlags, EmbedProvider, EmbedType, EmbedVideo,

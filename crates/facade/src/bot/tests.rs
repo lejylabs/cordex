@@ -4,6 +4,36 @@ fn noop<C>() -> Handler<C> {
     boxed(|_ctx: C| async { Ok(()) })
 }
 
+async fn test_context(bot: Bot) -> Context {
+    let gateway_bot: cordex_model::gateway::GatewayBot = serde_json::from_str(
+        r#"{"url":"wss://127.0.0.1:1","shards":1,"session_start_limit":{"total":1000,"remaining":1000,"reset_after":0,"max_concurrency":1}}"#,
+    )
+    .unwrap();
+    let manager = ShardManager::builder("t", Intents::empty())
+        .shards(0..1, 1)
+        .gateway_bot(gateway_bot)
+        .build()
+        .await
+        .unwrap();
+    let http = Client::builder("t").build().unwrap();
+    let shared = Arc::new(Shared {
+        http,
+        manager: std::sync::Mutex::new(Arc::new(manager)),
+        #[cfg(feature = "cache")]
+        cache: None,
+        me: OnceLock::new(),
+        handlers: bot.handlers,
+        data: bot.data,
+        error_message: bot.error_message,
+        auto_defer: bot.auto_defer,
+        standby: Standby::new(),
+    });
+    Context {
+        shared,
+        shard: ShardId::new(0, 1).unwrap(),
+    }
+}
+
 #[test]
 fn lookup_prefers_exact_id_then_prefix() {
     let mut map: HashMap<Box<str>, Handler<()>> = HashMap::new();
@@ -82,12 +112,60 @@ async fn invalid_command_fails_before_connecting() {
 
 #[tokio::test]
 async fn handler_errors_and_panics_are_contained() {
-    assert!(guarded("t", Box::pin(async { Ok(()) })).await);
+    let ctx = test_context(Bot::new("t")).await;
+    assert!(guarded("t", &ctx, Box::pin(async { Ok(()) })).await);
     let failing: BoxFuture =
         Box::pin(async { Err(cordex_interactions::InteractionError::NotResponded.into()) });
-    assert!(!guarded("t", failing).await);
+    assert!(!guarded("t", &ctx, failing).await);
     let panicking: BoxFuture = Box::pin(async { panic!("boom") });
-    assert!(!guarded("t", panicking).await);
+    assert!(!guarded("t", &ctx, panicking).await);
+}
+
+#[tokio::test]
+async fn bot_data_is_typed_and_retrievable() {
+    #[derive(Debug, PartialEq)]
+    struct Config {
+        prefix: &'static str,
+    }
+
+    let bot = Bot::new("t")
+        .data(Config { prefix: "!" })
+        .data(42_u64)
+        .data(99_u64);
+    let ctx = test_context(bot).await;
+    assert_eq!(ctx.data::<Config>(), Some(&Config { prefix: "!" }));
+    assert_eq!(ctx.data::<u64>(), Some(&99_u64));
+    assert_eq!(ctx.data::<String>(), None);
+}
+
+#[tokio::test]
+async fn on_error_hook_receives_handler_errors() {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let seen_hook = Arc::clone(&seen);
+    let bot = Bot::new("t").data("tag").on_error(move |ctx, err| {
+        let seen = Arc::clone(&seen_hook);
+        async move {
+            let tag = ctx.data::<&'static str>().copied().unwrap_or("");
+            seen.lock().unwrap().push(format!("{tag}:{err}"));
+        }
+    });
+    let ctx = test_context(bot).await;
+
+    assert!(guarded("t", &ctx, Box::pin(async { Ok(()) })).await);
+    assert!(seen.lock().unwrap().is_empty());
+
+    let failing: BoxFuture =
+        Box::pin(async { Err(cordex_interactions::InteractionError::NotResponded.into()) });
+    assert!(!guarded("t", &ctx, failing).await);
+    let entries = seen.lock().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert!(entries[0].starts_with("tag:"), "{}", entries[0]);
+}
+
+#[test]
+fn before_command_hook_is_registered() {
+    let bot = Bot::new("t").before_command(|_ctx: CommandContext| async { Ok(true) });
+    assert!(bot.handlers.before_command.is_some());
 }
 
 #[test]

@@ -52,6 +52,7 @@
 mod context;
 mod sync;
 
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
@@ -82,6 +83,10 @@ use crate::{Error, Result};
 
 type BoxFuture = Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 type Handler<C> = Arc<dyn Fn(C) -> BoxFuture + Send + Sync>;
+type ErrorHandler =
+    Arc<dyn Fn(Context, Error) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
+type BeforeCommand =
+    Arc<dyn Fn(CommandContext) -> Pin<Box<dyn Future<Output = Result<bool>> + Send>> + Send + Sync>;
 
 fn boxed<C, F, Fut>(f: F) -> Handler<C>
 where
@@ -106,6 +111,8 @@ struct Handlers {
     message: Vec<Handler<MessageContext>>,
     ready: Vec<Handler<ReadyContext>>,
     event: Vec<Handler<EventContext>>,
+    before_command: Option<BeforeCommand>,
+    on_error: Option<ErrorHandler>,
 }
 
 /// State every context points to.
@@ -117,6 +124,7 @@ struct Shared {
     cache: Option<Arc<cordex_cache::InMemoryCache>>,
     me: OnceLock<Id<UserMarker>>,
     handlers: Handlers,
+    data: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
     error_message: Option<Box<str>>,
     auto_defer: bool,
     standby: Standby,
@@ -143,6 +151,7 @@ pub struct Bot {
     guild_commands: Option<Id<GuildMarker>>,
     register_commands: bool,
     handlers: Handlers,
+    data: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
     error_message: Option<Box<str>>,
     auto_defer: bool,
     default_allowed_mentions: Option<AllowedMentions>,
@@ -173,6 +182,7 @@ impl Bot {
             guild_commands: None,
             register_commands: true,
             handlers: Handlers::default(),
+            data: HashMap::new(),
             error_message: Some(DEFAULT_ERROR_MESSAGE.into()),
             auto_defer: true,
             default_allowed_mentions: None,
@@ -271,6 +281,38 @@ impl Bot {
             self.intents |= Intents::GUILDS;
         }
         self.cache = Some(config);
+        self
+    }
+
+    /// Attach shared state accessible in every handler via
+    /// [`Context::data`], e.g. a database pool or configuration struct.
+    /// Calling `data` again with the same type replaces the previous value.
+    pub fn data<T: Send + Sync + 'static>(mut self, value: T) -> Self {
+        self.data.insert(TypeId::of::<T>(), Box::new(value));
+        self
+    }
+
+    /// Global hook invoked whenever a handler returns `Err`. Runs in
+    /// addition to tracing logs (and the default ephemeral interaction error
+    /// message, unless disabled with [`error_message(None)`](Self::error_message)).
+    pub fn on_error<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Error) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.handlers.on_error = Some(Arc::new(move |ctx, err| Box::pin(handler(ctx, err))));
+        self
+    }
+
+    /// Hook run before every slash, user or message command handler.
+    /// Return `Ok(true)` to proceed with the command, or `Ok(false)` to stop
+    /// (for cooldowns, maintenance mode, blacklists, or logging).
+    pub fn before_command<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(CommandContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<bool>> + Send + 'static,
+    {
+        self.handlers.before_command = Some(Arc::new(move |ctx| Box::pin(handler(ctx))));
         self
     }
 
@@ -403,6 +445,18 @@ impl Bot {
     /// Check the commands, connect and handle events until a shard fails
     /// fatally (bad token, disallowed intents, …); that error is returned.
     pub async fn run(self) -> Result<()> {
+        self.run_until(std::future::pending()).await
+    }
+
+    /// Like [`run`](Self::run), but shuts down all shards cleanly when
+    /// `Ctrl+C` (or `SIGTERM` on Unix) is received.
+    pub async fn run_until_ctrl_c(self) -> Result<()> {
+        self.run_until(shutdown_signal()).await
+    }
+
+    /// Like [`run`](Self::run), but shuts down all shards cleanly when
+    /// `shutdown` completes.
+    pub async fn run_until(self, shutdown: impl Future<Output = ()> + Send) -> Result<()> {
         for command in &self.commands {
             command.validate()?;
         }
@@ -433,6 +487,7 @@ impl Bot {
                 .map(|config| Arc::new(cordex_cache::InMemoryCache::new(config))),
             me: OnceLock::new(),
             handlers: self.handlers,
+            data: self.data,
             error_message: self.error_message,
             auto_defer: self.auto_defer,
             standby: Standby::new(),
@@ -458,8 +513,14 @@ impl Bot {
             ));
         }
 
+        let mut shutdown = std::pin::pin!(shutdown);
         loop {
             let item = tokio::select! {
+                () = &mut shutdown => {
+                    tracing::info!("shutdown signal received; closing shards");
+                    shared.manager().shutdown(CloseMode::Terminate).await;
+                    return Ok(());
+                }
                 item = events.recv() => item,
                 Some(next) = switch_rx.recv() => {
                     let old = std::mem::replace(
@@ -481,6 +542,28 @@ impl Bot {
             on_manager_event(&shared, item, &registered, guild_commands, &commands).await?;
         }
         Ok(())
+    }
+}
+
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut term = signal(SignalKind::terminate()).ok();
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = async {
+                if let Some(s) = term.as_mut() {
+                    let _ = s.recv().await;
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            } => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
     }
 }
 
@@ -723,6 +806,7 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
     for handler in &handlers.event {
         spawn_guarded(
             "event",
+            ctx.clone(),
             handler(EventContext {
                 ctx: ctx.clone(),
                 event: Arc::clone(&event),
@@ -760,6 +844,7 @@ fn route_ready(ctx: &Context, ready: impl FnOnce() -> Arc<Ready>, me: Id<UserMar
     for handler in handlers {
         spawn_guarded(
             "ready",
+            ctx.clone(),
             handler(ReadyContext {
                 ctx: ctx.clone(),
                 ready: Arc::clone(&ready),
@@ -782,6 +867,7 @@ fn route_message(ctx: &Context, message: impl FnOnce() -> Arc<Message>) {
     for handler in handlers {
         spawn_guarded(
             "message",
+            ctx.clone(),
             handler(MessageContext {
                 ctx: ctx.clone(),
                 message: Arc::clone(&message),
@@ -803,7 +889,8 @@ fn route_interaction(ctx: Context, mut interaction: Box<Interaction>) {
     let auto_defer = ctx.shared.auto_defer;
     let error_message = ctx.shared.error_message.clone();
     let kind = interaction.kind;
-    let future = match interaction.data.take() {
+    let error_ctx = ctx.clone();
+    let future: BoxFuture = match interaction.data.take() {
         Some(InteractionData::Command(data))
             if kind == InteractionType::ApplicationCommandAutocomplete =>
         {
@@ -830,12 +917,24 @@ fn route_interaction(ctx: Context, mut interaction: Box<Interaction>) {
             if auto_defer {
                 handle.auto_defer(DEFAULT_AUTO_DEFER, false);
             }
-            handler(CommandContext {
+            let before = handlers.before_command.clone();
+            let cmd_ctx = CommandContext {
                 ctx,
                 interaction,
                 data,
                 handle: handle.clone(),
-            })
+            };
+            if let Some(before) = before {
+                Box::pin(async move {
+                    if before(cmd_ctx.clone()).await? {
+                        handler(cmd_ctx).await
+                    } else {
+                        Ok(())
+                    }
+                })
+            } else {
+                handler(cmd_ctx)
+            }
         }
         Some(InteractionData::MessageComponent(data)) => {
             let Some(handler) = lookup(&handlers.components, &data.custom_id).cloned() else {
@@ -867,7 +966,7 @@ fn route_interaction(ctx: Context, mut interaction: Box<Interaction>) {
         _ => return,
     };
     tokio::spawn(async move {
-        if !guarded("interaction", future).await
+        if !guarded("interaction", &error_ctx, future).await
             && let Some(text) = error_message
         {
             answer_error(&handle, &text).await;
@@ -876,17 +975,22 @@ fn route_interaction(ctx: Context, mut interaction: Box<Interaction>) {
 }
 
 /// Spawn a handler; errors and panics are logged.
-fn spawn_guarded(what: &'static str, future: BoxFuture) {
-    tokio::spawn(guarded(what, future));
+fn spawn_guarded(what: &'static str, ctx: Context, future: BoxFuture) {
+    tokio::spawn(async move {
+        let _ = guarded(what, &ctx, future).await;
+    });
 }
 
 /// Await a handler and log a failure; `true` when it returned `Ok`.
 /// Panics are caught while polling, so no extra task is needed.
-async fn guarded(what: &'static str, future: BoxFuture) -> bool {
+async fn guarded(what: &'static str, ctx: &Context, future: BoxFuture) -> bool {
     match (CatchUnwind { future }).await {
         Ok(Ok(())) => true,
         Ok(Err(error)) => {
             tracing::warn!(%error, "{what} handler failed");
+            if let Some(on_error) = &ctx.shared.handlers.on_error {
+                on_error(ctx.clone(), error).await;
+            }
             false
         }
         Err(_) => {

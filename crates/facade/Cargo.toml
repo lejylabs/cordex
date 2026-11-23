@@ -22,8 +22,8 @@ cordex-http = { workspace = true, default-features = false, optional = true }
 cordex-gateway = { workspace = true, optional = true }
 cordex-interactions = { workspace = true, optional = true }
 cordex-cache = { workspace = true, optional = true }
-# Bounded parallel backfill (comes with `http` anyway).
-tokio = { workspace = true, optional = true }
+# Bounded parallel backfill and graceful Ctrl+C shutdown in `Bot`.
+tokio = { workspace = true, features = ["signal"], optional = true }
 # Logs of the simple layer (handler errors, command registration).
 tracing = { workspace = true, optional = true }
 # Compare registered commands with the local ones (simple layer).

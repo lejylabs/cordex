@@ -120,7 +120,7 @@ pub mod prelude {
     };
     pub use cordex_model::gateway::{Event, Intents};
     pub use cordex_model::mention::{Mentionable, ParsedMention, parse_mentions};
-    pub use cordex_model::message::{AllowedMentions, Embed, EmbedError};
+    pub use cordex_model::message::{AllowedMentions, Embed, EmbedError, MessageBuilder};
     pub use cordex_model::{
         Channel, Guild, Id, Member, Message, Permissions, Role, Timestamp, TimestampStyle, Token,
         User, parse_webhook_url,
