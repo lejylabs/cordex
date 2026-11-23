@@ -41,8 +41,33 @@ fn bench(c: &mut Criterion) {
     group.bench_function("update_guild_create_1000_members", |b| {
         b.iter_batched(
             || InMemoryCache::new(full()),
-            |cache| cache.update(black_box(&guild)),
+            // Return the cache so dropping it is not measured.
+            |cache| {
+                cache.update(black_box(&guild));
+                cache
+            },
             BatchSize::SmallInput,
+        );
+    });
+    // A bot in many guilds: 100 guilds (20 000 channels) are cached already.
+    let others: Vec<Event> = (1..=100)
+        .map(|n| event("GUILD_CREATE", common::guild_create_numbered(10, n)))
+        .collect();
+    group.bench_function("update_guild_create_after_100_guilds", |b| {
+        b.iter_batched(
+            || {
+                let cache = InMemoryCache::new(full());
+                for e in &others {
+                    cache.update(e);
+                }
+                cache
+            },
+            // Return the cache so dropping it is not measured.
+            |cache| {
+                cache.update(black_box(&guild));
+                cache
+            },
+            BatchSize::LargeInput,
         );
     });
     group.bench_function("update_guild_create_cache_off", |b| {

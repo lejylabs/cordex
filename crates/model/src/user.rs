@@ -7,6 +7,85 @@ use crate::id::marker::{GuildMarker, SkuMarker, UserMarker};
 use crate::image_hash::ImageHash;
 use crate::serde_util::{bitflags_serde_int, int_enum};
 
+/// Legacy four-digit user tag (`name#1337`), stored as a number instead of
+/// a string. `0` means the new username system without a tag, which every
+/// user except bots has today.
+///
+/// ```
+/// use cordex_model::user::Discriminator;
+///
+/// let tag: Discriminator = serde_json::from_str(r#""0042""#).unwrap();
+/// assert_eq!(tag.get(), 42);
+/// assert_eq!(tag.to_string(), "0042");
+/// assert!(Discriminator::default().is_none());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Discriminator(u16);
+
+impl Discriminator {
+    /// Tag from a number (`0` = no tag).
+    pub const fn new(value: u16) -> Self {
+        Self(value)
+    }
+
+    /// The tag as a number.
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+
+    /// Whether the user has no legacy tag (new username system).
+    pub const fn is_none(self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl std::fmt::Display for Discriminator {
+    /// `0` without a tag, otherwise four digits (`0042`), as Discord sends it.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0 == 0 {
+            f.write_str("0")
+        } else {
+            write!(f, "{:04}", self.0)
+        }
+    }
+}
+
+impl Serialize for Discriminator {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Discriminator {
+    /// Accepts the documented string and a plain number; anything that is
+    /// not a tag reads as `0` instead of failing the whole user.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = Discriminator;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a discriminator string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(Discriminator(v.parse().unwrap_or(0)))
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(Discriminator(u16::try_from(v).unwrap_or(0)))
+            }
+
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(Discriminator(0))
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
 /// A Discord user.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -17,10 +96,10 @@ pub struct User {
     /// users (presence updates send only `id`).
     #[serde(default)]
     pub username: Box<str>,
-    /// Discord tag (`"0"` for users on the new username system; empty if a
-    /// partial user omits it).
+    /// Legacy Discord tag; `0` for users on the new username system (and
+    /// when a partial user omits it). Only bots still have one.
     #[serde(default)]
-    pub discriminator: Box<str>,
+    pub discriminator: Discriminator,
     /// Display name, if set.
     pub global_name: Option<Box<str>>,
     /// Avatar hash.
@@ -70,7 +149,7 @@ impl User {
 
     /// CDN URL of the avatar, or the default avatar when none is set.
     pub fn avatar_url(&self) -> crate::cdn::CdnUrl {
-        crate::cdn::user_avatar(self.id, self.avatar.as_ref(), &self.discriminator)
+        crate::cdn::user_avatar(self.id, self.avatar.as_ref(), self.discriminator)
     }
 }
 
@@ -275,6 +354,7 @@ mod tests {
         assert_eq!(user.premium_type, Some(PremiumType::None));
         assert!(user.avatar_decoration_data.unwrap().asset.is_animated());
         assert_eq!(&*user.primary_guild.unwrap().tag.unwrap(), "DISC");
+        assert_eq!(user.discriminator, Discriminator::new(1337));
 
         // Round trip keeps every value.
         let again: User = serde_json::from_str(
@@ -292,5 +372,28 @@ mod tests {
         assert!(user.bot);
         assert_eq!(user.display_name(), "Zeny");
         assert!(user.flags.is_none());
+        assert!(user.discriminator.is_none());
+    }
+
+    #[test]
+    fn discriminator_forms() {
+        let read = |json: &str| serde_json::from_str::<Discriminator>(json).unwrap();
+        assert_eq!(read(r#""0""#), Discriminator::default());
+        assert_eq!(read(r#""0001""#).get(), 1);
+        assert_eq!(read("7").get(), 7);
+        assert_eq!(read("null").get(), 0);
+        assert_eq!(read(r#""x""#).get(), 0);
+        assert_eq!(read("70000").get(), 0);
+        assert!(serde_json::from_str::<Discriminator>("[]").is_err());
+        assert_eq!(
+            serde_json::to_string(&Discriminator::new(1)).unwrap(),
+            r#""0001""#
+        );
+        assert_eq!(
+            serde_json::to_string(&Discriminator::new(0)).unwrap(),
+            r#""0""#
+        );
+        let missing: User = serde_json::from_str(r#"{"id":"1"}"#).unwrap();
+        assert!(missing.discriminator.is_none());
     }
 }

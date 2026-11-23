@@ -39,14 +39,27 @@ pub(crate) fn interaction_create() -> String {
     if i.get("token").is_none() {
         i["token"] = json!("token");
     }
-    i.to_string()
+    // `Value` sorts keys; Discord sends `type` near the start, before `data`.
+    let kind = i
+        .as_object_mut()
+        .and_then(|o| o.remove("type"))
+        .expect("type");
+    let rest = i.to_string();
+    format!(r#"{{"type":{kind},{}"#, &rest[1..])
 }
 
 /// A `GUILD_CREATE` of a mid-sized guild: `members` members, 200 channels,
 /// 50 roles and half as many presences as members.
 pub(crate) fn guild_create(members: u64) -> String {
+    guild_create_numbered(members, 0)
+}
+
+/// [`guild_create`] for guild number `n`: guild and channel ids do not
+/// collide with other numbers (members are shared).
+pub(crate) fn guild_create_numbered(members: u64, n: u64) -> String {
+    let base = n * 1_000_000;
     let mut g = fixture("guild");
-    g["id"] = id(1);
+    g["id"] = id(1 + base);
     g["joined_at"] = json!("2024-01-01T00:00:00.000000+00:00");
     g["large"] = json!(true);
     g["member_count"] = json!(members);
@@ -65,7 +78,7 @@ pub(crate) fn guild_create(members: u64) -> String {
         (0..200)
             .map(|n| {
                 let mut c = channel.clone();
-                c["id"] = id(20_000 + n);
+                c["id"] = id(base + 20_000 + n);
                 c.as_object_mut().map(|o| o.remove("guild_id"));
                 c
             })

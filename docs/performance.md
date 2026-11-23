@@ -13,23 +13,27 @@ for every dispatch.
 
 | Payload | Size | Mean | Target (§16.1) |
 |---|---:|---:|---|
-| `MESSAGE_CREATE` | 0.6 KiB | **1.40 µs** | p99 < 50 µs |
-| `INTERACTION_CREATE` | 0.7 KiB | **1.82 µs** | – |
-| `GUILD_CREATE`, 1000 members, 200 channels, 50 roles, 500 presences | 0.9 MiB | **2.96 ms** (≈ 313 MiB/s) | – |
+| `MESSAGE_CREATE` | 0.6 KiB | **1.41 µs** | p99 < 50 µs |
+| `INTERACTION_CREATE` | 0.7 KiB | **1.62 µs** (was 1.82) | – |
+| `GUILD_CREATE`, 1000 members, 200 channels, 50 roles, 500 presences | 0.9 MiB | **2.89 ms** (≈ 320 MiB/s) | – |
 | Filtered `MESSAGE_CREATE` (envelope only) | 0.6 KiB | **0.36 µs** | < 5 µs |
 | Filtered `GUILD_CREATE` (envelope only) | 0.9 MiB | 0.37 ms (≈ 2.4 GiB/s) | – |
 
 A filtered event (not in the `EventTypeFlags`) costs only the envelope scan,
 about 8× less than parsing it.
 
+`INTERACTION_CREATE` parses `data` in one pass when `type` comes before it
+(Discord's usual key order); before, `data` was always copied into a raw
+buffer and parsed a second time. The bench payload now keeps that key order.
+
 ## Allocations per frame
 
 | Payload | Allocations | Bytes | Budget (§16.1) |
 |---|---:|---:|---|
 | Filtered event (envelope only) | 1 | 8 | ≤ 1 |
-| `MESSAGE_CREATE` | 7 | 1389 | ≤ 15 |
-| `INTERACTION_CREATE` | 15 | 2051 | – |
-| `GUILD_CREATE` (1000 members) | 9503 | 3.0 MB | – |
+| `MESSAGE_CREATE` | 6 | 1369 | ≤ 15 |
+| `INTERACTION_CREATE` | 12 (was 15) | 1881 | – |
+| `GUILD_CREATE` (1000 members) | 8503 (was 9503) | 3.0 MB | – |
 
 The budget for filtered events was 0 in the plan. The one allocation comes
 from `serde_json` itself: it keeps an 8-byte stack while skipping a nested
@@ -37,9 +41,10 @@ value (the same for `RawValue` and `IgnoredAny`); cordex allocates nothing
 there. Removing it would need an own JSON scanner, which is not worth 8
 bytes per event.
 
-`GUILD_CREATE` allocates about 9.5 times per member (user and member names,
-role lists, presence objects). It is read once per guild at startup; a
-future step could intern repeated strings or use smaller collections.
+`User::discriminator` is a `Discriminator(u16)` instead of a string: only
+bots still have a legacy tag, everyone else sends `"0"`, which cost one
+allocation per user. `GUILD_CREATE` now allocates about 8.5 times per member
+in this (rich) fixture; the rest are names, role lists and presence objects.
 
 ## Cache
 
@@ -47,12 +52,20 @@ future step could intern repeated strings or use smaller collections.
 |---|---:|---|
 | Lookup member by id | **22.7 ns** | < 200 ns |
 | Lookup channel by id | **18.2 ns** | < 200 ns |
-| `update(MESSAGE_CREATE)`, everything on, 100 messages per channel | 231 ns | – |
-| `update(GUILD_CREATE)` with 1000 members, everything on | 944 µs | – |
+| `update(MESSAGE_CREATE)`, everything on, 100 messages per channel | 208 ns | – |
+| `update(GUILD_CREATE)` with 1000 members, everything on | **657 µs** (was 806) | – |
+| same, with 100 other guilds (20 000 channels) cached | 668 µs (was 844) | – |
 | `update(GUILD_CREATE)` with the cache off (`CacheConfig::default()`) | **8.8 ns** | – |
 
 With the cache off an event costs a few nanoseconds: the cache checks its
 switches before doing any work.
+
+`GUILD_CREATE` inserts members and presences with one lock per map instead
+of one per entry, reserves map capacity up front, and skips scanning every
+cached channel on a guild's first `GUILD_CREATE` (it used to grow with the
+number of guilds). The "was" values are the old code measured with the
+current bench; the bench no longer times dropping the cache (the first
+baseline, 944 µs, included that).
 
 ## Binary size
 

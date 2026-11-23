@@ -6,6 +6,15 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+- **Faster parsing and caching:** `INTERACTION_CREATE` parses `data` in one
+  pass (1.82 → 1.62 µs, 15 → 12 allocations); the cache handles
+  `GUILD_CREATE` with one lock per map, reserved capacity and no scan of all
+  cached channels on a guild's first `GUILD_CREATE` (806 → 657 µs for 1000
+  members). Details in `docs/performance.md`.
+- **Breaking:** `User::discriminator` is a `Discriminator(u16)` (`get`,
+  `is_none`, `Display` as `0` or `0042`) instead of `Box<str>`; saves an
+  allocation per user. `cdn::user_avatar` / `cdn::default_avatar` take a
+  `Discriminator`.
 - **Fix: modal submits with a checkbox failed to parse.** Discord sends a
   checkbox `value` as a boolean; `SubmittedComponent::value` is now a
   `SubmittedValue` (`Text` / `Bool`, with `as_str` / `as_bool`). New

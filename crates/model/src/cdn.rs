@@ -9,6 +9,7 @@ use crate::id::marker::{
 };
 use crate::image_hash::ImageHash;
 use crate::sticker::StickerFormatType;
+use crate::user::Discriminator;
 
 /// Discord CDN origin.
 pub const CDN_BASE: &str = "https://cdn.discordapp.com";
@@ -120,7 +121,7 @@ impl fmt::Display for CdnUrl {
 pub fn user_avatar(
     user_id: Id<UserMarker>,
     hash: Option<&ImageHash>,
-    discriminator: &str,
+    discriminator: Discriminator,
 ) -> CdnUrl {
     match hash {
         Some(hash) => CdnUrl::hashed(
@@ -136,11 +137,11 @@ pub fn user_avatar(
 ///
 /// Legacy tags use `discriminator % 5`; the new username system uses
 /// `(user_id >> 22) % 6`.
-pub fn default_avatar(user_id: Id<UserMarker>, discriminator: &str) -> CdnUrl {
-    let index = if discriminator.is_empty() || discriminator == "0" {
+pub fn default_avatar(user_id: Id<UserMarker>, discriminator: Discriminator) -> CdnUrl {
+    let index = if discriminator.is_none() {
         (user_id.get() >> 22) % 6
     } else {
-        discriminator.parse::<u64>().unwrap_or(0) % 5
+        u64::from(discriminator.get() % 5)
     };
     CdnUrl::fixed(CDN_BASE, format!("/embed/avatars/{index}"), "png")
 }
@@ -245,18 +246,20 @@ mod tests {
     fn avatar_and_default() {
         let id = Id::<UserMarker>::new(80_351_110_224_678_912).unwrap();
         let hash = ImageHash::new("a_1269e74af4df7417b13759eae50c83dc");
-        let url = user_avatar(id, Some(&hash), "0").size(128).to_string();
+        let url = user_avatar(id, Some(&hash), Discriminator::default())
+            .size(128)
+            .to_string();
         assert_eq!(
             url,
             "https://cdn.discordapp.com/avatars/80351110224678912/a_1269e74af4df7417b13759eae50c83dc.gif?size=128"
         );
-        let def = default_avatar(id, "0").to_string();
+        let def = default_avatar(id, Discriminator::default()).to_string();
         let index = (id.get() >> 22) % 6;
         assert_eq!(
             def,
             format!("https://cdn.discordapp.com/embed/avatars/{index}.png")
         );
-        let legacy = default_avatar(id, "1337").to_string();
+        let legacy = default_avatar(id, Discriminator::new(1337)).to_string();
         assert!(legacy.ends_with("/embed/avatars/2.png"));
         assert_eq!(CdnUrl::fixed(CDN_BASE, "/x", "png").size(15).size, None);
         assert_eq!(CdnUrl::fixed(CDN_BASE, "/x", "png").size(32).size, Some(32));
@@ -285,7 +288,7 @@ mod tests {
             "https://cdn.discordapp.com/stickers/5.json"
         );
         let user = Id::<UserMarker>::new(80_351_110_224_678_912).unwrap();
-        let def = default_avatar(user, "0").format(ImageFormat::Webp);
+        let def = default_avatar(user, Discriminator::default()).format(ImageFormat::Webp);
         assert_eq!(def.ext, "png");
     }
 }

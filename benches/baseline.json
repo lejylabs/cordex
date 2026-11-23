@@ -1,12 +1,13 @@
 {
   "cache/lookup_channel": 18.2,
-  "cache/lookup_member": 22.7,
-  "cache/update_guild_create_1000_members": 943591.9,
+  "cache/lookup_member": 23.0,
+  "cache/update_guild_create_1000_members": 657390.0,
+  "cache/update_guild_create_after_100_guilds": 667800.0,
   "cache/update_guild_create_cache_off": 8.8,
-  "cache/update_message_create": 230.7,
-  "gateway_parse/filtered_guild_create_envelope_only": 367943.6,
-  "gateway_parse/filtered_message_create_envelope_only": 356.4,
-  "gateway_parse/guild_create_1000_members": 2958467.5,
-  "gateway_parse/interaction_create": 1820.7,
-  "gateway_parse/message_create": 1401.6
+  "cache/update_message_create": 208.1,
+  "gateway_parse/filtered_guild_create_envelope_only": 370800.0,
+  "gateway_parse/filtered_message_create_envelope_only": 361.0,
+  "gateway_parse/guild_create_1000_members": 2890000.0,
+  "gateway_parse/interaction_create": 1620.0,
+  "gateway_parse/message_create": 1410.0
 }

@@ -5,7 +5,6 @@
 
 use std::collections::HashMap;
 
-use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::value::RawValue;
 
@@ -465,85 +464,206 @@ impl<'de> Deserialize<'de> for SubmittedValue {
     }
 }
 
+/// Parse `data` for a known interaction type in one pass.
+fn parse_data<'de, A: serde::de::MapAccess<'de>>(
+    map: &mut A,
+    kind: InteractionType,
+) -> Result<Option<InteractionData>, A::Error> {
+    Ok(match kind {
+        InteractionType::ApplicationCommand | InteractionType::ApplicationCommandAutocomplete => {
+            map.next_value::<Option<CommandData>>()?
+                .map(InteractionData::Command)
+        }
+        InteractionType::MessageComponent => map
+            .next_value::<Option<MessageComponentData>>()?
+            .map(InteractionData::MessageComponent),
+        InteractionType::ModalSubmit => map
+            .next_value::<Option<ModalSubmitData>>()?
+            .map(InteractionData::ModalSubmit),
+        InteractionType::Ping => {
+            map.next_value::<serde::de::IgnoredAny>()?;
+            None
+        }
+        _ => map
+            .next_value::<Option<Box<RawValue>>>()?
+            .map(InteractionData::Unknown),
+    })
+}
+
+/// Parse `data` that arrived before `type`.
+fn finish_data<E: serde::de::Error>(
+    kind: InteractionType,
+    raw: Box<RawValue>,
+) -> Result<Option<InteractionData>, E> {
+    Ok(match kind {
+        InteractionType::Ping => None,
+        InteractionType::ApplicationCommand | InteractionType::ApplicationCommandAutocomplete => {
+            Some(InteractionData::Command(
+                serde_json::from_str(raw.get()).map_err(E::custom)?,
+            ))
+        }
+        InteractionType::MessageComponent => Some(InteractionData::MessageComponent(
+            serde_json::from_str(raw.get()).map_err(E::custom)?,
+        )),
+        InteractionType::ModalSubmit => Some(InteractionData::ModalSubmit(
+            serde_json::from_str(raw.get()).map_err(E::custom)?,
+        )),
+        _ => Some(InteractionData::Unknown(raw)),
+    })
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(field_identifier, rename_all = "snake_case")]
+enum InteractionField {
+    Id,
+    ApplicationId,
+    #[serde(rename = "type")]
+    Kind,
+    Data,
+    Guild,
+    GuildId,
+    Channel,
+    ChannelId,
+    Member,
+    User,
+    Token,
+    Version,
+    Message,
+    AppPermissions,
+    Locale,
+    GuildLocale,
+    Entitlements,
+    AuthorizingIntegrationOwners,
+    Context,
+    AttachmentSizeLimit,
+    #[serde(other)]
+    Other,
+}
+
+/// Fields of an interaction while its object is read.
+#[derive(Default)]
+struct InteractionParts {
+    id: Option<Id<InteractionMarker>>,
+    application_id: Option<Id<ApplicationMarker>>,
+    kind: Option<InteractionType>,
+    /// `data` typed (when `type` came first, the usual key order) ...
+    data: Option<InteractionData>,
+    /// ... or raw, parsed once `type` is known.
+    raw_data: Option<Box<RawValue>>,
+    guild: Option<InteractionGuild>,
+    guild_id: Option<Id<GuildMarker>>,
+    channel: Option<Box<Channel>>,
+    channel_id: Option<Id<ChannelMarker>>,
+    member: Option<Box<Member>>,
+    user: Option<User>,
+    token: Option<InteractionToken>,
+    version: Option<u8>,
+    message: Option<Box<Message>>,
+    app_permissions: Option<Permissions>,
+    locale: Option<Box<str>>,
+    guild_locale: Option<Box<str>>,
+    entitlements: Option<Vec<Entitlement>>,
+    owners: Option<AuthorizingIntegrationOwners>,
+    context: Option<InteractionContextType>,
+    attachment_size_limit: Option<u64>,
+}
+
+impl InteractionParts {
+    fn read<'de, A: serde::de::MapAccess<'de>>(
+        &mut self,
+        field: InteractionField,
+        map: &mut A,
+    ) -> Result<(), A::Error> {
+        use InteractionField as F;
+        match field {
+            F::Id => self.id = Some(map.next_value()?),
+            F::ApplicationId => self.application_id = Some(map.next_value()?),
+            F::Kind => self.kind = Some(map.next_value()?),
+            F::Data => match self.kind {
+                Some(kind) => self.data = parse_data(map, kind)?,
+                None => self.raw_data = map.next_value()?,
+            },
+            F::Guild => self.guild = map.next_value()?,
+            F::GuildId => self.guild_id = map.next_value()?,
+            F::Channel => self.channel = map.next_value()?,
+            F::ChannelId => self.channel_id = map.next_value()?,
+            F::Member => self.member = map.next_value()?,
+            F::User => self.user = map.next_value()?,
+            F::Token => self.token = Some(map.next_value()?),
+            F::Version => self.version = Some(map.next_value()?),
+            F::Message => self.message = map.next_value()?,
+            F::AppPermissions => self.app_permissions = Some(map.next_value()?),
+            F::Locale => self.locale = map.next_value()?,
+            F::GuildLocale => self.guild_locale = map.next_value()?,
+            F::Entitlements => self.entitlements = Some(map.next_value()?),
+            F::AuthorizingIntegrationOwners => self.owners = Some(map.next_value()?),
+            F::Context => self.context = map.next_value()?,
+            F::AttachmentSizeLimit => self.attachment_size_limit = Some(map.next_value()?),
+            F::Other => {
+                map.next_value::<serde::de::IgnoredAny>()?;
+            }
+        }
+        Ok(())
+    }
+
+    fn finish<E: serde::de::Error>(self) -> Result<Interaction, E> {
+        let kind = self.kind.ok_or_else(|| E::missing_field("type"))?;
+        let data = match (self.data, self.raw_data) {
+            (Some(data), _) => Some(data),
+            (None, Some(raw)) => finish_data(kind, raw)?,
+            (None, None) => None,
+        };
+        Ok(Interaction {
+            id: self.id.ok_or_else(|| E::missing_field("id"))?,
+            application_id: self
+                .application_id
+                .ok_or_else(|| E::missing_field("application_id"))?,
+            kind,
+            data,
+            guild: self.guild,
+            guild_id: self.guild_id,
+            channel: self.channel,
+            channel_id: self.channel_id,
+            member: self.member,
+            user: self.user,
+            token: self.token.ok_or_else(|| E::missing_field("token"))?,
+            version: self.version.unwrap_or_else(interaction_version),
+            message: self.message,
+            app_permissions: self.app_permissions.unwrap_or_default(),
+            locale: self.locale,
+            guild_locale: self.guild_locale,
+            entitlements: self.entitlements.unwrap_or_default(),
+            authorizing_integration_owners: self.owners.unwrap_or_default(),
+            context: self.context,
+            attachment_size_limit: self.attachment_size_limit.unwrap_or_default(),
+        })
+    }
+}
+
 impl<'de> Deserialize<'de> for Interaction {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        #[derive(Deserialize)]
-        struct Raw {
-            id: Id<InteractionMarker>,
-            application_id: Id<ApplicationMarker>,
-            #[serde(rename = "type")]
-            kind: InteractionType,
-            data: Option<Box<RawValue>>,
-            guild: Option<InteractionGuild>,
-            guild_id: Option<Id<GuildMarker>>,
-            channel: Option<Box<Channel>>,
-            channel_id: Option<Id<ChannelMarker>>,
-            member: Option<Box<Member>>,
-            user: Option<User>,
-            token: InteractionToken,
-            #[serde(default = "interaction_version")]
-            version: u8,
-            message: Option<Box<Message>>,
-            #[serde(default)]
-            app_permissions: Permissions,
-            locale: Option<Box<str>>,
-            guild_locale: Option<Box<str>>,
-            #[serde(default)]
-            entitlements: Vec<Entitlement>,
-            #[serde(default)]
-            authorizing_integration_owners: AuthorizingIntegrationOwners,
-            context: Option<InteractionContextType>,
-            #[serde(default)]
-            attachment_size_limit: u64,
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = Interaction;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("an interaction object")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Interaction, A::Error> {
+                let mut parts = InteractionParts::default();
+                while let Some(field) = map.next_key()? {
+                    parts.read(field, &mut map)?;
+                }
+                parts.finish()
+            }
         }
 
-        let raw = Raw::deserialize(deserializer)?;
-        let data = match (raw.kind, raw.data) {
-            (InteractionType::Ping, _) | (_, None) => None,
-            (
-                InteractionType::ApplicationCommand
-                | InteractionType::ApplicationCommandAutocomplete,
-                Some(value),
-            ) => Some(
-                serde_json::from_str(value.get())
-                    .map(InteractionData::Command)
-                    .map_err(D::Error::custom)?,
-            ),
-            (InteractionType::MessageComponent, Some(value)) => Some(
-                serde_json::from_str(value.get())
-                    .map(InteractionData::MessageComponent)
-                    .map_err(D::Error::custom)?,
-            ),
-            (InteractionType::ModalSubmit, Some(value)) => Some(
-                serde_json::from_str(value.get())
-                    .map(InteractionData::ModalSubmit)
-                    .map_err(D::Error::custom)?,
-            ),
-            (_, Some(value)) => Some(InteractionData::Unknown(value)),
-        };
-
-        Ok(Self {
-            id: raw.id,
-            application_id: raw.application_id,
-            kind: raw.kind,
-            data,
-            guild: raw.guild,
-            guild_id: raw.guild_id,
-            channel: raw.channel,
-            channel_id: raw.channel_id,
-            member: raw.member,
-            user: raw.user,
-            token: raw.token,
-            version: raw.version,
-            message: raw.message,
-            app_permissions: raw.app_permissions,
-            locale: raw.locale,
-            guild_locale: raw.guild_locale,
-            entitlements: raw.entitlements,
-            authorizing_integration_owners: raw.authorizing_integration_owners,
-            context: raw.context,
-            attachment_size_limit: raw.attachment_size_limit,
-        })
+        deserializer.deserialize_map(Visitor)
     }
 }
 
@@ -888,5 +1008,65 @@ mod tests {
             r#""x""#
         );
         assert!(serde_json::from_str::<SubmittedValue>("1").is_err());
+    }
+
+    #[test]
+    fn data_parses_in_any_key_order() {
+        let cases = [
+            (
+                r#"{"data":{"id":"3","name":"a","type":1},"type":2}"#,
+                "command",
+            ),
+            (
+                r#"{"type":2,"data":{"id":"3","name":"a","type":1}}"#,
+                "command",
+            ),
+            (
+                r#"{"data":{"custom_id":"b","component_type":2},"type":3}"#,
+                "component",
+            ),
+            (
+                r#"{"type":3,"data":{"custom_id":"b","component_type":2}}"#,
+                "component",
+            ),
+            (r#"{"data":{"custom_id":"m"},"type":5}"#, "modal"),
+            (r#"{"type":5,"data":{"custom_id":"m"}}"#, "modal"),
+            (r#"{"data":{"x":1},"type":99}"#, "unknown"),
+            (r#"{"type":99,"data":{"x":1}}"#, "unknown"),
+            (r#"{"data":{"x":1},"type":1}"#, "none"),
+            (r#"{"type":1,"data":{"x":1}}"#, "none"),
+            (r#"{"type":2,"data":null}"#, "none"),
+        ];
+        for (body, want) in cases {
+            let json = format!(
+                r#"{{"id":"1","application_id":"2","token":"t","extra":[1],{}"#,
+                &body[1..]
+            );
+            let interaction: Interaction = serde_json::from_str(&json).unwrap();
+            let got = match interaction.data {
+                Some(InteractionData::Command(_)) => "command",
+                Some(InteractionData::MessageComponent(_)) => "component",
+                Some(InteractionData::ModalSubmit(_)) => "modal",
+                Some(InteractionData::Unknown(_)) => "unknown",
+                None => "none",
+            };
+            assert_eq!(got, want, "{json}");
+            assert_eq!(interaction.version, 1);
+        }
+        for missing in [
+            r#"{"application_id":"2","type":1,"token":"t"}"#,
+            r#"{"id":"1","type":1,"token":"t"}"#,
+            r#"{"id":"1","application_id":"2","token":"t"}"#,
+            r#"{"id":"1","application_id":"2","type":1}"#,
+            r#"{"id":"1","application_id":"2","token":"t","data":{"name":1},"type":2}"#,
+            r#"{"id":"1","application_id":"2","token":"t","data":{},"type":3}"#,
+            r#"{"id":"1","application_id":"2","token":"t","data":{},"type":5}"#,
+            "[1]",
+        ] {
+            assert!(
+                serde_json::from_str::<Interaction>(missing).is_err(),
+                "{missing}"
+            );
+        }
     }
 }

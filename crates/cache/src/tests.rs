@@ -636,3 +636,34 @@ fn interaction_member_is_cached() {
     off.update(&ev("INTERACTION_CREATE", &interaction));
     assert!(off.member(g, carol).is_none());
 }
+
+#[test]
+fn guild_create_replaces_old_channels_and_threads() {
+    let g = Id::new(GUILD).unwrap();
+    let mut stale = fixture("text");
+    stale["id"] = id(150);
+    stale["guild_id"] = id(GUILD);
+    let mut stale_thread = fixture("thread");
+    stale_thread["id"] = id(250);
+    stale_thread["guild_id"] = id(GUILD);
+
+    // A channel cached before the first GUILD_CREATE, and one cached between
+    // two GUILD_CREATEs: both are gone after the next GUILD_CREATE.
+    let cache = InMemoryCache::new(all());
+    cache.update(&ev("CHANNEL_CREATE", &stale));
+    cache.update(&ev("GUILD_CREATE", &guild_create()));
+    assert!(cache.channel(Id::new(150).unwrap()).is_none());
+    cache.update(&ev("THREAD_CREATE", &stale_thread));
+    assert!(cache.thread(Id::new(250).unwrap()).is_some());
+    cache.update(&ev("GUILD_CREATE", &guild_create()));
+    assert!(cache.thread(Id::new(250).unwrap()).is_none());
+    assert_eq!(cache.guild_channels(g).len(), 1);
+    assert_eq!(cache.guild_threads(g).len(), 1);
+
+    // After the guild is gone, a new GUILD_CREATE starts clean.
+    cache.update(&ev("GUILD_DELETE", &json!({"id": id(GUILD)})));
+    assert_eq!(cache.guild_channels(g).len(), 0);
+    cache.update(&ev("GUILD_CREATE", &guild_create()));
+    assert_eq!(cache.guild_channels(g).len(), 1);
+    assert_eq!(cache.stats().members, 2);
+}
