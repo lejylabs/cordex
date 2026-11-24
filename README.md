@@ -20,7 +20,7 @@ Questions, feedback or help: join the [cordex Discord server][discord link].
 
 ```toml
 [dependencies]
-cordex = "0.1.3"
+cordex = "0.1.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

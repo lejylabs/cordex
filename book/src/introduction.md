@@ -13,7 +13,7 @@ Add `cordex` and `tokio` to your `Cargo.toml` (Rust 1.95 or newer):
 
 ```toml
 [dependencies]
-cordex = "0.1.3"
+cordex = "0.1.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
