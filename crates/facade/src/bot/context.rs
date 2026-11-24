@@ -96,6 +96,13 @@ impl Context {
         self.shared.cache.as_deref()
     }
 
+    /// The voice signaling manager, if the bot was built with
+    /// [`Bot::voice`](super::Bot::voice).
+    #[cfg(feature = "voice")]
+    pub fn voice(&self) -> Option<&cordex_voice::VoiceManager> {
+        self.shared.voice.as_deref()
+    }
+
     /// Wait for the next event matching `pred`, or `None` after `timeout`.
     ///
     /// Only events the bot parses arrive here: those of registered handlers,

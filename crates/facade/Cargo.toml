@@ -70,5 +70,9 @@ required-features = ["cache"]
 name = "interactions_http"
 required-features = ["interactions-server"]
 
+[[example]]
+name = "voice_lavalink"
+required-features = ["voice"]
+
 [package.metadata.docs.rs]
 all-features = true

@@ -122,15 +122,43 @@ struct Handlers {
 struct Shared {
     http: Client,
     /// Current shard manager; replaced when the bot reshards.
-    manager: std::sync::Mutex<Arc<ShardManager>>,
+    manager: Arc<std::sync::Mutex<Arc<ShardManager>>>,
     #[cfg(feature = "cache")]
     cache: Option<Arc<cordex_cache::InMemoryCache>>,
+    #[cfg(feature = "voice")]
+    voice: Option<Arc<cordex_voice::VoiceManager>>,
     me: OnceLock<Id<UserMarker>>,
     handlers: Handlers,
     data: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
     error_message: Option<Box<str>>,
     auto_defer: bool,
     standby: Standby,
+}
+
+#[cfg(feature = "voice")]
+struct BotVoiceGateway {
+    manager: Arc<std::sync::Mutex<Arc<ShardManager>>>,
+}
+
+#[cfg(feature = "voice")]
+impl cordex_voice::VoiceGateway for BotVoiceGateway {
+    fn send_voice_state(
+        &self,
+        update: cordex_model::gateway::command::UpdateVoiceState,
+    ) -> cordex_voice::gateway::BoxVoiceFuture<'_> {
+        let manager = Arc::clone(
+            &self
+                .manager
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        Box::pin(async move {
+            manager
+                .update_voice_state(&update)
+                .await
+                .map_err(cordex_voice::VoiceError::from)
+        })
+    }
 }
 
 impl Shared {
@@ -163,6 +191,8 @@ pub struct Bot {
     reshard_interval: Option<Duration>,
     #[cfg(feature = "cache")]
     cache: Option<cordex_cache::CacheConfig>,
+    #[cfg(feature = "voice")]
+    voice: bool,
 }
 
 impl std::fmt::Debug for Bot {
@@ -195,7 +225,20 @@ impl Bot {
             reshard_interval: Some(DEFAULT_RESHARD_INTERVAL),
             #[cfg(feature = "cache")]
             cache: None,
+            #[cfg(feature = "voice")]
+            voice: false,
         }
+    }
+
+    /// Enable voice signaling ([`cordex_voice::VoiceManager`]): adds
+    /// `Intents::GUILD_VOICE_STATES`, parses `VOICE_STATE_UPDATE` and
+    /// `VOICE_SERVER_UPDATE`, feeds them into the manager, and exposes it
+    /// via [`Context::voice`].
+    #[cfg(feature = "voice")]
+    pub fn voice(mut self) -> Self {
+        self.voice = true;
+        self.intents |= Intents::GUILD_VOICE_STATES;
+        self
     }
 
     /// Mentions applied to every message that does not set its own.
@@ -483,6 +526,11 @@ impl Bot {
         if let Some(config) = &self.cache {
             names.extend(config.wanted_events());
         }
+        #[cfg(feature = "voice")]
+        if self.voice {
+            names.push("VOICE_STATE_UPDATE");
+            names.push("VOICE_SERVER_UPDATE");
+        }
         names.into_iter().collect::<EventTypeFlags>() | self.extra_events
     }
 
@@ -530,13 +578,23 @@ impl Bot {
         .await?;
         let mut events = manager.events();
 
+        let manager = Arc::new(std::sync::Mutex::new(Arc::new(manager)));
+        #[cfg(feature = "voice")]
+        let voice = self.voice.then(|| {
+            Arc::new(cordex_voice::VoiceManager::new(Arc::new(BotVoiceGateway {
+                manager: Arc::clone(&manager),
+            })))
+        });
+
         let shared = Arc::new(Shared {
             http,
-            manager: std::sync::Mutex::new(Arc::new(manager)),
+            manager,
             #[cfg(feature = "cache")]
             cache: self
                 .cache
                 .map(|config| Arc::new(cordex_cache::InMemoryCache::new(config))),
+            #[cfg(feature = "voice")]
+            voice,
             me: OnceLock::new(),
             handlers: self.handlers,
             data: self.data,
@@ -844,6 +902,10 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
     #[cfg(feature = "cache")]
     if let Some(cache) = &shared.cache {
         cache.update(&event);
+    }
+    #[cfg(feature = "voice")]
+    if let Some(voice) = &shared.voice {
+        voice.update_from_event(&event);
     }
     let taken = shared.standby.process(&event) > 0;
     // A component interaction a waiter took (`ctx.wait_for_button`) is

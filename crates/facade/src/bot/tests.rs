@@ -18,9 +18,11 @@ async fn test_context(bot: Bot) -> Context {
     let http = Client::builder("t").build().unwrap();
     let shared = Arc::new(Shared {
         http,
-        manager: std::sync::Mutex::new(Arc::new(manager)),
+        manager: Arc::new(std::sync::Mutex::new(Arc::new(manager))),
         #[cfg(feature = "cache")]
         cache: None,
+        #[cfg(feature = "voice")]
+        voice: None,
         me: OnceLock::new(),
         handlers: bot.handlers,
         data: bot.data,
