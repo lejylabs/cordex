@@ -11,7 +11,7 @@
 | **Caching** | On by default (when `cache` feature is enabled) | Separate `twilight-cache-inmemory` (`ResourceType` flags) | Opt-in `cordex-cache` with `Off` / `Lazy` / `Eager` per resource + `CacheParts` field stripping |
 | **Gateway compression** | `zlib-stream` | `zlib-stream` / `zstd-stream` | Pure-Rust `zlib-stream` default + optional `zstd-stream` |
 | **HTTP/2** | via `reqwest` | HTTP/1.1 or HTTP/2 | HTTP/2 via ALPN by default |
-| **Voice** | via `songbird` | via `songbird` / Lavalink | No voice by design |
+| **Voice** | via `songbird` | via `songbird` / `twilight-lavalink` | Opt-in pure-Rust `cordex-voice` & `cordex-lavalink` (no C/FFI audio transport) |
 | **Unsafe code** | Some in deps | Minimal | `#![forbid(unsafe_code)]` across the workspace |
 
 ## Coming from Serenity / Poise

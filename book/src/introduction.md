@@ -4,8 +4,8 @@
 
 - **100 % measured bot API coverage** against `discord-api-docs` (`docs/coverage.md`).
 - **Simple layer (`cordex::bot`)** for everyday bots in ~20 lines, built directly on top of the low-level crates.
-- **Modular crates:** `cordex-model`, `cordex-http`, `cordex-gateway`, `cordex-interactions`, `cordex-cache`, and the `cordex` facade.
-- **No `unsafe`**, no hidden caching, no voice support by design.
+- **Modular crates:** `cordex-model`, `cordex-http`, `cordex-gateway`, `cordex-interactions`, `cordex-cache`, `cordex-voice`, `cordex-lavalink`, and the `cordex` facade.
+- **No `unsafe`**, no hidden caching, and pure-Rust opt-in voice signaling & Lavalink v4 (no C/FFI audio transport).
 
 ## Installation
 
@@ -13,7 +13,7 @@ Add `cordex` and `tokio` to your `Cargo.toml` (Rust 1.95 or newer):
 
 ```toml
 [dependencies]
-cordex = "0.1.6"
+cordex = "0.1.7"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -33,6 +33,8 @@ cargo generate lejylabs/cordex-template
 | `interactions` | yes | Command/modal builders, `InteractionHandle` |
 | `bot` | yes | Simple layer (`cordex::bot::Bot`) |
 | `cache` | no | Opt-in in-memory cache (`cordex-cache`) + `cordex::backfill` |
+| `voice` | no | Opt-in pure-Rust voice signaling (`cordex-voice`, `Bot::voice()`, `ctx.voice()`) |
+| `lavalink` | no | Opt-in pure-Rust Lavalink v4 client (`cordex-lavalink`, enables `voice`) |
 | `interactions-verify` | no | Ed25519 `verify_signature()` for any web framework |
 | `interactions-server` | no | Standalone Hyper HTTP interaction endpoint |
 | `metrics` | no | Export HTTP and gateway counters through the `metrics` crate |

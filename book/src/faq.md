@@ -36,4 +36,4 @@ The returned `PermissionCacheError` variant tells you exactly which resource or 
 
 ## Does `cordex` support voice?
 
-No, voice (UDP/RTP/Opus) is intentionally out of scope so `cordex` stays lean, `#![forbid(unsafe_code)]`, and focused on the bot API. You can still receive `VOICE_STATE_UPDATE` and `VOICE_SERVER_UPDATE` events to integrate with external voice servers like Lavalink.
+`cordex` provides two opt-in, 100% pure-Rust crates: **`cordex-voice`** (`feature = "voice"`) for Discord voice signaling and session coordination (`Bot::voice()`, `ctx.voice()`, `VoiceManager`, `LavalinkVoiceState`), and **`cordex-lavalink`** (`feature = "lavalink"`) for a full Lavalink v4 WebSocket + REST client with automatic voice bridging. Native UDP/RTP/Opus audio transport is intentionally out of scope so `cordex` stays lean and `#![forbid(unsafe_code)]`. See [Voice & Lavalink](voice.md).

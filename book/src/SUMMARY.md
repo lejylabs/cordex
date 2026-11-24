@@ -17,7 +17,7 @@
 - [REST Client (`cordex-http`)](rest.md)
 - [Sharding & Resharding](sharding.md)
 - [HTTP Interactions](http-interactions.md)
-- [Voice Signaling (`cordex-voice`)](voice.md)
+- [Voice & Lavalink (`cordex-voice`, `cordex-lavalink`)](voice.md)
 
 # Guides & Reference
 
