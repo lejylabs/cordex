@@ -24,9 +24,19 @@ const INTERNAL_DEPS: &[(&str, &[&str])] = &[
     ("gateway", &["model", "http"]),
     ("cache", &["model"]),
     ("interactions", &["model", "http"]),
+    ("voice", &["model", "gateway"]),
+    ("lavalink", &["model", "voice"]),
     (
         "facade",
-        &["model", "http", "gateway", "cache", "interactions"],
+        &[
+            "model",
+            "http",
+            "gateway",
+            "cache",
+            "interactions",
+            "voice",
+            "lavalink",
+        ],
     ),
 ];
 
