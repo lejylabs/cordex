@@ -98,6 +98,36 @@ impl Reply {
         self
     }
 
+    /// Text content, if set.
+    pub fn content_ref(&self) -> Option<&str> {
+        self.content.as_deref()
+    }
+
+    /// Embeds attached to this reply.
+    pub fn embeds_ref(&self) -> &[Embed] {
+        &self.embeds
+    }
+
+    /// Components attached to this reply, if set.
+    pub fn components_ref(&self) -> Option<&[Component]> {
+        self.components.as_deref()
+    }
+
+    /// Allowed mentions override, if set.
+    pub fn allowed_mentions_ref(&self) -> Option<&AllowedMentions> {
+        self.allowed_mentions.as_ref()
+    }
+
+    /// Message flags set on this reply.
+    pub fn flags_value(&self) -> MessageFlags {
+        self.flags
+    }
+
+    /// Whether text-to-speech is enabled.
+    pub fn is_tts(&self) -> bool {
+        self.tts
+    }
+
     pub(crate) fn into_callback_data(self) -> InteractionCallbackData {
         let mut data = InteractionCallbackData::default();
         data.content = self.content.map(String::into_boxed_str);

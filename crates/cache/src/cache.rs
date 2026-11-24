@@ -135,6 +135,35 @@ impl std::fmt::Display for PermissionCacheError {
 
 impl std::error::Error for PermissionCacheError {}
 
+/// Cached state replaced or removed by [`InMemoryCache::update_with_previous`].
+///
+/// Useful for diff-based features (audit logging, autorole `pending`
+/// transitions, voice channel switches) without maintaining a second
+/// shadow cache.
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub enum PreviousState {
+    /// No cached entry was replaced or removed.
+    #[default]
+    None,
+    /// Previous user before `UserUpdate`.
+    User(Arc<User>),
+    /// Previous guild before `GuildUpdate` or `GuildDelete`.
+    Guild(Arc<Guild>),
+    /// Previous channel before `ChannelUpdate` or `ChannelDelete`.
+    Channel(Arc<Channel>),
+    /// Previous thread before `ThreadUpdate` or `ThreadDelete`.
+    Thread(Arc<Channel>),
+    /// Previous role before `GuildRoleUpdate` or `GuildRoleDelete`.
+    Role(Arc<Role>),
+    /// Previous member before `GuildMemberUpdate` or `GuildMemberRemove`.
+    Member(Arc<Member>),
+    /// Previous voice state before `VoiceStateUpdate`.
+    VoiceState(Arc<VoiceState>),
+    /// Previous message before `MessageUpdate` or `MessageDelete`.
+    Message(Arc<Message>),
+}
+
 /// In-memory cache fed with [`InMemoryCache::update`]. Thread-safe; share it
 /// with `Arc`. Reads return `Arc` clones and never hold a lock across an
 /// `.await`.
@@ -277,17 +306,25 @@ impl InMemoryCache {
 
     /// Apply one gateway event. Events for switched-off resources are
     /// ignored before any work is done.
+    /// Update the cache from a gateway event.
+    pub fn update(&self, event: &Event) {
+        let _ = self.update_with_previous(event);
+    }
+
+    /// Update the cache from a gateway event and return the previous cached
+    /// state for update/delete events, if one was present.
     #[allow(
         clippy::too_many_lines,
         reason = "one flat match over every cached event reads better than many tiny functions"
     )]
-    pub fn update(&self, event: &Event) {
+    pub fn update_with_previous(&self, event: &Event) -> PreviousState {
         use ResourceType as R;
         let guard = self.config.read();
         let c: &CacheConfig = &guard;
         if c.enabled_resources().is_empty() {
-            return;
+            return PreviousState::None;
         }
+        let mut previous = PreviousState::None;
         match event {
             Event::Ready(ready) => {
                 if c.has(R::USERS) {
@@ -307,7 +344,9 @@ impl InMemoryCache {
                 strip::user(&mut user, c);
                 let uid = user.id;
                 let arc = Arc::new(user);
-                *self.current_user.write() = Some(Arc::clone(&arc));
+                if let Some(prev) = self.current_user.write().replace(Arc::clone(&arc)) {
+                    previous = PreviousState::User(prev);
+                }
                 let mut users = self.users.write();
                 if let Some(slot) = users.get_mut(&uid) {
                     *slot = arc;
@@ -331,18 +370,21 @@ impl InMemoryCache {
                         guild.approximate_presence_count = prev.approximate_presence_count;
                     }
                 }
-                guilds.insert(guild.id, Arc::new(guild));
+                if let Some(prev) = guilds.insert(guild.id, Arc::new(guild)) {
+                    previous = PreviousState::Guild(prev);
+                }
             }
             Event::GuildDelete(g) => {
                 if g.unavailable {
                     if c.has(R::GUILDS) {
                         self.unavailable.write().insert(g.id);
                     }
-                } else {
-                    self.remove_guild(g.id);
+                } else if let Some(prev) = self.remove_guild(g.id) {
+                    previous = PreviousState::Guild(prev);
                 }
             }
             Event::ChannelCreate(ch) | Event::ChannelUpdate(ch) if c.has(R::CHANNELS) => {
+                let is_update = matches!(event, Event::ChannelUpdate(_));
                 let mut ch = (**ch).clone();
                 strip::channel(&mut ch, c);
                 if let Some(gid) = ch.guild_id {
@@ -352,15 +394,21 @@ impl InMemoryCache {
                         .or_default()
                         .insert(ch.id);
                 }
-                self.channels.write().insert(ch.id, Arc::new(ch));
+                if let Some(prev) = self.channels.write().insert(ch.id, Arc::new(ch))
+                    && is_update
+                {
+                    previous = PreviousState::Channel(prev);
+                }
             }
             Event::ChannelDelete(ch) => {
-                let gid = self
-                    .channels
-                    .write()
-                    .remove(&ch.id)
-                    .and_then(|removed| removed.guild_id)
+                let removed = self.channels.write().remove(&ch.id);
+                let gid = removed
+                    .as_ref()
+                    .and_then(|r| r.guild_id)
                     .or(ch.guild_id);
+                if let Some(prev) = removed {
+                    previous = PreviousState::Channel(prev);
+                }
                 if let Some(gid) = gid {
                     if let Some(set) = self.guild_channels.write().get_mut(&gid) {
                         set.remove(&ch.id);
@@ -411,6 +459,7 @@ impl InMemoryCache {
                 }
             }
             Event::ThreadCreate(ch) | Event::ThreadUpdate(ch) if c.has(R::THREADS) => {
+                let is_update = matches!(event, Event::ThreadUpdate(_));
                 let mut ch = (**ch).clone();
                 strip::channel(&mut ch, c);
                 if let Some(gid) = ch.guild_id {
@@ -420,14 +469,20 @@ impl InMemoryCache {
                         .or_default()
                         .insert(ch.id);
                 }
-                self.threads.write().insert(ch.id, Arc::new(ch));
+                if let Some(prev) = self.threads.write().insert(ch.id, Arc::new(ch))
+                    && is_update
+                {
+                    previous = PreviousState::Thread(prev);
+                }
             }
             Event::ThreadDelete(ch) => {
-                if let Some(removed) = self.threads.write().remove(&ch.id)
-                    && let Some(gid) = removed.guild_id.or(ch.guild_id)
-                    && let Some(set) = self.guild_threads.write().get_mut(&gid)
-                {
-                    set.remove(&ch.id);
+                if let Some(removed) = self.threads.write().remove(&ch.id) {
+                    if let Some(gid) = removed.guild_id.or(ch.guild_id)
+                        && let Some(set) = self.guild_threads.write().get_mut(&gid)
+                    {
+                        set.remove(&ch.id);
+                    }
+                    previous = PreviousState::Thread(removed);
                 }
                 self.messages.write().remove(&ch.id);
             }
@@ -471,16 +526,21 @@ impl InMemoryCache {
                     }
                 }
             }
-            Event::GuildMemberUpdate(u) => self.member_update(u, c),
+            Event::GuildMemberUpdate(u) => {
+                if let Some(prev) = self.member_update(u, c) {
+                    previous = PreviousState::Member(prev);
+                }
+            }
             Event::GuildMemberRemove(r) => {
                 if c.has(R::MEMBERS) {
                     let removed = self
                         .members
                         .write()
                         .get_mut(&r.guild_id)
-                        .is_some_and(|g| g.remove(&r.user.id).is_some());
-                    if removed {
+                        .and_then(|g| g.remove(&r.user.id));
+                    if let Some(prev) = removed {
                         self.release_users(&[r.user.id]);
+                        previous = PreviousState::Member(prev);
                     }
                 }
                 if c.has(R::GUILDS)
@@ -503,13 +563,25 @@ impl InMemoryCache {
                 self.insert_member_batch(chunk.guild_id, &chunk.members, c, c.is_eager(R::USERS));
             }
             Event::GuildRoleCreate(r) | Event::GuildRoleUpdate(r) if c.has(R::ROLES) => {
-                insert_by_guild(&self.roles, r.guild_id, r.role.id, r.role.clone());
+                let is_update = matches!(event, Event::GuildRoleUpdate(_));
+                let prev = self
+                    .roles
+                    .write()
+                    .entry(r.guild_id)
+                    .or_default()
+                    .insert(r.role.id, Arc::new(r.role.clone()));
+                if let Some(prev) = prev
+                    && is_update
+                {
+                    previous = PreviousState::Role(prev);
+                }
             }
             Event::GuildRoleDelete(r) => {
                 if c.has(R::ROLES)
                     && let Some(g) = self.roles.write().get_mut(&r.guild_id)
+                    && let Some(prev) = g.remove(&r.role_id)
                 {
-                    g.remove(&r.role_id);
+                    previous = PreviousState::Role(prev);
                 }
                 // Cascade: remove deleted role from cached members so `permissions()` stays valid.
                 if c.has(R::MEMBERS)
@@ -604,8 +676,10 @@ impl InMemoryCache {
             }
             Event::VoiceStateUpdate(v) => {
                 if let Some(gid) = v.guild_id {
-                    if c.has(R::VOICE_STATES) {
-                        self.insert_voice_state(gid, v, c);
+                    if c.has(R::VOICE_STATES)
+                        && let Some(prev) = self.insert_voice_state(gid, v, c)
+                    {
+                        previous = PreviousState::VoiceState(prev);
                     }
                     if c.has(R::MEMBERS)
                         && let Some(member) = v.member.as_deref()
@@ -665,10 +739,17 @@ impl InMemoryCache {
                 }
             }
             Event::MessageCreate(m) => self.message_create(m, c),
-            Event::MessageUpdate(m) => self.message_update(m, c),
+            Event::MessageUpdate(m) => {
+                if let Some(prev) = self.message_update(m, c) {
+                    previous = PreviousState::Message(prev);
+                }
+            }
             Event::MessageDelete(d) => {
-                if let Some(ring) = self.messages.write().get_mut(&d.channel_id) {
-                    ring.retain(|m| m.id != d.id);
+                if let Some(ring) = self.messages.write().get_mut(&d.channel_id)
+                    && let Some(pos) = ring.iter().position(|m| m.id == d.id)
+                    && let Some(prev) = ring.remove(pos)
+                {
+                    previous = PreviousState::Message(prev);
                 }
             }
             Event::MessageDeleteBulk(d) => {
@@ -806,6 +887,7 @@ impl InMemoryCache {
             }
             _ => {}
         }
+        previous
     }
 
     fn guild_create(&self, g: &cordex_model::gateway::event::AvailableGuild, c: &CacheConfig) {
@@ -900,8 +982,8 @@ impl InMemoryCache {
     }
 
     /// Guild left or deleted: drop it and everything that belongs to it.
-    fn remove_guild(&self, gid: GuildId) {
-        self.guilds.write().remove(&gid);
+    fn remove_guild(&self, gid: GuildId) -> Option<Arc<Guild>> {
+        let removed_guild = self.guilds.write().remove(&gid);
         self.guild_member_counts.write().remove(&gid);
         self.unavailable.write().remove(&gid);
         let gone_channels = self.guild_channels.write().remove(&gid).unwrap_or_default();
@@ -945,6 +1027,7 @@ impl InMemoryCache {
         self.presences.write().remove(&gid);
         self.stage_instances.write().remove(&gid);
         self.scheduled_events.write().remove(&gid);
+        removed_guild
     }
 
     fn insert_member(&self, gid: GuildId, m: &Member, c: &CacheConfig) {
@@ -1034,13 +1117,15 @@ impl InMemoryCache {
         }
     }
 
-    fn member_update(&self, u: &GuildMemberUpdate, c: &CacheConfig) {
+    fn member_update(&self, u: &GuildMemberUpdate, c: &CacheConfig) -> Option<Arc<Member>> {
         let mut stored_member = false;
         let mut is_new = false;
+        let mut previous = None;
         if c.has(ResourceType::MEMBERS) {
             let mut members = self.members.write();
             let guild = members.entry(u.guild_id).or_default();
             if let Some(existing) = guild.get_mut(&u.user.id) {
+                previous = Some(Arc::clone(existing));
                 let m = Arc::make_mut(existing);
                 m.roles.clone_from(&u.roles);
                 m.nick.clone_from(&u.nick);
@@ -1083,6 +1168,7 @@ impl InMemoryCache {
             strip::user(&mut user, c);
             self.users.write().insert(user.id, Arc::new(user));
         }
+        previous
     }
 
     /// Decrement refcounts in O(1) per removed member and drop users with 0
@@ -1112,18 +1198,20 @@ impl InMemoryCache {
         }
     }
 
-    fn insert_voice_state(&self, gid: GuildId, v: &VoiceState, c: &CacheConfig) {
+    fn insert_voice_state(
+        &self,
+        gid: GuildId,
+        v: &VoiceState,
+        c: &CacheConfig,
+    ) -> Option<Arc<VoiceState>> {
         let mut voice = self.voice_states.write();
         if v.channel_id.is_none() {
-            if let Some(g) = voice.get_mut(&gid) {
-                g.remove(&v.user_id);
-            }
-            return;
+            return voice.get_mut(&gid).and_then(|g| g.remove(&v.user_id));
         }
         let mut v = v.clone();
         v.guild_id = Some(gid);
         strip::voice_state(&mut v, c);
-        voice.entry(gid).or_default().insert(v.user_id, Arc::new(v));
+        voice.entry(gid).or_default().insert(v.user_id, Arc::new(v))
     }
 
     /// All presences of a guild with one lock (`GUILD_CREATE`).
@@ -1193,9 +1281,9 @@ impl InMemoryCache {
         }
     }
 
-    fn message_update(&self, m: &Message, c: &CacheConfig) {
+    fn message_update(&self, m: &Message, c: &CacheConfig) -> Option<Arc<Message>> {
         if !c.has(ResourceType::MESSAGES) {
-            return;
+            return None;
         }
         let mut messages = self.messages.write();
         if let Some(slot) = messages
@@ -1204,8 +1292,9 @@ impl InMemoryCache {
         {
             let mut m = m.clone();
             strip::message(&mut m, c);
-            *slot = Arc::new(m);
+            return Some(std::mem::replace(slot, Arc::new(m)));
         }
+        None
     }
 
     // ---- explicit inserts (backfill) ------------------------------------
@@ -1439,6 +1528,55 @@ impl InMemoryCache {
             user,
             &member.roles,
             timed_out,
+        ))
+    }
+
+    /// Whether `moderator` can moderate `target` in `guild` according to
+    /// Discord's role hierarchy rules. Needs the guild, both members and their
+    /// roles in cache.
+    pub fn can_moderate(
+        &self,
+        guild: GuildId,
+        moderator: UserId,
+        target: UserId,
+    ) -> Result<bool, PermissionCacheError> {
+        use cordex_model::permission_calc;
+
+        if !self.config.read().has_part(CacheParts::MEMBER_ROLES) {
+            return Err(PermissionCacheError::MemberRolesOff);
+        }
+        let g = self.guild(guild).ok_or(PermissionCacheError::Guild)?;
+        let owner_id = g.owner_id.ok_or(PermissionCacheError::Guild)?;
+        if target == owner_id {
+            return Ok(false);
+        }
+        if moderator == owner_id {
+            return Ok(true);
+        }
+        let mod_member = self
+            .member(guild, moderator)
+            .ok_or(PermissionCacheError::Member)?;
+        let target_member = self
+            .member(guild, target)
+            .ok_or(PermissionCacheError::Member)?;
+        let mod_roles: Vec<Arc<Role>> = mod_member
+            .roles
+            .iter()
+            .map(|id| self.role(guild, *id))
+            .collect::<Option<Vec<_>>>()
+            .ok_or(PermissionCacheError::Roles)?;
+        let target_roles: Vec<Arc<Role>> = target_member
+            .roles
+            .iter()
+            .map(|id| self.role(guild, *id))
+            .collect::<Option<Vec<_>>>()
+            .ok_or(PermissionCacheError::Roles)?;
+        Ok(permission_calc::can_moderate(
+            owner_id,
+            moderator,
+            mod_roles.iter().map(Arc::as_ref),
+            target,
+            target_roles.iter().map(Arc::as_ref),
         ))
     }
 

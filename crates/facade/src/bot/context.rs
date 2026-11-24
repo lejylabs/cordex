@@ -71,23 +71,45 @@ impl Context {
             .and_then(|value| value.downcast_ref::<T>())
     }
 
-    /// Send a plain text message to `channel`.
+    /// Send a message (plain text, embed, or Components V2 [`Reply`]) to
+    /// `channel`.
     pub async fn send(
         &self,
         channel: Id<ChannelMarker>,
-        content: impl Into<String>,
+        message: impl Into<Reply>,
     ) -> Result<Message> {
-        Ok(self
-            .http()
-            .create_message(channel)
-            .content(content.into())?
-            .await?)
+        let reply = message.into();
+        let mut req = self.http().create_message(channel);
+        if let Some(content) = reply.content_ref() {
+            req = req.content(content.to_owned())?;
+        }
+        if !reply.embeds_ref().is_empty() {
+            req = req.embeds(reply.embeds_ref().to_vec())?;
+        }
+        let mut flags = reply.flags_value();
+        if let Some(components) = reply.components_ref() {
+            if cordex_model::component::needs_components_v2(components) {
+                flags |= cordex_model::message::MessageFlags::IS_COMPONENTS_V2;
+            }
+            req = req.components(components.to_vec());
+        }
+        if let Some(mentions) = reply.allowed_mentions_ref() {
+            req = req.allowed_mentions(mentions.clone());
+        }
+        if !flags.is_empty() {
+            req = req.flags(flags);
+        }
+        if reply.is_tts() {
+            req = req.tts(true);
+        }
+        Ok(req.await?)
     }
 
-    /// Open a DM channel with `user` and send a plain text message.
-    pub async fn dm(&self, user: Id<UserMarker>, content: impl Into<String>) -> Result<Message> {
+    /// Open a DM channel with `user` and send a message (plain text, embed, or
+    /// Components V2 [`Reply`]).
+    pub async fn dm(&self, user: Id<UserMarker>, message: impl Into<Reply>) -> Result<Message> {
         let channel = self.http().create_dm(user).await?;
-        self.send(channel.id, content).await
+        self.send(channel.id, message).await
     }
 
     /// The cache, if the bot was built with [`Bot::cache`](super::Bot::cache).
@@ -370,6 +392,36 @@ macro_rules! interaction_methods {
             /// Channel the interaction came from.
             pub fn channel_id(&self) -> Option<Id<ChannelMarker>> {
                 self.interaction.channel_id
+            }
+
+            /// Permissions the bot holds in the interaction's channel
+            /// (precomputed by Discord; no cache or REST call needed).
+            pub fn app_permissions(&self) -> cordex_model::Permissions {
+                self.interaction.app_permissions
+            }
+
+            /// Permissions the invoking member holds in the interaction's
+            /// channel (`None` in DMs; precomputed by Discord).
+            pub fn member_permissions(&self) -> Option<cordex_model::Permissions> {
+                self.interaction
+                    .member
+                    .as_ref()
+                    .and_then(|m| m.permissions)
+            }
+
+            /// Whether the bot holds `permission` (or `ADMINISTRATOR`) in the
+            /// interaction's channel.
+            pub fn bot_can(&self, permission: cordex_model::Permissions) -> bool {
+                let p = self.app_permissions();
+                p.contains(cordex_model::Permissions::ADMINISTRATOR) || p.contains(permission)
+            }
+
+            /// Whether the invoking member holds `permission` (or
+            /// `ADMINISTRATOR`) in the interaction's channel.
+            pub fn user_can(&self, permission: cordex_model::Permissions) -> bool {
+                self.member_permissions().is_some_and(|p| {
+                    p.contains(cordex_model::Permissions::ADMINISTRATOR) || p.contains(permission)
+                })
             }
 
             /// Answer with a message. After a defer (also the automatic
@@ -951,6 +1003,8 @@ impl ReadyContext {
 pub struct EventContext {
     pub(super) ctx: Context,
     pub(super) event: Arc<Event>,
+    #[cfg(feature = "cache")]
+    pub(super) previous: Arc<cordex_cache::PreviousState>,
 }
 
 impl fmt::Debug for EventContext {
@@ -965,5 +1019,12 @@ impl EventContext {
     /// The event.
     pub fn event(&self) -> &Event {
         &self.event
+    }
+
+    /// Cached state replaced or removed by this event, when the cache is
+    /// enabled and held an entry before the update.
+    #[cfg(feature = "cache")]
+    pub fn previous(&self) -> &cordex_cache::PreviousState {
+        &self.previous
     }
 }

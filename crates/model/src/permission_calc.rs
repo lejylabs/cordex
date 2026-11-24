@@ -1,6 +1,7 @@
 //! Pure permission calculator (topics/permissions.mdx).
 
 use crate::channel::{OverwriteType, PermissionOverwrite};
+use crate::guild::Role;
 use crate::id::Id;
 use crate::id::marker::{GenericMarker, RoleMarker, UserMarker};
 use crate::permissions::Permissions;
@@ -116,6 +117,64 @@ pub fn channel_permissions(
     }
     let with_overwrites = apply_overwrites(guild, overwrites, everyone_id, member_id, member_roles);
     apply_implicit(with_overwrites, timed_out)
+}
+
+/// Highest role in Discord's hierarchy order: greatest `position`, with the
+/// lower role `id` winning ties.
+pub fn highest_role<'a>(roles: impl IntoIterator<Item = &'a Role>) -> Option<&'a Role> {
+    roles
+        .into_iter()
+        .max_by(|a, b| a.position.cmp(&b.position).then_with(|| b.id.cmp(&a.id)))
+}
+
+/// Whether `moderator_id` can moderate `target_id` according to Discord's role
+/// hierarchy rules:
+///
+/// - The guild owner can never be moderated (not even by themselves).
+/// - The guild owner can moderate every other member.
+/// - A target holding [`Permissions::ADMINISTRATOR`] can only be moderated by
+///   the guild owner.
+/// - Otherwise the moderator's highest role must be strictly higher than the
+///   target's highest role (higher `position`, or equal `position` with lower
+///   role `id`).
+pub fn can_moderate<'a>(
+    owner_id: Id<UserMarker>,
+    moderator_id: Id<UserMarker>,
+    moderator_roles: impl IntoIterator<Item = &'a Role>,
+    target_id: Id<UserMarker>,
+    target_roles: impl IntoIterator<Item = &'a Role>,
+) -> bool {
+    if target_id == owner_id {
+        return false;
+    }
+    if moderator_id == owner_id {
+        return true;
+    }
+    let mut target_top: Option<&Role> = None;
+    for role in target_roles {
+        if role.permissions.contains(Permissions::ADMINISTRATOR) {
+            return false;
+        }
+        if target_top.is_none_or(|top| {
+            role.position
+                .cmp(&top.position)
+                .then_with(|| top.id.cmp(&role.id))
+                .is_gt()
+        }) {
+            target_top = Some(role);
+        }
+    }
+    let Some(mod_top) = highest_role(moderator_roles) else {
+        return false;
+    };
+    let Some(target_top) = target_top else {
+        return true;
+    };
+    mod_top
+        .position
+        .cmp(&target_top.position)
+        .then_with(|| target_top.id.cmp(&mod_top.id))
+        .is_gt()
 }
 
 #[cfg(test)]

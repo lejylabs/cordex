@@ -177,7 +177,7 @@ impl Shared {
 pub struct Bot {
     token: String,
     intents: Intents,
-    shards: Option<u32>,
+    shards: Option<(std::ops::Range<u32>, u32)>,
     commands: Vec<Command>,
     guild_commands: Option<Id<GuildMarker>>,
     register_commands: bool,
@@ -290,7 +290,15 @@ impl Bot {
     /// Fixed shard count instead of Discord's recommendation (turns off
     /// resharding).
     pub fn shards(mut self, count: u32) -> Self {
-        self.shards = Some(count.max(1));
+        let count = count.max(1);
+        self.shards = Some((0..count, count));
+        self
+    }
+
+    /// Run a specific `range` of `total` shards in this process (multi-process
+    /// clustering; turns off resharding).
+    pub fn shard_range(mut self, range: std::ops::Range<u32>, total: u32) -> Self {
+        self.shards = Some((range, total));
         self
     }
 
@@ -572,7 +580,7 @@ impl Bot {
             self.intents,
             &http,
             event_types,
-            fixed_shards,
+            fixed_shards.clone(),
             presence.clone(),
         )
         .await?;
@@ -727,7 +735,7 @@ async fn build_manager(
     intents: Intents,
     http: &Client,
     event_types: EventTypeFlags,
-    fixed_shards: Option<u32>,
+    fixed_shards: Option<(std::ops::Range<u32>, u32)>,
     presence: Option<cordex_model::gateway::presence::UpdatePresence>,
 ) -> Result<ShardManager> {
     let mut builder = ShardManager::builder(token, intents)
@@ -737,7 +745,7 @@ async fn build_manager(
         builder = builder.presence(presence);
     }
     let builder = match fixed_shards {
-        Some(n) => builder.shards(0..n, n),
+        Some((range, total)) => builder.shards(range, total),
         None => builder.automatic(),
     };
     Ok(builder.build().await?)
@@ -900,9 +908,12 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
         shard: shard_id,
     };
     #[cfg(feature = "cache")]
-    if let Some(cache) = &shared.cache {
-        cache.update(&event);
-    }
+    let previous = shared
+        .cache
+        .as_ref()
+        .map_or(cordex_cache::PreviousState::None, |cache| {
+            cache.update_with_previous(&event)
+        });
     #[cfg(feature = "voice")]
     if let Some(voice) = &shared.voice {
         voice.update_from_event(&event);
@@ -924,6 +935,8 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
     // `on_event` handlers share one `Arc<Event>`; the typed handlers get
     // copies of only the parts they read.
     let event = Arc::new(event);
+    #[cfg(feature = "cache")]
+    let previous = Arc::new(previous);
     for handler in &handlers.event {
         spawn_guarded(
             "event",
@@ -931,6 +944,8 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
             handler(EventContext {
                 ctx: ctx.clone(),
                 event: Arc::clone(&event),
+                #[cfg(feature = "cache")]
+                previous: Arc::clone(&previous),
             }),
         );
     }
@@ -997,11 +1012,21 @@ fn route_message(ctx: &Context, message: impl FnOnce() -> Arc<Message>) {
     }
 }
 
-/// Look up a component/modal handler: exact id first, then the part
-/// before the first `:`.
+/// Look up a component/modal handler: exact id first, then longest `:`-delimited
+/// prefix (e.g. `"giveaway:join:42"` checks `"giveaway:join:42"`, then
+/// `"giveaway:join"`, then `"giveaway"`).
 fn lookup<'a, C>(map: &'a HashMap<Box<str>, Handler<C>>, id: &str) -> Option<&'a Handler<C>> {
-    map.get(id)
-        .or_else(|| id.split_once(':').and_then(|(prefix, _)| map.get(prefix)))
+    if let Some(handler) = map.get(id) {
+        return Some(handler);
+    }
+    let mut prefix = id;
+    while let Some((head, _)) = prefix.rsplit_once(':') {
+        if let Some(handler) = map.get(head) {
+            return Some(handler);
+        }
+        prefix = head;
+    }
+    None
 }
 
 fn route_interaction(ctx: Context, mut interaction: Box<Interaction>) {

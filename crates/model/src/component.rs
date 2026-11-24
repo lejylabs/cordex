@@ -85,6 +85,43 @@ impl PartialEq for UnknownComponent {
 impl Eq for UnknownComponent {}
 
 impl Component {
+    /// Maximum number of top-level Components V2 items allowed per message.
+    pub const MAX_V2_TOP_LEVEL: usize = 10;
+
+    /// Maximum number of total nested Components V2 items allowed per message.
+    pub const MAX_V2_TOTAL_NESTED: usize = 40;
+
+    /// Count this component plus all nested child components recursively.
+    pub fn count_nested(&self) -> usize {
+        1 + match self {
+            Self::ActionRow(r) => r.components.iter().map(Self::count_nested).sum(),
+            Self::Section(s) => {
+                s.components.iter().map(Self::count_nested).sum::<usize>()
+                    + s.accessory.count_nested()
+            }
+            Self::Container(c) => c.components.iter().map(Self::count_nested).sum(),
+            Self::Label(l) => l.component.count_nested(),
+            _ => 0,
+        }
+    }
+
+    /// Count all components (including nested children) in `components`.
+    pub fn total_nested(components: &[Self]) -> usize {
+        components.iter().map(Self::count_nested).sum()
+    }
+
+    /// Validate Discord's Components V2 message limits (`<= 10` top-level and
+    /// `<= 40` total nested components).
+    pub fn validate_v2_limits(components: &[Self]) -> Result<(), &'static str> {
+        if components.len() > Self::MAX_V2_TOP_LEVEL {
+            return Err("components V2 message exceeds 10 top-level components");
+        }
+        if Self::total_nested(components) > Self::MAX_V2_TOTAL_NESTED {
+            return Err("components V2 message exceeds 40 total nested components");
+        }
+        Ok(())
+    }
+
     /// The integer `type`.
     pub const fn kind(&self) -> u8 {
         match self {

@@ -4,6 +4,23 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
+## 0.1.8 - 2026-11-24
+
+- **`cordex-cache`:**
+  - Added `PreviousState` and `InMemoryCache::update_with_previous(&event)` so diff-based features (audit logging, autorole `pending` transitions, TempVoice channel switches) receive the replaced/removed cached entity (`User`, `Guild`, `Channel`, `Thread`, `Role`, `Member`, `VoiceState`, `Message`) without maintaining a second shadow cache.
+  - Added `InMemoryCache::can_moderate(guild, moderator, target)` for Discord role-hierarchy checks.
+- **`cordex-model`:**
+  - Added `permission_calc::highest_role` and `permission_calc::can_moderate` (owner protection, administrator protection, role position + ID tie-breaker).
+  - Added `Component::count_nested`, `Component::total_nested`, and `Component::validate_v2_limits` (`<= 10` top-level, `<= 40` total nested components).
+- **`cordex-interactions`:**
+  - Added read-only accessors on `Reply` (`content_ref`, `embeds_ref`, `components_ref`, `allowed_mentions_ref`, `flags_value`, `is_tts`).
+- **`cordex` facade (`Bot`):**
+  - `Context::send` and `Context::dm` now accept `impl Into<Reply>` (plain text, embeds, and Components V2 with automatic `IS_COMPONENTS_V2` flag).
+  - Added `app_permissions`, `member_permissions`, `bot_can`, and `user_can` on `CommandContext`, `ComponentContext`, and `ModalContext`.
+  - Added `EventContext::previous()` (with `cache` feature) exposing the `PreviousState` from `InMemoryCache::update_with_previous`.
+  - Added `Bot::shard_range(range, total)` for multi-process shard clustering.
+  - Upgraded `Bot::on_component` / `Bot::on_modal` routing to longest `:`-delimited prefix matching (e.g. `"giveaway:join:42"` checks `"giveaway:join:42"`, `"giveaway:join"`, then `"giveaway"`).
+
 ## 0.1.7 - 2026-11-24
 
 - **New optional crate `cordex-voice` (pure-Rust voice signaling & session coordination):**
