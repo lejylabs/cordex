@@ -112,6 +112,86 @@ impl Context {
         self.send(channel.id, message).await
     }
 
+    /// Fetch a guild: returns the cached entry if the cache is enabled and
+    /// holds it, otherwise falls back to REST (`GET /guilds/{id}`).
+    pub async fn get_guild(&self, guild: Id<GuildMarker>) -> Result<cordex_model::Guild> {
+        #[cfg(feature = "cache")]
+        if let Some(cached) = self.cache().and_then(|c| c.guild(guild)) {
+            return Ok((*cached).clone());
+        }
+        Ok(self.http().get_guild(guild).await?)
+    }
+
+    /// Fetch a channel or thread: returns the cached entry if the cache is
+    /// enabled and holds it, otherwise falls back to REST (`GET /channels/{id}`).
+    pub async fn get_channel(&self, channel: Id<ChannelMarker>) -> Result<Channel> {
+        #[cfg(feature = "cache")]
+        if let Some(cached) = self
+            .cache()
+            .and_then(|c| c.channel(channel).or_else(|| c.thread(channel)))
+        {
+            return Ok((*cached).clone());
+        }
+        Ok(self.http().get_channel(channel).await?)
+    }
+
+    /// Fetch a guild member: returns the cached entry if the cache is enabled
+    /// and holds it, otherwise falls back to REST (`GET /guilds/{g}/members/{u}`).
+    pub async fn get_member(
+        &self,
+        guild: Id<GuildMarker>,
+        user: Id<UserMarker>,
+    ) -> Result<cordex_model::Member> {
+        #[cfg(feature = "cache")]
+        if let Some(cached) = self.cache().and_then(|c| c.member(guild, user)) {
+            return Ok((*cached).clone());
+        }
+        Ok(self.http().get_guild_member(guild, user).await?)
+    }
+
+    /// Fetch a user: returns the cached entry if the cache is enabled and
+    /// holds it, otherwise falls back to REST (`GET /users/{id}`).
+    pub async fn get_user(&self, user: Id<UserMarker>) -> Result<User> {
+        #[cfg(feature = "cache")]
+        if let Some(cached) = self.cache().and_then(|c| c.user(user)) {
+            return Ok((*cached).clone());
+        }
+        Ok(self.http().user(user).await?)
+    }
+
+    /// Sync guild slash/context commands with Discord, skipping the bulk
+    /// overwrite when Discord already has identical definitions. Returns
+    /// `Ok(true)` if an overwrite was sent, or `Ok(false)` if unchanged.
+    pub async fn sync_guild_commands(
+        &self,
+        application: Id<cordex_model::id::marker::ApplicationMarker>,
+        guild: Id<GuildMarker>,
+        commands: &[cordex_interactions::Command],
+    ) -> Result<bool> {
+        let route = cordex_http::Route::raw(
+            "/applications/{application_id}/guilds/{guild_id}/commands",
+            (application, guild),
+        );
+        if let Ok(remote) = self
+            .http()
+            .get(route)
+            .send_json::<Vec<serde_json::Value>>()
+            .await
+        {
+            let local: Vec<serde_json::Value> = commands
+                .iter()
+                .filter_map(|c| serde_json::to_value(c).ok())
+                .collect();
+            if local.len() == commands.len() && super::sync::commands_match(&local, &remote) {
+                return Ok(false);
+            }
+        }
+        self.http()
+            .bulk_overwrite_guild_commands(application, guild, commands.iter().cloned())
+            .await?;
+        Ok(true)
+    }
+
     /// The cache, if the bot was built with [`Bot::cache`](super::Bot::cache).
     #[cfg(feature = "cache")]
     pub fn cache(&self) -> Option<&cordex_cache::InMemoryCache> {

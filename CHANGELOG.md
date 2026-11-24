@@ -7,8 +7,9 @@ All notable changes are listed here. The project follows
 ## 0.1.8 - 2026-11-24
 
 - **`cordex-cache`:**
-  - Added `PreviousState` and `InMemoryCache::update_with_previous(&event)` so diff-based features (audit logging, autorole `pending` transitions, TempVoice channel switches) receive the replaced/removed cached entity (`User`, `Guild`, `Channel`, `Thread`, `Role`, `Member`, `VoiceState`, `Message`) without maintaining a second shadow cache.
+  - Added `PreviousState` and `InMemoryCache::update_with_previous(&event)` so diff-based features (audit logging, autorole `pending` transitions, voice channel switches) receive the replaced/removed cached entity (`User`, `Guild`, `Channel`, `Thread`, `Role`, `Member`, `VoiceState`, `Message`) without maintaining a second shadow cache.
   - Added `InMemoryCache::can_moderate(guild, moderator, target)` for Discord role-hierarchy checks.
+  - Added `InMemoryCache::shrink_to_fit()` and `InMemoryCache::prune_members(max_per_guild)` for memory footprint control.
 - **`cordex-model`:**
   - Added `permission_calc::highest_role` and `permission_calc::can_moderate` (owner protection, administrator protection, role position + ID tie-breaker).
   - Added `Component::count_nested`, `Component::total_nested`, and `Component::validate_v2_limits` (`<= 10` top-level, `<= 40` total nested components).
@@ -16,9 +17,11 @@ All notable changes are listed here. The project follows
   - Added read-only accessors on `Reply` (`content_ref`, `embeds_ref`, `components_ref`, `allowed_mentions_ref`, `flags_value`, `is_tts`).
 - **`cordex` facade (`Bot`):**
   - `Context::send` and `Context::dm` now accept `impl Into<Reply>` (plain text, embeds, and Components V2 with automatic `IS_COMPONENTS_V2` flag).
+  - Added cache-first + REST-fallback helpers on `Context`: `get_guild`, `get_channel`, `get_member`, `get_user`, plus `sync_guild_commands` (diff-checked bulk overwrite).
   - Added `app_permissions`, `member_permissions`, `bot_can`, and `user_can` on `CommandContext`, `ComponentContext`, and `ModalContext`.
   - Added `EventContext::previous()` (with `cache` feature) exposing the `PreviousState` from `InMemoryCache::update_with_previous`.
   - Added `Bot::shard_range(range, total)` for multi-process shard clustering.
+  - Added `Bot::on_unknown_component` and `Bot::on_unknown_modal` fallback handlers.
   - Upgraded `Bot::on_component` / `Bot::on_modal` routing to longest `:`-delimited prefix matching (e.g. `"giveaway:join:42"` checks `"giveaway:join:42"`, `"giveaway:join"`, then `"giveaway"`).
 
 ## 0.1.7 - 2026-11-24

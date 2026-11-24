@@ -229,6 +229,106 @@ impl InMemoryCache {
         *guard = config;
     }
 
+    /// Shrink every internal map and ring buffer to fit its current entries.
+    ///
+    /// Useful after the initial `GUILD_CREATE` burst or after pruning to
+    /// release over-allocated heap capacity.
+    pub fn shrink_to_fit(&self) {
+        self.guilds.write().shrink_to_fit();
+        self.guild_member_counts.write().shrink_to_fit();
+        self.unavailable.write().shrink_to_fit();
+        {
+            let mut m = self.guild_channels.write();
+            for s in m.values_mut() {
+                s.shrink_to_fit();
+            }
+            m.shrink_to_fit();
+        }
+        {
+            let mut m = self.guild_threads.write();
+            for s in m.values_mut() {
+                s.shrink_to_fit();
+            }
+            m.shrink_to_fit();
+        }
+        self.channels.write().shrink_to_fit();
+        self.threads.write().shrink_to_fit();
+        self.users.write().shrink_to_fit();
+        self.user_refs.write().shrink_to_fit();
+        shrink_by_guild(&self.members);
+        shrink_by_guild(&self.roles);
+        shrink_by_guild(&self.emojis);
+        shrink_by_guild(&self.stickers);
+        shrink_by_guild(&self.sounds);
+        shrink_by_guild(&self.voice_states);
+        shrink_by_guild(&self.presences);
+        shrink_by_guild(&self.stage_instances);
+        shrink_by_guild(&self.scheduled_events);
+        {
+            let mut m = self.messages.write();
+            for ring in m.values_mut() {
+                ring.shrink_to_fit();
+            }
+            m.shrink_to_fit();
+        }
+    }
+
+    /// Evict excess cached members so every guild holds at most
+    /// `max_per_guild` entries, preferring to keep the bot's own user and
+    /// members currently in a voice channel. Releases orphaned users and
+    /// returns the total number of evicted member entries.
+    pub fn prune_members(&self, max_per_guild: usize) -> usize {
+        let bot_id = self.current_user.read().as_ref().map(|u| u.id);
+        let voice_users: IdMap<GuildId, IdSet<UserId>> = self
+            .voice_states
+            .read()
+            .iter()
+            .map(|(&gid, g)| (gid, g.keys().copied().collect()))
+            .collect();
+        let mut evicted_users = Vec::new();
+        {
+            let mut members = self.members.write();
+            for (&gid, guild) in members.iter_mut() {
+                if guild.len() <= max_per_guild {
+                    continue;
+                }
+                let to_remove = guild.len() - max_per_guild;
+                let active_voice = voice_users.get(&gid);
+                let mut candidates: Vec<UserId> = guild
+                    .keys()
+                    .copied()
+                    .filter(|uid| {
+                        bot_id != Some(*uid)
+                            && !active_voice.is_some_and(|vs| vs.contains(uid))
+                    })
+                    .take(to_remove)
+                    .collect();
+                if candidates.len() < to_remove {
+                    let remaining = to_remove - candidates.len();
+                    for &uid in guild.keys() {
+                        if bot_id == Some(uid) || candidates.contains(&uid) {
+                            continue;
+                        }
+                        candidates.push(uid);
+                        if candidates.len() >= to_remove || remaining == 0 {
+                            break;
+                        }
+                    }
+                }
+                for uid in candidates {
+                    if guild.remove(&uid).is_some() {
+                        evicted_users.push(uid);
+                    }
+                }
+            }
+        }
+        let count = evicted_users.len();
+        if !evicted_users.is_empty() {
+            self.release_users(&evicted_users);
+        }
+        count
+    }
+
     fn apply_config(&self, c: &CacheConfig) {
         use ResourceType as R;
         if c.has(R::GUILDS) {
@@ -1808,4 +1908,12 @@ fn trim_by_guild_returning<K: Clone + Eq + Hash, V>(map: &ByGuild<K, V>, cap: us
 
 fn trim_by_guild<K: Clone + Eq + Hash, V>(map: &ByGuild<K, V>, cap: usize) {
     let _ = trim_by_guild_returning(map, cap);
+}
+
+fn shrink_by_guild<K: Eq + Hash, V>(map: &ByGuild<K, V>) {
+    let mut outer = map.write();
+    for inner in outer.values_mut() {
+        inner.shrink_to_fit();
+    }
+    outer.shrink_to_fit();
 }

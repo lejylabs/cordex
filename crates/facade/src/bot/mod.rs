@@ -111,6 +111,8 @@ struct Handlers {
     autocomplete: HashMap<Box<str>, Handler<AutocompleteContext>>,
     components: HashMap<Box<str>, Handler<ComponentContext>>,
     modals: HashMap<Box<str>, Handler<ModalContext>>,
+    unknown_component: Option<Handler<ComponentContext>>,
+    unknown_modal: Option<Handler<ModalContext>>,
     message: Vec<Handler<MessageContext>>,
     ready: Vec<Handler<ReadyContext>>,
     event: Vec<Handler<EventContext>>,
@@ -473,6 +475,29 @@ impl Bot {
         self.handlers
             .modals
             .insert(custom_id.into(), boxed(handler));
+        self
+    }
+
+    /// Fallback handler for buttons/selects whose `custom_id` matches no
+    /// [`on_component`](Self::on_component) handler (e.g. old buttons from a
+    /// previous bot version).
+    pub fn on_unknown_component<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(ComponentContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers.unknown_component = Some(boxed(handler));
+        self
+    }
+
+    /// Fallback handler for submitted modals whose `custom_id` matches no
+    /// [`on_modal`](Self::on_modal) handler.
+    pub fn on_unknown_modal<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(ModalContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers.unknown_modal = Some(boxed(handler));
         self
     }
 
@@ -1083,7 +1108,10 @@ fn route_interaction(ctx: Context, mut interaction: Box<Interaction>) {
             }
         }
         Some(InteractionData::MessageComponent(data)) => {
-            let Some(handler) = lookup(&handlers.components, &data.custom_id).cloned() else {
+            let Some(handler) = lookup(&handlers.components, &data.custom_id)
+                .or(handlers.unknown_component.as_ref())
+                .cloned()
+            else {
                 tracing::debug!(custom_id = %data.custom_id, "no component handler");
                 return;
             };
@@ -1095,7 +1123,10 @@ fn route_interaction(ctx: Context, mut interaction: Box<Interaction>) {
             })
         }
         Some(InteractionData::ModalSubmit(data)) => {
-            let Some(handler) = lookup(&handlers.modals, &data.custom_id).cloned() else {
+            let Some(handler) = lookup(&handlers.modals, &data.custom_id)
+                .or(handlers.unknown_modal.as_ref())
+                .cloned()
+            else {
                 tracing::debug!(custom_id = %data.custom_id, "no modal handler");
                 return;
             };
