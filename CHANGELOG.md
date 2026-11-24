@@ -4,6 +4,20 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
+## 0.1.7 - 2026-11-24
+
+- **New optional crate `cordex-voice` (pure-Rust voice signaling & session coordination):**
+  - `VoiceManager` tracks per-guild voice state (`channel_id`, `session_id`, `token`, `endpoint`, `self_mute`, `self_deaf`), correlates `VOICE_STATE_UPDATE` and `VOICE_SERVER_UPDATE` in either order, and exposes `join`, `join_with`, `leave`, `update_voice_state`, `connection_info`, `wait_for_connection`, `watch`, and `subscribe`.
+  - Decoupled via the `VoiceGateway` trait (implemented for `cordex_gateway::Shard` and `ShardManager` behind the default `gateway` feature).
+  - Includes `LavalinkVoiceState` (`info.to_lavalink()`) for Lavalink v4 payloads.
+- **New optional crate `cordex-lavalink` (pure-Rust Lavalink v4 client):**
+  - `LavalinkClient` connects to `/v4/websocket`, tracks `sessionId`, broadcasts `LavalinkEvent`s, and provides typed REST helpers (`load_tracks`, `update_player`, `update_voice`, `play`, `stop`, `set_paused`, `set_volume`, `destroy_player`).
+  - `LavalinkClient::attach_voice(&voice)` automatically forwards `Connected`, `ServerUpdated`, and `Disconnected` events from `VoiceManager` to Lavalink.
+- **`cordex-gateway`:**
+  - Added `ShardId::for_guild`, `ShardManager::shard_for_guild`, and `ShardManager::update_voice_state`.
+- **`cordex` facade:**
+  - Added opt-in features `voice` and `lavalink` (off by default), `Bot::voice()`, `Context::voice()`, `Error::Voice`, `Error::Lavalink`, and `examples/voice_lavalink.rs`.
+
 ## 0.1.6 - 2026-11-24
 
 - **`cordex-cache`:**

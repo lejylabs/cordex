@@ -331,6 +331,7 @@ dependencies = [
  "parking_lot 0.13.0",
  "percent-encoding",
  "rustls",
+ "rustls-platform-verifier",
  "serde",
  "serde_json",
  "thiserror",

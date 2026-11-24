@@ -20,7 +20,7 @@ Read the full [cordex Guide][guide] (quickstart, commands, caching, migration fr
 
 ```toml
 [dependencies]
-cordex = "0.1.6"
+cordex = "0.1.7"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -30,7 +30,7 @@ Or scaffold a ready-to-run bot with [`cargo-generate`][template]:
 cargo generate lejylabs/cordex-template
 ```
 
-Rust 1.95 or newer. No voice support, by design. See the [cordex Guide][guide] for walkthroughs and deployment notes.
+Rust 1.95 or newer. Pure-Rust voice signaling (`voice`) and Lavalink v4 (`lavalink`) are available as opt-in features (no C/FFI audio transport). See the [cordex Guide][guide] for walkthroughs and deployment notes.
 
 ## Quick start
 
@@ -133,6 +133,7 @@ One small file per task in [`crates/facade/examples`][examples]:
 | [`thread_per_core.rs`][ex-tpc] | Pin shards onto dedicated `current_thread` Tokio runtimes (`RuntimeHandles`) |
 | [`http_only.rs`][ex-http] | REST without a gateway, safe default mentions, webhook URLs |
 | [`interactions_http.rs`][ex-ihttp] | Interactions over HTTP with signature check (feature `interactions-server`) |
+| [`voice_lavalink.rs`][ex-voice] | Voice signaling with `Bot::voice()` and Lavalink v4 payload (feature `voice`) |
 
 ## What is included
 
@@ -181,6 +182,8 @@ Most bots only need `cordex`. The parts work on their own too:
 | [`cordex-gateway`][gateway] | Shards, shard manager, identify queue, `Standby` |
 | [`cordex-interactions`][interactions] | Command builders, responses, modals, HTTP endpoint |
 | [`cordex-cache`][cache] | Optional in-memory cache, every resource and part switchable |
+| [`cordex-voice`][voice] | Optional pure-Rust voice signaling & session coordination (Lavalink v4 & custom backends) |
+| [`cordex-lavalink`][lavalink] | Optional pure-Rust Lavalink v4 client (WebSocket + REST + `cordex-voice` bridge) |
 
 ## Features
 
@@ -192,6 +195,8 @@ Most bots only need `cordex`. The parts work on their own too:
 | `interactions` | yes | Command builders and responses (`cordex-interactions`) |
 | `bot` | yes | Simple layer: `Bot` and handler contexts |
 | `cache` | no | In-memory cache (`cordex-cache`) and `cordex::backfill` |
+| `voice` | no | Pure-Rust voice signaling (`cordex-voice`, `Bot::voice()`, `ctx.voice()`) |
+| `lavalink` | no | Pure-Rust Lavalink v4 client (`cordex-lavalink`, enables `voice`) |
 | `interactions-verify` | no | `verify_signature()` for HTTP interactions in any web framework |
 | `interactions-server` | no | Standalone hyper endpoint for HTTP interactions |
 | `metrics` | no | Export HTTP and gateway counters through the `metrics` crate |
@@ -263,6 +268,7 @@ any additional terms or conditions.
 [ex-tpc]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/thread_per_core.rs
 [ex-http]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/http_only.rs
 [ex-ihttp]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/interactions_http.rs
+[ex-voice]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/voice_lavalink.rs
 [template]: https://github.com/lejylabs/cordex-template
 [guide]: https://lejylabs.github.io/cordex/
 [guide badge]: https://img.shields.io/badge/guide-cordex_docs-1f6feb.svg?style=for-the-badge
@@ -277,3 +283,5 @@ any additional terms or conditions.
 [gateway]: https://crates.io/crates/cordex-gateway
 [interactions]: https://crates.io/crates/cordex-interactions
 [cache]: https://crates.io/crates/cordex-cache
+[voice]: https://crates.io/crates/cordex-voice
+[lavalink]: https://crates.io/crates/cordex-lavalink

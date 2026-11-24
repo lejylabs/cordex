@@ -14,6 +14,7 @@ use hyper_util::client::legacy::Client as HyperClient;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+use rustls_platform_verifier::BuilderVerifierExt;
 use tokio::sync::{broadcast, watch};
 use tokio_websockets::ClientBuilder;
 
@@ -33,6 +34,7 @@ pub struct LavalinkClient {
 
 struct Inner {
     config: NodeConfig,
+    auth_header: HeaderValue,
     http: HttpClient,
     session_id: watch::Sender<Option<Box<str>>>,
     events: broadcast::Sender<LavalinkEvent>,
@@ -44,15 +46,20 @@ impl LavalinkClient {
     /// Call [`Self::wait_ready`] if you want to wait until Lavalink sends its
     /// `ready` event and `sessionId`.
     pub fn connect(config: NodeConfig) -> Result<Self, LavalinkError> {
+        let auth_header = HeaderValue::from_str(&config.password)
+            .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?;
+
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
+        http_connector.set_nodelay(true);
 
         let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::aws_lc_rs::default_provider(),
         ))
         .with_safe_default_protocol_versions()
         .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?
-        .with_root_certificates(rustls::RootCertStore::empty())
+        .with_platform_verifier()
+        .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?
         .with_no_client_auth();
 
         let https = HttpsConnectorBuilder::new()
@@ -67,6 +74,7 @@ impl LavalinkClient {
 
         let inner = Arc::new(Inner {
             config,
+            auth_header,
             http,
             session_id,
             events,
@@ -219,6 +227,35 @@ impl LavalinkClient {
         self.update_player(guild_id, &update).await
     }
 
+    /// Configure session resuming on Lavalink (`PATCH /v4/sessions/{sessionId}`).
+    pub async fn update_session(
+        &self,
+        resuming: bool,
+        timeout_secs: u64,
+    ) -> Result<(), LavalinkError> {
+        #[derive(serde::Serialize)]
+        struct Body {
+            resuming: bool,
+            timeout: u64,
+        }
+        let session_id = self.session_id().ok_or(LavalinkError::NotReady)?;
+        let url = format!(
+            "{}/v4/sessions/{session_id}",
+            self.inner.config.http_base_url()
+        );
+        let _ = self
+            .send_raw(
+                Method::PATCH,
+                &url,
+                Some(&Body {
+                    resuming,
+                    timeout: timeout_secs,
+                }),
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Destroy a guild player (`DELETE /v4/sessions/{sessionId}/players/{guildId}`).
     pub async fn destroy_player(&self, guild_id: Id<GuildMarker>) -> Result<(), LavalinkError> {
         let session_id = self.session_id().ok_or(LavalinkError::NotReady)?;
@@ -259,10 +296,10 @@ impl LavalinkClient {
             None => Bytes::new(),
         };
 
-        let mut req = Request::builder()
-            .method(method)
-            .uri(uri)
-            .header("Authorization", self.inner.config.password.as_ref());
+        let mut req = Request::builder().method(method).uri(uri).header(
+            HeaderName::from_static("authorization"),
+            self.inner.auth_header.clone(),
+        );
 
         if body.is_some() {
             req = req.header("Content-Type", "application/json");
@@ -303,8 +340,9 @@ impl LavalinkClient {
 
 async fn ws_loop(inner: Arc<Inner>) {
     let mut backoff = Duration::from_secs(1);
+    let mut last_session_id: Option<Box<str>> = None;
     loop {
-        match run_ws_once(&inner).await {
+        match run_ws_once(&inner, last_session_id.as_deref()).await {
             Ok(()) => {
                 backoff = Duration::from_secs(1);
             }
@@ -312,13 +350,16 @@ async fn ws_loop(inner: Arc<Inner>) {
                 tracing::warn!(%err, ?backoff, "lavalink websocket disconnected; reconnecting");
             }
         }
+        if let Some(id) = inner.session_id.borrow().clone() {
+            last_session_id = Some(id);
+        }
         let _ = inner.session_id.send(None);
         tokio::time::sleep(backoff).await;
         backoff = (backoff * 2).min(Duration::from_secs(30));
     }
 }
 
-async fn run_ws_once(inner: &Inner) -> Result<(), LavalinkError> {
+async fn run_ws_once(inner: &Inner, resume_session_id: Option<&str>) -> Result<(), LavalinkError> {
     let uri: Uri = inner
         .config
         .ws_url()
@@ -327,20 +368,31 @@ async fn run_ws_once(inner: &Inner) -> Result<(), LavalinkError> {
             LavalinkError::InvalidConfig(err.to_string().into())
         })?;
 
-    let auth = HeaderValue::from_str(&inner.config.password)
-        .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?;
     let user_id = HeaderValue::from_str(&inner.config.user_id.to_string())
         .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?;
     let client_name = HeaderValue::from_str(&inner.config.client_name)
         .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?;
 
-    let (mut ws, _resp) = ClientBuilder::from_uri(uri)
-        .add_header(HeaderName::from_static("authorization"), auth)
+    let mut builder = ClientBuilder::from_uri(uri)
+        .add_header(
+            HeaderName::from_static("authorization"),
+            inner.auth_header.clone(),
+        )
         .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?
         .add_header(HeaderName::from_static("user-id"), user_id)
         .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?
         .add_header(HeaderName::from_static("client-name"), client_name)
-        .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?
+        .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?;
+
+    if let Some(session_id) = resume_session_id {
+        let header = HeaderValue::from_str(session_id)
+            .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?;
+        builder = builder
+            .add_header(HeaderName::from_static("session-id"), header)
+            .map_err(|err| LavalinkError::InvalidConfig(err.to_string().into()))?;
+    }
+
+    let (mut ws, _resp) = builder
         .connect()
         .await
         .map_err(|err| LavalinkError::WebSocket(err.to_string().into()))?;
