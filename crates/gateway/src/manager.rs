@@ -10,8 +10,11 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use cordex_model::Token;
+use cordex_model::gateway::command::UpdateVoiceState;
 use cordex_model::gateway::presence::UpdatePresence;
 use cordex_model::gateway::{GatewayBot, Intents};
+use cordex_model::id::Id;
+use cordex_model::id::marker::GuildMarker;
 use futures_core::Stream;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -457,6 +460,27 @@ impl<C: Connector> ShardManager<C> {
             .iter()
             .find(|slot| slot.as_ref().is_some_and(|s| s.id().number() == number))
             .and_then(|slot| slot.as_ref().map(Shard::clone_handle))
+    }
+
+    /// Non-owning handle to the shard responsible for `guild_id`, if this
+    /// manager owns that shard.
+    #[must_use]
+    pub fn shard_for_guild(&self, guild_id: Id<GuildMarker>) -> Option<Shard<C>> {
+        let id = ShardId::for_guild(guild_id, self.inner.total).ok()?;
+        self.shard(id.number())
+    }
+
+    /// Send a voice state update (opcode 4) to the shard responsible for
+    /// `update.guild_id`.
+    pub async fn update_voice_state(&self, update: &UpdateVoiceState) -> Result<(), GatewayError> {
+        let id = ShardId::for_guild(update.guild_id, self.inner.total)?;
+        let shard = self
+            .shard(id.number())
+            .ok_or(GatewayError::InvalidShardId {
+                id: id.number(),
+                total: self.inner.total,
+            })?;
+        shard.update_voice_state(update).await
     }
 
     /// Recommended shard count from `GET /gateway/bot`.

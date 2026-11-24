@@ -78,6 +78,19 @@ impl ShardId {
     pub const fn identify_pair(self) -> [u32; 2] {
         [self.id, self.total]
     }
+
+    /// Shard that handles `guild_id` for `total` shards
+    /// (`(guild_id >> 22) % total`).
+    pub fn for_guild(
+        guild_id: cordex_model::id::Id<cordex_model::id::marker::GuildMarker>,
+        total: u32,
+    ) -> Result<Self, GatewayError> {
+        if total == 0 {
+            return Err(GatewayError::InvalidShardId { id: 0, total: 0 });
+        }
+        let id = u32::try_from((guild_id.get() >> 22) % u64::from(total)).unwrap_or(0);
+        Ok(Self { id, total })
+    }
 }
 
 impl Default for ShardId {

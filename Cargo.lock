@@ -221,13 +221,14 @@ dependencies = [
 
 [[package]]
 name = "cordex"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "cordex-cache",
  "cordex-gateway",
  "cordex-http",
  "cordex-interactions",
  "cordex-model",
+ "cordex-voice",
  "serde_json",
  "tokio",
  "tracing",
@@ -236,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-cache"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "bitflags",
  "cordex-model",
@@ -247,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-gateway"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "bitflags",
  "bytes",
@@ -272,7 +273,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-http"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "bytes",
  "cordex-model",
@@ -295,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-interactions"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "bytes",
  "cordex-http",
@@ -315,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-model"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "bitflags",
  "criterion",
@@ -324,6 +325,20 @@ dependencies = [
  "serde_json",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "cordex-voice"
+version = "0.1.7"
+dependencies = [
+ "cordex-gateway",
+ "cordex-model",
+ "parking_lot 0.13.0",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1855,7 +1870,7 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "xtask"
-version = "0.1.6"
+version = "0.1.7"
 
 [[package]]
 name = "zerocopy"

@@ -25,6 +25,8 @@ pub use cordex_gateway as gateway;
 pub use cordex_http as http;
 #[cfg(feature = "interactions")]
 pub use cordex_interactions as interactions;
+#[cfg(feature = "voice")]
+pub use cordex_voice as voice;
 
 /// Any error from the enabled `cordex-*` crates.
 #[derive(Debug)]
@@ -41,6 +43,9 @@ pub enum Error {
     /// Building a command or answering an interaction failed.
     #[cfg(feature = "interactions")]
     Interaction(cordex_interactions::InteractionError),
+    /// A voice signaling operation failed.
+    #[cfg(feature = "voice")]
+    Voice(cordex_voice::VoiceError),
     /// An embed builder check failed.
     Embed(cordex_model::EmbedError),
 }
@@ -58,6 +63,8 @@ impl fmt::Display for Error {
             Self::Gateway(err) => fmt::Display::fmt(err, f),
             #[cfg(feature = "interactions")]
             Self::Interaction(err) => fmt::Display::fmt(err, f),
+            #[cfg(feature = "voice")]
+            Self::Voice(err) => fmt::Display::fmt(err, f),
             Self::Embed(err) => fmt::Display::fmt(err, f),
         }
     }
@@ -73,6 +80,8 @@ impl StdError for Error {
             Self::Gateway(err) => Some(err),
             #[cfg(feature = "interactions")]
             Self::Interaction(err) => Some(err),
+            #[cfg(feature = "voice")]
+            Self::Voice(err) => Some(err),
             Self::Embed(err) => Some(err),
         }
     }
@@ -111,6 +120,13 @@ impl From<cordex_interactions::InteractionError> for Error {
     }
 }
 
+#[cfg(feature = "voice")]
+impl From<cordex_voice::VoiceError> for Error {
+    fn from(err: cordex_voice::VoiceError) -> Self {
+        Self::Voice(err)
+    }
+}
+
 /// The types most bots need: `use cordex::prelude::*;`.
 pub mod prelude {
     pub use crate::{Error, Result};
@@ -142,6 +158,11 @@ pub mod prelude {
     #[cfg(feature = "interactions")]
     pub use cordex_interactions::{
         Choice, Command, CommandOption, CommandOptions, InteractionHandle, Modal, Reply,
+    };
+    #[cfg(feature = "voice")]
+    pub use cordex_voice::{
+        LavalinkVoiceState, VoiceConnectionInfo, VoiceError, VoiceEvent, VoiceGateway,
+        VoiceManager, VoiceOptions,
     };
 }
 

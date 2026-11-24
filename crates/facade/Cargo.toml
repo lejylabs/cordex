@@ -23,6 +23,7 @@ cordex-http = { workspace = true, default-features = false, optional = true }
 cordex-gateway = { workspace = true, optional = true }
 cordex-interactions = { workspace = true, optional = true }
 cordex-cache = { workspace = true, optional = true }
+cordex-voice = { workspace = true, default-features = false, optional = true }
 # Bounded parallel backfill and graceful Ctrl+C shutdown in `Bot`.
 tokio = { workspace = true, features = ["signal"], optional = true }
 # Logs of the simple layer (handler errors, command registration).
@@ -35,12 +36,14 @@ default = ["http", "http2", "gateway", "interactions", "bot"]
 http = ["dep:cordex-http", "dep:tokio"]
 # Negotiate HTTP/2 via ALPN on the REST client (disable for smaller binaries).
 http2 = ["cordex-http?/http2"]
-gateway = ["dep:cordex-gateway"]
+gateway = ["dep:cordex-gateway", "cordex-voice?/gateway"]
 interactions = ["dep:cordex-interactions"]
 # Simple layer (`Bot`, handler contexts) on top of the three crates.
 bot = ["http", "gateway", "interactions", "dep:tracing", "dep:serde_json"]
 # In-memory cache; off by default, and every resource inside is off too.
 cache = ["dep:cordex-cache"]
+# Pure-Rust voice signaling & session coordination (Lavalink v4 & custom backends).
+voice = ["dep:cordex-voice"]
 # Ed25519 check for HTTP interactions (any web framework).
 interactions-verify = ["interactions", "cordex-interactions/verify"]
 # Standalone hyper endpoint for HTTP interactions.
