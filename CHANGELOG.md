@@ -4,6 +4,17 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
+## 0.1.4 - 2026-11-24
+
+- **`cordex-cache`: full event maintenance & cascade cleanups across all cached resources:**
+  - **Guild member counts & `GUILD_UPDATE` preservation:** tracks `member_count` from `GUILD_CREATE`, increments/decrements on `GUILD_MEMBER_ADD` / `GUILD_MEMBER_REMOVE`, clears on `GUILD_DELETE`, and exposes `InMemoryCache::guild_member_count(id)`. `GUILD_UPDATE` preserves `approximate_member_count` / `approximate_presence_count` when omitted by Discord.
+  - **Member removal cascades:** `GUILD_MEMBER_REMOVE` now also drops stale `voice_states` and `presences` for the removed member; `USER_UPDATE` updates `users` alongside `current_user`.
+  - **Role deletion cascades (fixes `permissions()`):** `GUILD_ROLE_DELETE` removes the deleted role ID from cached `member.roles` and role `permission_overwrites` on guild channels.
+  - **Channel deletion cascades & incremental field updates:** `CHANNEL_DELETE` drops child threads (and their cached messages), voice states and stage instances in that channel. `CHANNEL_PINS_UPDATE` updates `last_pin_timestamp`, `MESSAGE_CREATE` updates `last_message_id`, `THREAD_MEMBERS_UPDATE` updates thread `member_count`, and `GUILD_SCHEDULED_EVENT_USER_ADD` / `REMOVE` maintain `user_count`.
+  - **Message reaction caching:** `MESSAGE_REACTION_ADD`, `MESSAGE_REACTION_REMOVE`, `MESSAGE_REACTION_REMOVE_EMOJI` and `MESSAGE_REACTION_REMOVE_ALL` maintain `Message.reactions` (normal & burst counts, `me`/`me_burst`, `burst_colors`) and cache reacting guild members when `MEMBERS` is enabled.
+  - **`wanted_events()` updated** for all newly handled maintenance and cascade events.
+- **`cordex-model`:** added `Reaction::single(...)` constructor for building `Reaction` entries.
+
 ## 0.1.3 - 2026-11-23
 
 - **Optional `zstd-stream` gateway compression (`cordex-gateway`, `cordex`):** opt-in `zstd-stream` feature switches gateway transport compression from pure-Rust `zlib-stream` to `zstd-stream` via `zstd` (lower bandwidth and faster decompression; requires a C compiler to build `libzstd`, off by default).

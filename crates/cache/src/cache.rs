@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::sync::Arc;
 
-use cordex_model::channel::Channel;
+use cordex_model::channel::{Channel, OverwriteType};
 use cordex_model::emoji::Emoji;
 use cordex_model::gateway::Event;
 use cordex_model::gateway::event::{GuildCreate, GuildMemberUpdate};
@@ -15,7 +15,7 @@ use cordex_model::id::marker::{
     ChannelMarker, EmojiMarker, GuildMarker, MessageMarker, RoleMarker, ScheduledEventMarker,
     SoundMarker, StageMarker, StickerMarker, UserMarker,
 };
-use cordex_model::message::Message;
+use cordex_model::message::{Message, Reaction, ReactionType};
 use cordex_model::scheduled_event::ScheduledEvent;
 use cordex_model::soundboard::SoundboardSound;
 use cordex_model::stage::StageInstance;
@@ -151,6 +151,8 @@ pub struct InMemoryCache {
     config: RwLock<CacheConfig>,
     current_user: RwLock<Option<Arc<User>>>,
     guilds: Flat<GuildId, Guild>,
+    /// Guild member counts from `GUILD_CREATE`, maintained on member add/remove.
+    guild_member_counts: RwLock<IdMap<GuildId, u32>>,
     unavailable: RwLock<IdSet<GuildId>>,
     /// Per-guild index of cached channel IDs for `O(guild_channels)` lookups and deletes.
     guild_channels: RwLock<IdMap<GuildId, IdSet<ChannelId>>>,
@@ -204,6 +206,7 @@ impl InMemoryCache {
             restrip_flat(&self.guilds, |g| strip::guild(g, c));
         } else {
             self.guilds.write().clear();
+            self.guild_member_counts.write().clear();
             self.unavailable.write().clear();
         }
         if c.has(R::CHANNELS) {
@@ -302,7 +305,13 @@ impl InMemoryCache {
             Event::UserUpdate(user) if c.has(R::USERS) => {
                 let mut user = (**user).clone();
                 strip::user(&mut user, c);
-                *self.current_user.write() = Some(Arc::new(user));
+                let uid = user.id;
+                let arc = Arc::new(user);
+                *self.current_user.write() = Some(Arc::clone(&arc));
+                let mut users = self.users.write();
+                if let Some(slot) = users.get_mut(&uid) {
+                    *slot = arc;
+                }
             }
             Event::GuildCreate(GuildCreate::Available(g)) => self.guild_create(g, c),
             Event::GuildCreate(GuildCreate::Unavailable(g)) => {
@@ -313,7 +322,16 @@ impl InMemoryCache {
             Event::GuildUpdate(guild) if c.has(R::GUILDS) => {
                 let mut guild = (**guild).clone();
                 strip::guild(&mut guild, c);
-                self.guilds.write().insert(guild.id, Arc::new(guild));
+                let mut guilds = self.guilds.write();
+                if let Some(prev) = guilds.get(&guild.id) {
+                    if guild.approximate_member_count.is_none() {
+                        guild.approximate_member_count = prev.approximate_member_count;
+                    }
+                    if guild.approximate_presence_count.is_none() {
+                        guild.approximate_presence_count = prev.approximate_presence_count;
+                    }
+                }
+                guilds.insert(guild.id, Arc::new(guild));
             }
             Event::GuildDelete(g) => {
                 if g.unavailable {
@@ -337,13 +355,60 @@ impl InMemoryCache {
                 self.channels.write().insert(ch.id, Arc::new(ch));
             }
             Event::ChannelDelete(ch) => {
-                if let Some(removed) = self.channels.write().remove(&ch.id)
-                    && let Some(gid) = removed.guild_id.or(ch.guild_id)
-                    && let Some(set) = self.guild_channels.write().get_mut(&gid)
-                {
-                    set.remove(&ch.id);
+                let gid = self
+                    .channels
+                    .write()
+                    .remove(&ch.id)
+                    .and_then(|removed| removed.guild_id)
+                    .or(ch.guild_id);
+                if let Some(gid) = gid {
+                    if let Some(set) = self.guild_channels.write().get_mut(&gid) {
+                        set.remove(&ch.id);
+                    }
+                    // Cascade: drop child threads (and their messages) of the deleted channel.
+                    let mut gone_threads = Vec::new();
+                    if let Some(set) = self.guild_threads.write().get_mut(&gid) {
+                        let mut threads = self.threads.write();
+                        for &tid in set.iter() {
+                            if threads
+                                .get(&tid)
+                                .is_some_and(|t| t.parent_id == Some(ch.id))
+                            {
+                                gone_threads.push(tid);
+                            }
+                        }
+                        for &tid in &gone_threads {
+                            threads.remove(&tid);
+                            set.remove(&tid);
+                        }
+                    }
+                    if !gone_threads.is_empty() {
+                        let mut messages = self.messages.write();
+                        for tid in gone_threads {
+                            messages.remove(&tid);
+                        }
+                    }
+                    // Cascade: drop voice states and stage instances in the deleted channel.
+                    if let Some(g) = self.voice_states.write().get_mut(&gid) {
+                        g.retain(|_, v| v.channel_id != Some(ch.id));
+                    }
+                    if let Some(g) = self.stage_instances.write().get_mut(&gid) {
+                        g.retain(|_, s| s.channel_id != ch.id);
+                    }
                 }
                 self.messages.write().remove(&ch.id);
+            }
+            Event::ChannelPinsUpdate(p) => {
+                if c.has(R::CHANNELS)
+                    && let Some(ch) = self.channels.write().get_mut(&p.channel_id)
+                {
+                    Arc::make_mut(ch).last_pin_timestamp = p.last_pin_timestamp;
+                }
+                if c.has(R::THREADS)
+                    && let Some(t) = self.threads.write().get_mut(&p.channel_id)
+                {
+                    Arc::make_mut(t).last_pin_timestamp = p.last_pin_timestamp;
+                }
             }
             Event::ThreadCreate(ch) | Event::ThreadUpdate(ch) if c.has(R::THREADS) => {
                 let mut ch = (**ch).clone();
@@ -391,9 +456,19 @@ impl InMemoryCache {
                     threads.insert(t.id, Arc::new(t));
                 }
             }
+            Event::ThreadMembersUpdate(u) if c.has(R::THREADS) => {
+                if let Some(t) = self.threads.write().get_mut(&u.id) {
+                    Arc::make_mut(t).member_count = Some(u.member_count);
+                }
+            }
             Event::GuildMemberAdd(m) => {
                 if let Some(gid) = m.guild_id {
                     self.insert_member(gid, m, c);
+                    if c.has(R::GUILDS)
+                        && let Some(count) = self.guild_member_counts.write().get_mut(&gid)
+                    {
+                        *count = count.saturating_add(1);
+                    }
                 }
             }
             Event::GuildMemberUpdate(u) => self.member_update(u, c),
@@ -408,6 +483,21 @@ impl InMemoryCache {
                         self.release_users(&[r.user.id]);
                     }
                 }
+                if c.has(R::GUILDS)
+                    && let Some(count) = self.guild_member_counts.write().get_mut(&r.guild_id)
+                {
+                    *count = count.saturating_sub(1);
+                }
+                if c.has(R::VOICE_STATES)
+                    && let Some(g) = self.voice_states.write().get_mut(&r.guild_id)
+                {
+                    g.remove(&r.user.id);
+                }
+                if c.has(R::PRESENCES)
+                    && let Some(g) = self.presences.write().get_mut(&r.guild_id)
+                {
+                    g.remove(&r.user.id);
+                }
             }
             Event::GuildMembersChunk(chunk) if c.is_eager(R::MEMBERS) => {
                 self.insert_member_batch(chunk.guild_id, &chunk.members, c, c.is_eager(R::USERS));
@@ -415,9 +505,59 @@ impl InMemoryCache {
             Event::GuildRoleCreate(r) | Event::GuildRoleUpdate(r) if c.has(R::ROLES) => {
                 insert_by_guild(&self.roles, r.guild_id, r.role.id, r.role.clone());
             }
-            Event::GuildRoleDelete(r) if c.has(R::ROLES) => {
-                if let Some(g) = self.roles.write().get_mut(&r.guild_id) {
+            Event::GuildRoleDelete(r) => {
+                if c.has(R::ROLES)
+                    && let Some(g) = self.roles.write().get_mut(&r.guild_id)
+                {
                     g.remove(&r.role_id);
+                }
+                // Cascade: remove deleted role from cached members so `permissions()` stays valid.
+                if c.has(R::MEMBERS)
+                    && c.has_part(CacheParts::MEMBER_ROLES)
+                    && let Some(g) = self.members.write().get_mut(&r.guild_id)
+                {
+                    for member in g.values_mut() {
+                        if member.roles.contains(&r.role_id) {
+                            let m = Arc::make_mut(member);
+                            m.roles = m
+                                .roles
+                                .iter()
+                                .copied()
+                                .filter(|&id| id != r.role_id)
+                                .collect();
+                        }
+                    }
+                }
+                // Cascade: remove deleted role's permission overwrites from guild channels.
+                if c.has(R::CHANNELS) && c.has_part(CacheParts::CHANNEL_OVERWRITES) {
+                    let cids: Vec<ChannelId> = self
+                        .guild_channels
+                        .read()
+                        .get(&r.guild_id)
+                        .map(|s| s.iter().copied().collect())
+                        .unwrap_or_default();
+                    if !cids.is_empty() {
+                        let role_target = r.role_id.cast();
+                        let mut channels = self.channels.write();
+                        for cid in cids {
+                            if let Some(ch) = channels.get_mut(&cid)
+                                && ch
+                                    .permission_overwrites
+                                    .iter()
+                                    .any(|o| o.kind == OverwriteType::Role && o.id == role_target)
+                            {
+                                let ch = Arc::make_mut(ch);
+                                ch.permission_overwrites = ch
+                                    .permission_overwrites
+                                    .iter()
+                                    .copied()
+                                    .filter(|o| {
+                                        !(o.kind == OverwriteType::Role && o.id == role_target)
+                                    })
+                                    .collect();
+                            }
+                        }
+                    }
                 }
             }
             Event::GuildEmojisUpdate(e) if c.has(R::EMOJIS) => {
@@ -499,6 +639,22 @@ impl InMemoryCache {
                     g.remove(&e.id);
                 }
             }
+            Event::GuildScheduledEventUserAdd(u) if c.has(R::SCHEDULED_EVENTS) => {
+                if let Some(g) = self.scheduled_events.write().get_mut(&u.guild_id)
+                    && let Some(ev) = g.get_mut(&u.guild_scheduled_event_id)
+                {
+                    let ev = Arc::make_mut(ev);
+                    ev.user_count = Some(ev.user_count.unwrap_or(0).saturating_add(1));
+                }
+            }
+            Event::GuildScheduledEventUserRemove(u) if c.has(R::SCHEDULED_EVENTS) => {
+                if let Some(g) = self.scheduled_events.write().get_mut(&u.guild_id)
+                    && let Some(ev) = g.get_mut(&u.guild_scheduled_event_id)
+                {
+                    let ev = Arc::make_mut(ev);
+                    ev.user_count = Some(ev.user_count.unwrap_or(0).saturating_sub(1));
+                }
+            }
             // Without the presences intent `GUILD_CREATE` carries almost no
             // members; the invoking member of an interaction is complete.
             Event::InteractionCreate(i) => {
@@ -521,6 +677,133 @@ impl InMemoryCache {
                     ring.retain(|m| !ids.contains(&m.id));
                 }
             }
+            Event::MessageReactionAdd(r) => {
+                if c.has(R::MEMBERS)
+                    && let (Some(gid), Some(member)) = (r.guild_id, r.member.as_deref())
+                {
+                    self.insert_member(gid, member, c);
+                }
+                if c.has(R::MESSAGES) {
+                    let is_bot = self
+                        .current_user
+                        .read()
+                        .as_ref()
+                        .is_some_and(|u| u.id == r.user_id);
+                    let burst = r.burst || r.kind == ReactionType::Burst;
+                    if let Some(slot) = self
+                        .messages
+                        .write()
+                        .get_mut(&r.channel_id)
+                        .and_then(|ring| ring.iter_mut().find(|m| m.id == r.message_id))
+                    {
+                        let msg = Arc::make_mut(slot);
+                        if let Some(existing) = msg
+                            .reactions
+                            .iter_mut()
+                            .find(|x| same_emoji(&x.emoji, &r.emoji))
+                        {
+                            existing.count = existing.count.saturating_add(1);
+                            if burst {
+                                existing.count_details.burst =
+                                    existing.count_details.burst.saturating_add(1);
+                                if is_bot {
+                                    existing.me_burst = true;
+                                }
+                                if existing.burst_colors.is_empty() && !r.burst_colors.is_empty() {
+                                    existing.burst_colors.clone_from(&r.burst_colors);
+                                }
+                            } else {
+                                existing.count_details.normal =
+                                    existing.count_details.normal.saturating_add(1);
+                                if is_bot {
+                                    existing.me = true;
+                                }
+                            }
+                        } else {
+                            let mut list = msg.reactions.to_vec();
+                            list.push(Reaction::single(
+                                r.emoji.clone(),
+                                burst,
+                                is_bot,
+                                r.burst_colors.clone(),
+                            ));
+                            msg.reactions = list.into_boxed_slice();
+                        }
+                    }
+                }
+            }
+            Event::MessageReactionRemove(r) if c.has(R::MESSAGES) => {
+                let is_bot = self
+                    .current_user
+                    .read()
+                    .as_ref()
+                    .is_some_and(|u| u.id == r.user_id);
+                let burst = r.burst || r.kind == ReactionType::Burst;
+                if let Some(slot) = self
+                    .messages
+                    .write()
+                    .get_mut(&r.channel_id)
+                    .and_then(|ring| ring.iter_mut().find(|m| m.id == r.message_id))
+                {
+                    let msg = Arc::make_mut(slot);
+                    let mut remove_idx = None;
+                    for (idx, existing) in msg.reactions.iter_mut().enumerate() {
+                        if same_emoji(&existing.emoji, &r.emoji) {
+                            existing.count = existing.count.saturating_sub(1);
+                            if burst {
+                                existing.count_details.burst =
+                                    existing.count_details.burst.saturating_sub(1);
+                                if is_bot {
+                                    existing.me_burst = false;
+                                }
+                            } else {
+                                existing.count_details.normal =
+                                    existing.count_details.normal.saturating_sub(1);
+                                if is_bot {
+                                    existing.me = false;
+                                }
+                            }
+                            if existing.count == 0 {
+                                remove_idx = Some(idx);
+                            }
+                            break;
+                        }
+                    }
+                    if let Some(idx) = remove_idx {
+                        let mut list = msg.reactions.to_vec();
+                        list.remove(idx);
+                        msg.reactions = list.into_boxed_slice();
+                    }
+                }
+            }
+            Event::MessageReactionRemoveAll(r) if c.has(R::MESSAGES) => {
+                if let Some(slot) = self
+                    .messages
+                    .write()
+                    .get_mut(&r.channel_id)
+                    .and_then(|ring| ring.iter_mut().find(|m| m.id == r.message_id))
+                {
+                    Arc::make_mut(slot).reactions = Box::default();
+                }
+            }
+            Event::MessageReactionRemoveEmoji(r) if c.has(R::MESSAGES) => {
+                if let Some(slot) = self
+                    .messages
+                    .write()
+                    .get_mut(&r.channel_id)
+                    .and_then(|ring| ring.iter_mut().find(|m| m.id == r.message_id))
+                {
+                    let msg = Arc::make_mut(slot);
+                    if msg.reactions.iter().any(|x| same_emoji(&x.emoji, &r.emoji)) {
+                        msg.reactions = msg
+                            .reactions
+                            .iter()
+                            .filter(|x| !same_emoji(&x.emoji, &r.emoji))
+                            .cloned()
+                            .collect();
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -533,6 +816,7 @@ impl InMemoryCache {
         let gid = g.guild.id;
         if c.is_eager(R::GUILDS) {
             self.unavailable.write().remove(&gid);
+            self.guild_member_counts.write().insert(gid, g.member_count);
             let mut guild = g.guild.clone();
             strip::guild(&mut guild, c);
             self.guilds.write().insert(gid, Arc::new(guild));
@@ -618,6 +902,7 @@ impl InMemoryCache {
     /// Guild left or deleted: drop it and everything that belongs to it.
     fn remove_guild(&self, gid: GuildId) {
         self.guilds.write().remove(&gid);
+        self.guild_member_counts.write().remove(&gid);
         self.unavailable.write().remove(&gid);
         let gone_channels = self.guild_channels.write().remove(&gid).unwrap_or_default();
         if !gone_channels.is_empty() {
@@ -884,6 +1169,16 @@ impl InMemoryCache {
         {
             self.insert_member_with_user(gid, member, &m.author, c);
         }
+        if c.has(ResourceType::CHANNELS)
+            && let Some(ch) = self.channels.write().get_mut(&m.channel_id)
+        {
+            Arc::make_mut(ch).last_message_id = Some(m.id);
+        }
+        if c.has(ResourceType::THREADS)
+            && let Some(t) = self.threads.write().get_mut(&m.channel_id)
+        {
+            Arc::make_mut(t).last_message_id = Some(m.id);
+        }
         let size = c.messages_per_channel();
         if !c.has(ResourceType::MESSAGES) || size == 0 {
             return;
@@ -984,6 +1279,11 @@ impl InMemoryCache {
     /// Guild by id.
     pub fn guild(&self, id: GuildId) -> Option<Arc<Guild>> {
         self.guilds.read().get(&id).cloned()
+    }
+
+    /// Member count of a guild (from `GUILD_CREATE`, maintained on member add/remove).
+    pub fn guild_member_count(&self, id: GuildId) -> Option<u32> {
+        self.guild_member_counts.read().get(&id).copied()
     }
 
     /// Ids of all cached (available) guilds.
@@ -1240,6 +1540,14 @@ impl InMemoryCache {
             scheduled_events: count(&self.scheduled_events),
             messages: self.messages.read().values().map(VecDeque::len).sum(),
         }
+    }
+}
+
+fn same_emoji(a: &Emoji, b: &Emoji) -> bool {
+    match (a.id, b.id) {
+        (Some(x), Some(y)) => x == y,
+        (None, None) => a.name == b.name,
+        _ => false,
     }
 }
 

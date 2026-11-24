@@ -345,10 +345,30 @@ impl CacheConfig {
                 }
             }
         }
-        if self.has(R::MESSAGES) {
-            // Channel and thread deletes drop their messages.
+        if self.has(R::MESSAGES)
+            || self.has(R::THREADS)
+            || self.has(R::VOICE_STATES)
+            || self.has(R::STAGE_INSTANCES)
+        {
+            // Channel deletes drop their messages, child threads, voice states and stage instances.
             push("CHANNEL_DELETE");
+        }
+        if self.has(R::MESSAGES) {
+            // Thread deletes drop their messages.
             push("THREAD_DELETE");
+        }
+        if self.has(R::GUILDS) || self.has(R::VOICE_STATES) || self.has(R::PRESENCES) {
+            // Member leaves update guild member_count and drop voice states / presences.
+            push("GUILD_MEMBER_REMOVE");
+        }
+        if self.has(R::GUILDS) {
+            push("GUILD_MEMBER_ADD");
+        }
+        if (self.has(R::MEMBERS) && self.has_part(CacheParts::MEMBER_ROLES))
+            || (self.has(R::CHANNELS) && self.has_part(CacheParts::CHANNEL_OVERWRITES))
+        {
+            // Role deletes remove stale role IDs from members and channel overwrites.
+            push("GUILD_ROLE_DELETE");
         }
         out
     }
@@ -361,11 +381,22 @@ const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
         (R::GUILDS, &["GUILD_UPDATE"]),
         (
             R::CHANNELS,
-            &["CHANNEL_CREATE", "CHANNEL_UPDATE", "CHANNEL_DELETE"],
+            &[
+                "CHANNEL_CREATE",
+                "CHANNEL_UPDATE",
+                "CHANNEL_DELETE",
+                "CHANNEL_PINS_UPDATE",
+            ],
         ),
         (
             R::THREADS,
-            &["THREAD_CREATE", "THREAD_UPDATE", "THREAD_DELETE"],
+            &[
+                "THREAD_CREATE",
+                "THREAD_UPDATE",
+                "THREAD_DELETE",
+                "THREAD_MEMBERS_UPDATE",
+                "CHANNEL_PINS_UPDATE",
+            ],
         ),
         (
             R::USERS,
@@ -424,6 +455,8 @@ const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
                 "GUILD_SCHEDULED_EVENT_CREATE",
                 "GUILD_SCHEDULED_EVENT_UPDATE",
                 "GUILD_SCHEDULED_EVENT_DELETE",
+                "GUILD_SCHEDULED_EVENT_USER_ADD",
+                "GUILD_SCHEDULED_EVENT_USER_REMOVE",
             ],
         ),
         (
@@ -433,6 +466,10 @@ const EVENTS_BY_RESOURCE: [(ResourceType, &[&str]); 14] = {
                 "MESSAGE_UPDATE",
                 "MESSAGE_DELETE",
                 "MESSAGE_DELETE_BULK",
+                "MESSAGE_REACTION_ADD",
+                "MESSAGE_REACTION_REMOVE",
+                "MESSAGE_REACTION_REMOVE_ALL",
+                "MESSAGE_REACTION_REMOVE_EMOJI",
             ],
         ),
     ]

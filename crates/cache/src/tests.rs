@@ -836,3 +836,243 @@ fn policy_transitions_and_lazy_wanted_events() {
     cache.set_config(all().with_policy(ResourceType::MEMBERS, CachePolicy::Off));
     assert_eq!(cache.stats().members, 0);
 }
+
+#[test]
+fn member_count_and_member_remove_cascade() {
+    let cache = replay(all());
+    let g = Id::new(GUILD).unwrap();
+    let alice = Id::new(ALICE).unwrap();
+    let carol = Id::new(777).unwrap();
+
+    assert_eq!(cache.guild_member_count(g), Some(2));
+    assert!(cache.voice_state(g, alice).is_some());
+    assert!(cache.presence(g, alice).is_some());
+
+    // Member add increments member_count.
+    let mut new_m = member(777);
+    new_m["guild_id"] = id(GUILD);
+    cache.update(&ev("GUILD_MEMBER_ADD", &new_m));
+    assert_eq!(cache.guild_member_count(g), Some(3));
+    assert!(cache.member(g, carol).is_some());
+
+    // Member remove decrements member_count and drops voice state + presence.
+    cache.update(&ev(
+        "GUILD_MEMBER_REMOVE",
+        &json!({"guild_id": id(GUILD), "user": user(ALICE)}),
+    ));
+    assert_eq!(cache.guild_member_count(g), Some(2));
+    assert!(cache.member(g, alice).is_none());
+    assert!(cache.voice_state(g, alice).is_none());
+    assert!(cache.presence(g, alice).is_none());
+
+    // Guild delete clears member_count.
+    cache.update(&ev("GUILD_DELETE", &json!({"id": id(GUILD)})));
+    assert_eq!(cache.guild_member_count(g), None);
+}
+
+#[test]
+fn role_delete_cascades_to_members_and_channel_overwrites() {
+    let cache = replay(all());
+    let g = Id::new(GUILD).unwrap();
+    let ch = Id::new(TEXT).unwrap();
+    let alice = Id::new(ALICE).unwrap();
+    let role_id = Id::new(10).unwrap();
+
+    // Add a role overwrite for role 10 on TEXT channel.
+    let mut text = fixture("text");
+    text["id"] = id(TEXT);
+    text["guild_id"] = id(GUILD);
+    text["permission_overwrites"] = json!([
+        {"id": id(GUILD), "type": 0, "allow": "0", "deny": "2048"},
+        {"id": id(10), "type": 0, "allow": "2048", "deny": "0"}
+    ]);
+    cache.update(&ev("CHANNEL_UPDATE", &text));
+    assert_eq!(cache.channel(ch).unwrap().permission_overwrites.len(), 2);
+    assert!(cache.member(g, alice).unwrap().roles.contains(&role_id));
+
+    // Deleting role 10 removes it from roles, member.roles, and channel overwrites.
+    cache.update(&ev(
+        "GUILD_ROLE_DELETE",
+        &json!({"guild_id": id(GUILD), "role_id": id(10)}),
+    ));
+    assert!(cache.role(g, role_id).is_none());
+    assert!(!cache.member(g, alice).unwrap().roles.contains(&role_id));
+    assert_eq!(cache.channel(ch).unwrap().permission_overwrites.len(), 1);
+}
+
+#[test]
+fn channel_delete_cascades_to_threads_voice_and_stage() {
+    let cache = replay(all());
+    let g = Id::new(GUILD).unwrap();
+    let text = Id::new(TEXT).unwrap();
+    let thread = Id::new(THREAD).unwrap();
+    let alice = Id::new(ALICE).unwrap();
+
+    // Put a message into the child thread and align stage_instance channel_id with TEXT.
+    cache.update(&ev("MESSAGE_CREATE", &message(99, THREAD)));
+    let mut stage = fixture("stage");
+    stage["id"] = id(300);
+    stage["guild_id"] = id(GUILD);
+    stage["channel_id"] = id(TEXT);
+    cache.update(&ev("STAGE_INSTANCE_UPDATE", &stage));
+
+    assert!(cache.thread(thread).is_some());
+    assert_eq!(cache.channel_messages(thread).len(), 1);
+    assert!(cache.voice_state(g, alice).is_some());
+    assert!(cache.stage_instance(g, Id::new(300).unwrap()).is_some());
+
+    // Deleting parent channel TEXT drops child thread, its messages, voice state and stage instance.
+    let mut ch = fixture("text");
+    ch["id"] = id(TEXT);
+    ch["guild_id"] = id(GUILD);
+    cache.update(&ev("CHANNEL_DELETE", &ch));
+
+    assert!(cache.channel(text).is_none());
+    assert!(cache.thread(thread).is_none());
+    assert_eq!(cache.channel_messages(thread).len(), 0);
+    assert!(cache.voice_state(g, alice).is_none());
+    assert!(cache.stage_instance(g, Id::new(300).unwrap()).is_none());
+}
+
+#[test]
+fn incremental_field_updates_for_channels_threads_events_and_users() {
+    let cache = replay(all());
+    let g = Id::new(GUILD).unwrap();
+    let text = Id::new(TEXT).unwrap();
+    let thread = Id::new(THREAD).unwrap();
+    let sched = Id::new(350).unwrap();
+
+    // MESSAGE_CREATE updates last_message_id on channel and thread.
+    assert_eq!(
+        cache.channel(text).unwrap().last_message_id,
+        Some(Id::new(2).unwrap())
+    );
+    cache.update(&ev("MESSAGE_CREATE", &message(42, THREAD)));
+    assert_eq!(
+        cache.thread(thread).unwrap().last_message_id,
+        Some(Id::new(42).unwrap())
+    );
+
+    // CHANNEL_PINS_UPDATE updates last_pin_timestamp on channel and thread.
+    cache.update(&ev(
+        "CHANNEL_PINS_UPDATE",
+        &json!({"guild_id": id(GUILD), "channel_id": id(TEXT), "last_pin_timestamp": "2026-01-01T00:00:00+00:00"}),
+    ));
+    assert!(cache.channel(text).unwrap().last_pin_timestamp.is_some());
+
+    // THREAD_MEMBERS_UPDATE updates thread member_count.
+    cache.update(&ev(
+        "THREAD_MEMBERS_UPDATE",
+        &json!({"id": id(THREAD), "guild_id": id(GUILD), "member_count": 7}),
+    ));
+    assert_eq!(cache.thread(thread).unwrap().member_count, Some(7));
+
+    // GUILD_SCHEDULED_EVENT_USER_ADD / REMOVE updates user_count.
+    cache.update(&ev(
+        "GUILD_SCHEDULED_EVENT_USER_ADD",
+        &json!({"guild_scheduled_event_id": id(350), "user_id": id(ALICE), "guild_id": id(GUILD)}),
+    ));
+    assert_eq!(cache.scheduled_event(g, sched).unwrap().user_count, Some(1));
+    cache.update(&ev(
+        "GUILD_SCHEDULED_EVENT_USER_REMOVE",
+        &json!({"guild_scheduled_event_id": id(350), "user_id": id(ALICE), "guild_id": id(GUILD)}),
+    ));
+    assert_eq!(cache.scheduled_event(g, sched).unwrap().user_count, Some(0));
+
+    // USER_UPDATE updates both current_user and self.users if bot is a cached member.
+    let mut bot_m = member(BOT);
+    bot_m["guild_id"] = id(GUILD);
+    cache.update(&ev("GUILD_MEMBER_ADD", &bot_m));
+    let mut bot_u = user(BOT);
+    bot_u["username"] = json!("renamed-bot");
+    cache.update(&ev("USER_UPDATE", &bot_u));
+    assert_eq!(&*cache.current_user().unwrap().username, "renamed-bot");
+    assert_eq!(
+        &*cache.user(Id::new(BOT).unwrap()).unwrap().username,
+        "renamed-bot"
+    );
+}
+
+#[test]
+fn message_reactions_are_maintained_in_cache() {
+    let cache = replay(all());
+    let ch = Id::new(TEXT).unwrap();
+    let msg_id = Id::new(1).unwrap();
+    let initial = cache.message(ch, msg_id).unwrap().reactions.len();
+
+    // Add normal reaction by Alice, then by Bot.
+    cache.update(&ev(
+        "MESSAGE_REACTION_ADD",
+        &json!({
+            "user_id": id(ALICE), "channel_id": id(TEXT), "message_id": id(1),
+            "guild_id": id(GUILD), "emoji": {"id": null, "name": "🎉"}
+        }),
+    ));
+    cache.update(&ev(
+        "MESSAGE_REACTION_ADD",
+        &json!({
+            "user_id": id(BOT), "channel_id": id(TEXT), "message_id": id(1),
+            "guild_id": id(GUILD), "emoji": {"id": null, "name": "🎉"}
+        }),
+    ));
+    let m = cache.message(ch, msg_id).unwrap();
+    assert_eq!(m.reactions.len(), initial + 1);
+    let party = m
+        .reactions
+        .iter()
+        .find(|r| r.emoji.name.as_deref() == Some("🎉"))
+        .unwrap();
+    assert_eq!(party.count, 2);
+    assert_eq!(party.count_details.normal, 2);
+    assert!(party.me);
+
+    // Add a second custom emoji reaction.
+    cache.update(&ev(
+        "MESSAGE_REACTION_ADD",
+        &json!({
+            "user_id": id(ALICE), "channel_id": id(TEXT), "message_id": id(1),
+            "guild_id": id(GUILD), "emoji": {"id": id(20), "name": "custom"}
+        }),
+    ));
+    assert_eq!(
+        cache.message(ch, msg_id).unwrap().reactions.len(),
+        initial + 2
+    );
+
+    // Bot removes its reaction -> count drops to 1 and `me` becomes false.
+    cache.update(&ev(
+        "MESSAGE_REACTION_REMOVE",
+        &json!({
+            "user_id": id(BOT), "channel_id": id(TEXT), "message_id": id(1),
+            "guild_id": id(GUILD), "emoji": {"id": null, "name": "🎉"}
+        }),
+    ));
+    let m = cache.message(ch, msg_id).unwrap();
+    let party = m
+        .reactions
+        .iter()
+        .find(|r| r.emoji.name.as_deref() == Some("🎉"))
+        .unwrap();
+    assert_eq!(party.count, 1);
+    assert!(!party.me);
+
+    // Remove all of one emoji.
+    cache.update(&ev(
+        "MESSAGE_REACTION_REMOVE_EMOJI",
+        &json!({
+            "channel_id": id(TEXT), "message_id": id(1),
+            "guild_id": id(GUILD), "emoji": {"id": id(20), "name": "custom"}
+        }),
+    ));
+    assert_eq!(
+        cache.message(ch, msg_id).unwrap().reactions.len(),
+        initial + 1
+    );
+
+    // Remove all reactions.
+    cache.update(&ev(
+        "MESSAGE_REACTION_REMOVE_ALL",
+        &json!({"channel_id": id(TEXT), "message_id": id(1), "guild_id": id(GUILD)}),
+    ));
+    assert_eq!(cache.message(ch, msg_id).unwrap().reactions.len(), 0);
+}

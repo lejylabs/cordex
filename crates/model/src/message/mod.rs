@@ -549,6 +549,23 @@ pub struct Reaction {
     pub burst_colors: Vec<Box<str>>,
 }
 
+impl Reaction {
+    /// Create a new reaction entry with count 1.
+    pub fn single(emoji: Emoji, burst: bool, me: bool, burst_colors: Vec<Box<str>>) -> Self {
+        Self {
+            count: 1,
+            count_details: ReactionCountDetails {
+                burst: u32::from(burst),
+                normal: u32::from(!burst),
+            },
+            me: me && !burst,
+            me_burst: me && burst,
+            emoji,
+            burst_colors,
+        }
+    }
+}
+
 /// Reaction counts by kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[non_exhaustive]
