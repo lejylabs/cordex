@@ -24,3 +24,25 @@
 - [Migrating from Serenity & Twilight](migration.md)
 - [Deployment & Performance](deployment.md)
 - [FAQ & Troubleshooting](faq.md)
+
+# Reference & Benchmarks
+
+- [Architecture](architecture.md)
+- [Performance & Benchmarks](performance.md)
+- [Discord API Coverage](coverage.md)
+
+# Community & Releases
+
+- [Projects Using cordex](projects.md)
+- [Contributing](contributing.md)
+- [Changelog](changelog.md)
+  - [Unreleased](changelog/unreleased.md)
+  - [0.1.8](changelog/0.1.8.md)
+  - [0.1.7](changelog/0.1.7.md)
+  - [0.1.6](changelog/0.1.6.md)
+  - [0.1.5](changelog/0.1.5.md)
+  - [0.1.4](changelog/0.1.4.md)
+  - [0.1.3](changelog/0.1.3.md)
+  - [0.1.2](changelog/0.1.2.md)
+  - [0.1.1](changelog/0.1.1.md)
+  - [0.1.0](changelog/0.1.0.md)

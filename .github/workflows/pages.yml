@@ -6,6 +6,9 @@ on:
     branches: [master]
     paths:
       - "book/**"
+      - "docs/**"
+      - "CONTRIBUTING.md"
+      - "CHANGELOG.md"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
