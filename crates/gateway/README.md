@@ -1,6 +1,6 @@
 # cordex-gateway
 
-[![crates.io][crates badge]][crates link] [![docs.rs][docs badge]][docs link] [![discord][discord badge]][discord link] ![rust 1.95+][rust badge]
+[![crates.io][crates badge]][crates link] [![docs.rs][docs badge]][docs link] [![guide](https://img.shields.io/badge/guide-cordex_docs-1f6feb.svg?style=for-the-badge)](https://lejylabs.github.io/cordex/) [![discord][discord badge]][discord link] ![rust 1.95+][rust badge]
 
 Discord gateway for [cordex]: shard connections, automatic and manual
 sharding, and waiting for events.

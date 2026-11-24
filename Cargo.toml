@@ -9,6 +9,7 @@ version = "0.1.4"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0"
+homepage = "https://lejylabs.github.io/cordex/"
 repository = "https://github.com/lejylabs/cordex"
 keywords = ["discord", "discord-api", "bot", "gateway", "async"]
 categories = ["api-bindings", "asynchronous", "network-programming"]

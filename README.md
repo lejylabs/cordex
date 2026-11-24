@@ -1,6 +1,6 @@
 # cordex
 
-[![crates.io][crates badge]][crates link] [![docs.rs][docs badge]][docs link] [![CI][ci badge]][ci link] [![discord][discord badge]][discord link] [![license][license badge]][license link] ![rust 1.95+][rust badge]
+[![crates.io][crates badge]][crates link] [![docs.rs][docs badge]][docs link] [![guide][guide badge]][guide] [![CI][ci badge]][ci link] [![discord][discord badge]][discord link] [![license][license badge]][license link] ![rust 1.95+][rust badge]
 
 cordex is an independent, fast Discord bot API library for Rust on Tokio.
 It covers the whole official bot API — gateway, sharding, REST, interactions,
@@ -14,7 +14,7 @@ lines. Low-level access stays available, but you never need it.
 > (currently 100 % of all endpoints, events, opcodes, enum values, object
 > fields and flags).
 
-Questions, feedback or help: join the [cordex Discord server][discord link].
+Read the full [cordex Guide][guide] (quickstart, commands, caching, migration from Serenity/Twilight, FAQ) or join the [cordex Discord server][discord link] for questions and feedback.
 
 ## Installation
 
@@ -265,6 +265,7 @@ any additional terms or conditions.
 [ex-ihttp]: https://github.com/lejylabs/cordex/blob/master/crates/facade/examples/interactions_http.rs
 [template]: https://github.com/lejylabs/cordex-template
 [guide]: https://lejylabs.github.io/cordex/
+[guide badge]: https://img.shields.io/badge/guide-cordex_docs-1f6feb.svg?style=for-the-badge
 [api docs]: https://github.com/discord/discord-api-docs
 [issues]: https://github.com/lejylabs/cordex/issues
 [contributing]: https://github.com/lejylabs/cordex/blob/master/CONTRIBUTING.md

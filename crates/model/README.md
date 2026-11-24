@@ -1,6 +1,6 @@
 # cordex-model
 
-[![crates.io][crates badge]][crates link] [![docs.rs][docs badge]][docs link] [![discord][discord badge]][discord link] ![rust 1.95+][rust badge]
+[![crates.io][crates badge]][crates link] [![docs.rs][docs badge]][docs link] [![guide](https://img.shields.io/badge/guide-cordex_docs-1f6feb.svg?style=for-the-badge)](https://lejylabs.github.io/cordex/) [![discord][discord badge]][discord link] ![rust 1.95+][rust badge]
 
 Discord API v10 models for [cordex]: every object, event, opcode, enum value
 and flag of the official bot API, plus helpers that need no network.
