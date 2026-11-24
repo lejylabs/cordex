@@ -24,6 +24,7 @@ cordex-gateway = { workspace = true, optional = true }
 cordex-interactions = { workspace = true, optional = true }
 cordex-cache = { workspace = true, optional = true }
 cordex-voice = { workspace = true, default-features = false, optional = true }
+cordex-lavalink = { workspace = true, optional = true }
 # Bounded parallel backfill and graceful Ctrl+C shutdown in `Bot`.
 tokio = { workspace = true, features = ["signal"], optional = true }
 # Logs of the simple layer (handler errors, command registration).
@@ -44,6 +45,8 @@ bot = ["http", "gateway", "interactions", "dep:tracing", "dep:serde_json"]
 cache = ["dep:cordex-cache"]
 # Pure-Rust voice signaling & session coordination (Lavalink v4 & custom backends).
 voice = ["dep:cordex-voice"]
+# Pure-Rust Lavalink v4 client (WebSocket + REST + automatic `cordex-voice` bridge).
+lavalink = ["voice", "dep:cordex-lavalink"]
 # Ed25519 check for HTTP interactions (any web framework).
 interactions-verify = ["interactions", "cordex-interactions/verify"]
 # Standalone hyper endpoint for HTTP interactions.

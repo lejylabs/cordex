@@ -227,6 +227,7 @@ dependencies = [
  "cordex-gateway",
  "cordex-http",
  "cordex-interactions",
+ "cordex-lavalink",
  "cordex-model",
  "cordex-voice",
  "serde_json",
@@ -311,6 +312,30 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "cordex-lavalink"
+version = "0.1.7"
+dependencies = [
+ "bytes",
+ "cordex-model",
+ "cordex-voice",
+ "futures-core",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "parking_lot 0.13.0",
+ "percent-encoding",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-websockets",
  "tracing",
 ]
 

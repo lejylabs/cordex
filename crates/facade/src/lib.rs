@@ -25,6 +25,8 @@ pub use cordex_gateway as gateway;
 pub use cordex_http as http;
 #[cfg(feature = "interactions")]
 pub use cordex_interactions as interactions;
+#[cfg(feature = "lavalink")]
+pub use cordex_lavalink as lavalink;
 #[cfg(feature = "voice")]
 pub use cordex_voice as voice;
 
@@ -46,6 +48,9 @@ pub enum Error {
     /// A voice signaling operation failed.
     #[cfg(feature = "voice")]
     Voice(cordex_voice::VoiceError),
+    /// A Lavalink v4 operation failed.
+    #[cfg(feature = "lavalink")]
+    Lavalink(cordex_lavalink::LavalinkError),
     /// An embed builder check failed.
     Embed(cordex_model::EmbedError),
 }
@@ -65,6 +70,8 @@ impl fmt::Display for Error {
             Self::Interaction(err) => fmt::Display::fmt(err, f),
             #[cfg(feature = "voice")]
             Self::Voice(err) => fmt::Display::fmt(err, f),
+            #[cfg(feature = "lavalink")]
+            Self::Lavalink(err) => fmt::Display::fmt(err, f),
             Self::Embed(err) => fmt::Display::fmt(err, f),
         }
     }
@@ -82,6 +89,8 @@ impl StdError for Error {
             Self::Interaction(err) => Some(err),
             #[cfg(feature = "voice")]
             Self::Voice(err) => Some(err),
+            #[cfg(feature = "lavalink")]
+            Self::Lavalink(err) => Some(err),
             Self::Embed(err) => Some(err),
         }
     }
@@ -124,6 +133,13 @@ impl From<cordex_interactions::InteractionError> for Error {
 impl From<cordex_voice::VoiceError> for Error {
     fn from(err: cordex_voice::VoiceError) -> Self {
         Self::Voice(err)
+    }
+}
+
+#[cfg(feature = "lavalink")]
+impl From<cordex_lavalink::LavalinkError> for Error {
+    fn from(err: cordex_lavalink::LavalinkError) -> Self {
+        Self::Lavalink(err)
     }
 }
 
