@@ -4,6 +4,15 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
+## 0.1.5 - 2026-11-24
+
+- **`cordex-http`: attachment metadata & clearing on message, webhook, and interaction edits:**
+  - `FollowupBody` (shared by `UpdateInteractionResponse` and `CreateFollowupMessage`) now populates `"attachments": [{"id": 0, "filename": ...}]` from attached files on send, so editing an interaction response with a new file replaces the previous attachment instead of appending.
+  - Added `.clear_attachments()` and `.clear_embeds()` across `UpdateInteractionResponse`, `CreateFollowupMessage`, `EditMessage`, `CreateMessage`, and `UpdateWebhookMessage` (plus `.components(...)` on `UpdateWebhookMessage`) so edits can explicitly send `"attachments": []`, `"embeds": []`, and `"components": []`.
+- **`cordex-model`: explicit clearing on `InteractionResponse` / `InteractionCallbackData`:**
+  - Added `InteractionResponse::update_message(content)` (type 7) and `.clear_components()`, `.clear_embeds()`, `.clear_attachments()` on both `InteractionResponse` and `InteractionCallbackData` so type-7 updates can explicitly serialize `"components": []`, `"embeds": []`, and `"attachments": []`.
+- **Documentation & crates.io metadata:** expanded the mdBook guide (`https://lejylabs.github.io/cordex/`), added `homepage` to all published crates, and linked the guide from all crate READMEs.
+
 ## 0.1.4 - 2026-11-24
 
 - **`cordex-cache`: full event maintenance & cascade cleanups across all cached resources:**

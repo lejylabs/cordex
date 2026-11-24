@@ -4,6 +4,7 @@ description = "Discord REST client for cordex: all endpoints typed, per-route an
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+homepage.workspace = true
 repository.workspace = true
 license.workspace = true
 keywords.workspace = true

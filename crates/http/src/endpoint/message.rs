@@ -30,18 +30,18 @@ pub(crate) struct MessageBody {
     nonce: Option<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     tts: bool,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub(crate) embeds: Vec<Embed>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) embeds: Option<Vec<Embed>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     allowed_mentions: Option<AllowedMentions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     message_reference: Option<MessageReference>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub(crate) components: Vec<Component>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) components: Option<Vec<Component>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     sticker_ids: Vec<Id<StickerMarker>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    attachments: Vec<PartialAttachment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attachments: Option<Vec<PartialAttachment>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     flags: Option<MessageFlags>,
 }
@@ -332,16 +332,24 @@ macro_rules! message_setters {
 
             /// One embed (max. 10, 6000 characters of text in total).
             pub fn embed(mut self, embed: Embed) -> Result<Self, HttpError> {
-                self.body.embeds.push(embed);
-                embed_limits(&self.body.embeds)?;
+                let embeds = self.body.embeds.get_or_insert_with(Vec::new);
+                embeds.push(embed);
+                embed_limits(embeds)?;
                 Ok(self)
             }
 
             /// Replace the embed list.
             pub fn embeds(mut self, embeds: Vec<Embed>) -> Result<Self, HttpError> {
                 embed_limits(&embeds)?;
-                self.body.embeds = embeds;
+                self.body.embeds = Some(embeds);
                 Ok(self)
+            }
+
+            /// Clear all embeds on the message (sends `"embeds": []`).
+            #[must_use]
+            pub fn clear_embeds(mut self) -> Self {
+                self.body.embeds = Some(Vec::new());
+                self
             }
 
             /// Allowed mentions.
@@ -351,10 +359,10 @@ macro_rules! message_setters {
                 self
             }
 
-            /// Message components.
+            /// Message components (an empty list removes them on edit).
             #[must_use]
             pub fn components(mut self, components: Vec<Component>) -> Self {
-                self.body.components = components;
+                self.body.components = Some(components);
                 self
             }
 
@@ -385,6 +393,14 @@ macro_rules! message_setters {
                 }
                 self.files.push(file);
                 Ok(self)
+            }
+
+            /// Clear all attachments on the message (sends `"attachments": []`).
+            #[must_use]
+            pub fn clear_attachments(mut self) -> Self {
+                self.files.clear();
+                self.body.attachments = Some(Vec::new());
+                self
             }
 
             /// Audit-log reason (unused on create; applied on edit).
@@ -696,18 +712,22 @@ pub(crate) async fn send_message(
     require_body: bool,
 ) -> Result<Message, HttpError> {
     client.fill_allowed_mentions(&mut body.allowed_mentions);
-    super::mark_components_v2(&mut body.flags, &body.components);
+    if let Some(components) = &body.components {
+        super::mark_components_v2(&mut body.flags, components);
+    }
 
     if !files.is_empty() {
-        body.attachments = files
-            .iter()
-            .enumerate()
-            .map(|(i, file)| PartialAttachment {
-                id: i as u64,
-                filename: file.filename.clone(),
-                description: file.description.clone(),
-            })
-            .collect();
+        body.attachments = Some(
+            files
+                .iter()
+                .enumerate()
+                .map(|(i, file)| PartialAttachment {
+                    id: i as u64,
+                    filename: file.filename.clone(),
+                    description: file.description.clone(),
+                })
+                .collect(),
+        );
     }
 
     let is_forward = body
@@ -717,9 +737,9 @@ pub(crate) async fn send_message(
     if require_body
         && !is_forward
         && body.content.as_ref().is_none_or(String::is_empty)
-        && body.embeds.is_empty()
+        && body.embeds.as_ref().is_none_or(Vec::is_empty)
         && body.sticker_ids.is_empty()
-        && body.components.is_empty()
+        && body.components.as_ref().is_none_or(Vec::is_empty)
         && files.is_empty()
     {
         return Err(HttpError::validation(

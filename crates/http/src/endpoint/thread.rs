@@ -300,8 +300,8 @@ impl CreateForumThread {
     pub async fn send(self) -> Result<Channel, HttpError> {
         thread_name_len(&self.name)?;
         if self.message.content.as_ref().is_none_or(String::is_empty)
-            && self.message.embeds.is_empty()
-            && self.message.components.is_empty()
+            && self.message.embeds.as_ref().is_none_or(Vec::is_empty)
+            && self.message.components.as_ref().is_none_or(Vec::is_empty)
         {
             return Err(HttpError::validation(
                 "forum thread needs content, an embed or components",

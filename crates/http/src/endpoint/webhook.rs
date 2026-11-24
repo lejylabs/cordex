@@ -37,16 +37,16 @@ struct WebhookBody {
     avatar_url: Option<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     tts: bool,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    embeds: Vec<Embed>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    embeds: Option<Vec<Embed>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     allowed_mentions: Option<AllowedMentions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     flags: Option<MessageFlags>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    components: Vec<cordex_model::component::Component>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    attachments: Vec<WebhookAttachment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    components: Option<Vec<cordex_model::component::Component>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attachments: Option<Vec<WebhookAttachment>>,
 }
 
 #[derive(Serialize)]
@@ -257,8 +257,9 @@ impl ExecuteWebhook {
 
     /// One embed.
     pub fn embed(mut self, embed: Embed) -> Result<Self, HttpError> {
-        self.body.embeds.push(embed);
-        embed_limits(&self.body.embeds)?;
+        let embeds = self.body.embeds.get_or_insert_with(Vec::new);
+        embeds.push(embed);
+        embed_limits(embeds)?;
         Ok(self)
     }
 
@@ -267,7 +268,7 @@ impl ExecuteWebhook {
     /// `IS_COMPONENTS_V2` flag is set automatically when needed.
     #[must_use]
     pub fn components(mut self, components: Vec<cordex_model::component::Component>) -> Self {
-        self.body.components = components;
+        self.body.components = Some(components);
         self
     }
 
@@ -296,7 +297,9 @@ impl ExecuteWebhook {
         let mut body = self.body;
         self.client
             .fill_allowed_mentions(&mut body.allowed_mentions);
-        super::mark_components_v2(&mut body.flags, &body.components);
+        if let Some(components) = &body.components {
+            super::mark_components_v2(&mut body.flags, components);
+        }
         fill_attachments(&mut body.attachments, &self.files);
 
         let route = Route::raw(
@@ -305,7 +308,7 @@ impl ExecuteWebhook {
         );
         let mut req = self.client.post(route);
         req = req.query("wait", self.wait);
-        if !body.components.is_empty() {
+        if body.components.as_ref().is_some_and(|c| !c.is_empty()) {
             // Needed for webhooks that are not owned by an application.
             req = req.query("with_components", true);
         }
@@ -442,9 +445,24 @@ impl UpdateWebhookMessage {
 
     /// One embed.
     pub fn embed(mut self, embed: Embed) -> Result<Self, HttpError> {
-        self.body.embeds.push(embed);
-        embed_limits(&self.body.embeds)?;
+        let embeds = self.body.embeds.get_or_insert_with(Vec::new);
+        embeds.push(embed);
+        embed_limits(embeds)?;
         Ok(self)
+    }
+
+    /// Clear all embeds on the message (sends `"embeds": []`).
+    #[must_use]
+    pub fn clear_embeds(mut self) -> Self {
+        self.body.embeds = Some(Vec::new());
+        self
+    }
+
+    /// Message components (an empty list removes them on edit).
+    #[must_use]
+    pub fn components(mut self, components: Vec<cordex_model::component::Component>) -> Self {
+        self.body.components = Some(components);
+        self
     }
 
     /// Attach a file.
@@ -453,9 +471,20 @@ impl UpdateWebhookMessage {
         Ok(self)
     }
 
+    /// Clear all attachments on the message (sends `"attachments": []`).
+    #[must_use]
+    pub fn clear_attachments(mut self) -> Self {
+        self.files.clear();
+        self.body.attachments = Some(Vec::new());
+        self
+    }
+
     /// Send the request.
     pub async fn send(self) -> Result<Message, HttpError> {
         let mut body = self.body;
+        if let Some(components) = &body.components {
+            super::mark_components_v2(&mut body.flags, components);
+        }
         fill_attachments(&mut body.attachments, &self.files);
         let route = Route::raw(
             "/webhooks/{webhook_id}/{webhook_token}/messages/{message_id}",
@@ -496,19 +525,21 @@ fn attach_file(files: &mut Vec<File>, file: File) -> Result<(), HttpError> {
     Ok(())
 }
 
-fn fill_attachments(attachments: &mut Vec<WebhookAttachment>, files: &[File]) {
+fn fill_attachments(attachments: &mut Option<Vec<WebhookAttachment>>, files: &[File]) {
     if files.is_empty() {
         return;
     }
-    *attachments = files
-        .iter()
-        .enumerate()
-        .map(|(i, file)| WebhookAttachment {
-            id: i as u64,
-            filename: file.filename.clone(),
-            description: file.description.clone(),
-        })
-        .collect();
+    *attachments = Some(
+        files
+            .iter()
+            .enumerate()
+            .map(|(i, file)| WebhookAttachment {
+                id: i as u64,
+                filename: file.filename.clone(),
+                description: file.description.clone(),
+            })
+            .collect(),
+    );
 }
 
 fn with_body(

@@ -128,14 +128,24 @@ impl Client {
 struct FollowupBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    embeds: Vec<Embed>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    embeds: Option<Vec<Embed>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     allowed_mentions: Option<AllowedMentions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     flags: Option<MessageFlags>,
     #[serde(skip_serializing_if = "Option::is_none")]
     components: Option<Vec<Component>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attachments: Option<Vec<FollowupAttachment>>,
+}
+
+#[derive(Serialize)]
+struct FollowupAttachment {
+    id: u64,
+    filename: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
 }
 
 /// Edit the original interaction response.
@@ -169,9 +179,17 @@ macro_rules! followup_setters {
 
             /// One embed.
             pub fn embed(mut self, embed: Embed) -> Result<Self, HttpError> {
-                self.body.embeds.push(embed);
-                embed_limits(&self.body.embeds)?;
+                let embeds = self.body.embeds.get_or_insert_with(Vec::new);
+                embeds.push(embed);
+                embed_limits(embeds)?;
                 Ok(self)
+            }
+
+            /// Clear all embeds on the message (sends `"embeds": []`).
+            #[must_use]
+            pub fn clear_embeds(mut self) -> Self {
+                self.body.embeds = Some(Vec::new());
+                self
             }
 
             /// Allowed mentions.
@@ -199,6 +217,14 @@ macro_rules! followup_setters {
             pub fn attach(mut self, file: File) -> Result<Self, HttpError> {
                 self.files.push(file);
                 Ok(self)
+            }
+
+            /// Clear all attachments on the message (sends `"attachments": []`).
+            #[must_use]
+            pub fn clear_attachments(mut self) -> Self {
+                self.files.clear();
+                self.body.attachments = Some(Vec::new());
+                self
             }
         }
     };
@@ -249,6 +275,23 @@ fn apply_default_mentions(client: &Client, response: &mut InteractionResponse) {
     }
 }
 
+fn fill_followup_attachments(body: &mut FollowupBody, files: &[File]) {
+    if files.is_empty() {
+        return;
+    }
+    body.attachments = Some(
+        files
+            .iter()
+            .enumerate()
+            .map(|(i, file)| FollowupAttachment {
+                id: i as u64,
+                filename: file.filename.clone(),
+                description: file.description.clone(),
+            })
+            .collect(),
+    );
+}
+
 async fn followup_send(
     client: Client,
     req: crate::RequestBuilder,
@@ -259,6 +302,7 @@ async fn followup_send(
     if let Some(components) = &body.components {
         super::mark_components_v2(&mut body.flags, components);
     }
+    fill_followup_attachments(&mut body, &files);
     let req = if files.is_empty() {
         req.json(&body)?
     } else {
@@ -315,5 +359,36 @@ impl Client {
                 .send_json()
                 .await
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn followup_body_fills_attachments_from_files() {
+        let mut body = FollowupBody::default();
+        let files = vec![File::bytes("captcha.png", b"png".to_vec())];
+        fill_followup_attachments(&mut body, &files);
+        let json = serde_json::to_value(&body).unwrap();
+        assert_eq!(
+            json["attachments"],
+            serde_json::json!([{"id": 0, "filename": "captcha.png"}])
+        );
+    }
+
+    #[test]
+    fn followup_body_clear_attachments_empty_content_and_components() {
+        let body = FollowupBody {
+            content: Some(String::new()),
+            components: Some(Vec::new()),
+            attachments: Some(Vec::new()),
+            ..FollowupBody::default()
+        };
+        let json = serde_json::to_value(&body).unwrap();
+        assert_eq!(json["content"], serde_json::json!(""));
+        assert_eq!(json["components"], serde_json::json!([]));
+        assert_eq!(json["attachments"], serde_json::json!([]));
     }
 }

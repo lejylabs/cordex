@@ -82,6 +82,8 @@ async fn slow_command(ctx: CommandContext) -> cordex::Result<()> {
 }
 ```
 
+When editing messages, interaction responses, or webhook messages via `cordex-http` / `cordex-model`, you can explicitly remove existing components, embeds, or attachments with `.components(vec![])`, `.clear_embeds()`, and `.clear_attachments()` (for example `InteractionResponse::update_message("Closed.").clear_components()`).
+
 ## Pre-Command Hooks, Cooldowns & Error Handling
 
 - **`.before_command(|ctx| ...)`** runs before every command handler. Return `Ok(false)` to block execution (e.g., for permission checks, maintenance mode, or cooldowns).

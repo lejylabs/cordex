@@ -754,6 +754,49 @@ impl InteractionResponse {
         }
     }
 
+    /// Update message (type 7) with content.
+    ///
+    /// Chain [`.clear_components()`](Self::clear_components),
+    /// [`.clear_embeds()`](Self::clear_embeds) or
+    /// [`.clear_attachments()`](Self::clear_attachments) to explicitly send
+    /// empty arrays and remove existing buttons, embeds or attachments.
+    pub fn update_message(content: impl Into<Box<str>>) -> Self {
+        Self {
+            kind: InteractionCallbackType::UpdateMessage,
+            data: Some(InteractionCallbackData {
+                content: Some(content.into()),
+                ..InteractionCallbackData::empty()
+            }),
+        }
+    }
+
+    /// Clear all components on the target message (sends `"components": []`).
+    #[must_use]
+    pub fn clear_components(mut self) -> Self {
+        self.data
+            .get_or_insert_with(InteractionCallbackData::empty)
+            .clear_components();
+        self
+    }
+
+    /// Clear all embeds on the target message (sends `"embeds": []`).
+    #[must_use]
+    pub fn clear_embeds(mut self) -> Self {
+        self.data
+            .get_or_insert_with(InteractionCallbackData::empty)
+            .clear_embeds();
+        self
+    }
+
+    /// Clear all attachments on the target message (sends `"attachments": []`).
+    #[must_use]
+    pub fn clear_attachments(mut self) -> Self {
+        self.data
+            .get_or_insert_with(InteractionCallbackData::empty)
+            .clear_attachments();
+        self
+    }
+
     /// Autocomplete suggestions (type 8).
     pub fn autocomplete(choices: Vec<CommandOptionChoice>) -> Self {
         Self {
@@ -786,47 +829,152 @@ impl InteractionResponse {
 /// Callback data for a message, autocomplete result or modal.
 ///
 /// Fields of the variants that are not in use stay empty/`None`.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub struct InteractionCallbackData {
     /// TTS message.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tts: Option<bool>,
     /// Message content.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<Box<str>>,
     /// Embeds (max. 10).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub embeds: Vec<Embed>,
     /// Allowed mentions.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_mentions: Option<AllowedMentions>,
     /// Message flags (`EPHEMERAL`, `SUPPRESS_EMBEDS`, …).
-    #[serde(default, skip_serializing_if = "MessageFlags::is_empty")]
     pub flags: MessageFlags,
     /// Components (message or modal).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub components: Vec<Component>,
     /// Partial attachments (`filename`, `description`).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<Attachment>,
     /// Poll to create.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub poll: Option<PollCreate>,
     /// Autocomplete choices (max. 25).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub choices: Vec<CommandOptionChoice>,
     /// Modal `custom_id`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_id: Option<Box<str>>,
     /// Modal title (max. 45 characters).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<Box<str>>,
+    clear_embeds: bool,
+    clear_components: bool,
+    clear_attachments: bool,
+}
+
+impl<'de> Deserialize<'de> for InteractionCallbackData {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Raw {
+            #[serde(default)]
+            tts: Option<bool>,
+            #[serde(default)]
+            content: Option<Box<str>>,
+            #[serde(default)]
+            embeds: Option<Vec<Embed>>,
+            #[serde(default)]
+            allowed_mentions: Option<AllowedMentions>,
+            #[serde(default)]
+            flags: MessageFlags,
+            #[serde(default)]
+            components: Option<Vec<Component>>,
+            #[serde(default)]
+            attachments: Option<Vec<Attachment>>,
+            #[serde(default)]
+            poll: Option<PollCreate>,
+            #[serde(default)]
+            choices: Vec<CommandOptionChoice>,
+            #[serde(default)]
+            custom_id: Option<Box<str>>,
+            #[serde(default)]
+            title: Option<Box<str>>,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        let clear_embeds = raw.embeds.as_ref().is_some_and(Vec::is_empty);
+        let clear_components = raw.components.as_ref().is_some_and(Vec::is_empty);
+        let clear_attachments = raw.attachments.as_ref().is_some_and(Vec::is_empty);
+        Ok(Self {
+            tts: raw.tts,
+            content: raw.content,
+            embeds: raw.embeds.unwrap_or_default(),
+            allowed_mentions: raw.allowed_mentions,
+            flags: raw.flags,
+            components: raw.components.unwrap_or_default(),
+            attachments: raw.attachments.unwrap_or_default(),
+            poll: raw.poll,
+            choices: raw.choices,
+            custom_id: raw.custom_id,
+            title: raw.title,
+            clear_embeds,
+            clear_components,
+            clear_attachments,
+        })
+    }
 }
 
 impl InteractionCallbackData {
     fn empty() -> Self {
         Self::default()
+    }
+
+    /// Clear all embeds and serialize `"embeds": []`.
+    pub fn clear_embeds(&mut self) -> &mut Self {
+        self.embeds.clear();
+        self.clear_embeds = true;
+        self
+    }
+
+    /// Clear all components and serialize `"components": []`.
+    pub fn clear_components(&mut self) -> &mut Self {
+        self.components.clear();
+        self.clear_components = true;
+        self
+    }
+
+    /// Clear all attachments and serialize `"attachments": []`.
+    pub fn clear_attachments(&mut self) -> &mut Self {
+        self.attachments.clear();
+        self.clear_attachments = true;
+        self
+    }
+}
+
+impl Serialize for InteractionCallbackData {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+
+        let mut map = serializer.serialize_map(None)?;
+        if let Some(tts) = self.tts {
+            map.serialize_entry("tts", &tts)?;
+        }
+        if let Some(content) = &self.content {
+            map.serialize_entry("content", content)?;
+        }
+        if !self.embeds.is_empty() || self.clear_embeds {
+            map.serialize_entry("embeds", &self.embeds)?;
+        }
+        if let Some(allowed_mentions) = &self.allowed_mentions {
+            map.serialize_entry("allowed_mentions", allowed_mentions)?;
+        }
+        if !self.flags.is_empty() {
+            map.serialize_entry("flags", &self.flags)?;
+        }
+        if !self.components.is_empty() || self.clear_components {
+            map.serialize_entry("components", &self.components)?;
+        }
+        if !self.attachments.is_empty() || self.clear_attachments {
+            map.serialize_entry("attachments", &self.attachments)?;
+        }
+        if let Some(poll) = &self.poll {
+            map.serialize_entry("poll", poll)?;
+        }
+        if !self.choices.is_empty() {
+            map.serialize_entry("choices", &self.choices)?;
+        }
+        if let Some(custom_id) = &self.custom_id {
+            map.serialize_entry("custom_id", custom_id)?;
+        }
+        if let Some(title) = &self.title {
+            map.serialize_entry("title", title)?;
+        }
+        map.end()
     }
 }
 
@@ -1068,5 +1216,29 @@ mod tests {
                 "{missing}"
             );
         }
+    }
+
+    #[test]
+    fn callback_data_preserves_explicit_empty_arrays_on_round_trip() {
+        let input = serde_json::json!({
+            "type": 7,
+            "data": {
+                "content": "This form is closed.",
+                "components": [],
+                "embeds": [],
+                "attachments": []
+            }
+        });
+        let resp: InteractionResponse = serde_json::from_value(input.clone()).unwrap();
+        let output = serde_json::to_value(&resp).unwrap();
+        assert_eq!(output, input);
+
+        // Omitted arrays stay omitted on round-trip.
+        let omitted = serde_json::json!({
+            "type": 7,
+            "data": { "content": "Only text." }
+        });
+        let resp2: InteractionResponse = serde_json::from_value(omitted.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&resp2).unwrap(), omitted);
     }
 }
