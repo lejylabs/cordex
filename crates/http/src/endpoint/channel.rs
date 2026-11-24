@@ -3,7 +3,9 @@
 use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
-use cordex_model::channel::{AutoArchiveDuration, Channel, ChannelType, OverwriteType};
+use cordex_model::channel::{
+    AutoArchiveDuration, Channel, ChannelType, OverwriteType, PermissionOverwrite,
+};
 use cordex_model::id::Id;
 use cordex_model::id::marker::{ChannelMarker, GenericMarker, GuildMarker};
 use cordex_model::permissions::Permissions;
@@ -158,6 +160,8 @@ struct UpdateChannelBody {
     locked: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     invitable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    permission_overwrites: Option<Vec<PermissionOverwrite>>,
 }
 
 /// `PATCH /channels/{channel_id}`.
@@ -181,6 +185,13 @@ impl UpdateChannel {
     #[must_use]
     pub fn kind(mut self, kind: ChannelType) -> Self {
         self.body.kind = Some(kind);
+        self
+    }
+
+    /// Replace permission overwrites (an empty list removes all overwrites).
+    #[must_use]
+    pub fn permission_overwrites(mut self, overwrites: Vec<PermissionOverwrite>) -> Self {
+        self.body.permission_overwrites = Some(overwrites);
         self
     }
 
@@ -424,6 +435,8 @@ struct CreateChannelBody {
     parent_id: Option<Id<ChannelMarker>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     nsfw: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    permission_overwrites: Option<Vec<PermissionOverwrite>>,
 }
 
 /// `POST /guilds/{guild_id}/channels`.
@@ -439,6 +452,13 @@ impl CreateGuildChannel {
     #[must_use]
     pub fn kind(mut self, kind: ChannelType) -> Self {
         self.body.kind = Some(kind);
+        self
+    }
+
+    /// Initial permission overwrites for the new channel.
+    #[must_use]
+    pub fn permission_overwrites(mut self, overwrites: Vec<PermissionOverwrite>) -> Self {
+        self.body.permission_overwrites = Some(overwrites);
         self
     }
 
@@ -622,5 +642,36 @@ impl crate::client::Client {
                 .send_json()
                 .await
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn channel_bodies_serialize_permission_overwrites_and_empty_clear() {
+        let ov = PermissionOverwrite::role(
+            Id::new(1).unwrap(),
+            Permissions::VIEW_CHANNEL,
+            Permissions::empty(),
+        );
+        let create = CreateChannelBody {
+            name: "private".into(),
+            permission_overwrites: Some(vec![ov]),
+            ..CreateChannelBody::default()
+        };
+        let create_json = serde_json::to_value(&create).unwrap();
+        assert_eq!(
+            create_json["permission_overwrites"],
+            serde_json::json!([{"id": "1", "type": 0, "allow": "1024", "deny": "0"}])
+        );
+
+        let update = UpdateChannelBody {
+            permission_overwrites: Some(Vec::new()),
+            ..UpdateChannelBody::default()
+        };
+        let update_json = serde_json::to_value(&update).unwrap();
+        assert_eq!(update_json["permission_overwrites"], serde_json::json!([]));
     }
 }

@@ -4,6 +4,15 @@ All notable changes are listed here. The project follows
 [Semantic Versioning](https://semver.org/); before 1.0 a minor release
 (`0.x`) may break the API.
 
+## 0.1.6 - 2026-11-24
+
+- **`cordex-cache`:**
+  - Added `InMemoryCache::guild_members_with_ids(guild)` (`Vec<(UserId, Arc<Member>)>`) and `InMemoryCache::guild_member_ids(guild)` (`Vec<UserId>`) so callers can look up cached users (e.g. `user.bot` for user/bot counters) without losing the map key when `member.user` is stripped.
+  - Added `InMemoryCache::guild_voice_states(guild)` (`Vec<Arc<VoiceState>>`) to list all voice states in a guild directly.
+- **`cordex-http` & `cordex-model`:**
+  - Added `.permission_overwrites(Vec<PermissionOverwrite>)` on `CreateGuildChannel` and `UpdateChannel` (sending `"permission_overwrites": []` clears all overwrites).
+  - Added `PermissionOverwrite::new`, `PermissionOverwrite::role`, and `PermissionOverwrite::member` constructors in `cordex-model`.
+
 ## 0.1.5 - 2026-11-24
 
 - **`cordex-http`: attachment metadata & clearing on message, webhook, and interaction edits:**

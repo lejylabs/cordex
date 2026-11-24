@@ -1355,6 +1355,22 @@ impl InMemoryCache {
         all_by_guild(&self.members, guild)
     }
 
+    /// All cached members of a guild with their user id (members are stored
+    /// without `user`; the id is the map key).
+    pub fn guild_members_with_ids(&self, guild: GuildId) -> Vec<(UserId, Arc<Member>)> {
+        all_by_guild_with_keys(&self.members, guild)
+    }
+
+    /// User ids of all cached members of a guild (avoids cloning `Arc<Member>`
+    /// when only ids are needed, e.g. for counting users/bots via [`Self::user`]).
+    pub fn guild_member_ids(&self, guild: GuildId) -> Vec<UserId> {
+        self.members
+            .read()
+            .get(&guild)
+            .map(|g| g.keys().copied().collect())
+            .unwrap_or_default()
+    }
+
     /// Role by guild and id.
     pub fn role(&self, guild: GuildId, role: Id<RoleMarker>) -> Option<Arc<Role>> {
         get_by_guild(&self.roles, guild, &role)
@@ -1463,6 +1479,11 @@ impl InMemoryCache {
     /// Voice state of a user in a guild.
     pub fn voice_state(&self, guild: GuildId, user: UserId) -> Option<Arc<VoiceState>> {
         get_by_guild(&self.voice_states, guild, &user)
+    }
+
+    /// All voice states of a guild.
+    pub fn guild_voice_states(&self, guild: GuildId) -> Vec<Arc<VoiceState>> {
+        all_by_guild(&self.voice_states, guild)
     }
 
     /// Voice states of everyone connected to `channel`.
@@ -1603,6 +1624,13 @@ fn all_by_guild<K, V>(map: &ByGuild<K, V>, gid: GuildId) -> Vec<Arc<V>> {
     map.read()
         .get(&gid)
         .map(|g| g.values().cloned().collect())
+        .unwrap_or_default()
+}
+
+fn all_by_guild_with_keys<K: Copy, V>(map: &ByGuild<K, V>, gid: GuildId) -> Vec<(K, Arc<V>)> {
+    map.read()
+        .get(&gid)
+        .map(|g| g.iter().map(|(k, v)| (*k, Arc::clone(v))).collect())
         .unwrap_or_default()
 }
 

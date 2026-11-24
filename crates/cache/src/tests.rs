@@ -1076,3 +1076,29 @@ fn message_reactions_are_maintained_in_cache() {
     ));
     assert_eq!(cache.message(ch, msg_id).unwrap().reactions.len(), 0);
 }
+
+#[test]
+fn guild_members_with_ids_exposes_user_id_and_bot_flag() {
+    let cache = InMemoryCache::new(
+        CacheConfig::new().resources(ResourceType::MEMBERS | ResourceType::USERS),
+    );
+    let g = Id::new(GUILD).unwrap();
+    let bot_uid = Id::new(777).unwrap();
+
+    let mut m = member(777);
+    m["guild_id"] = id(GUILD);
+    m["user"]["bot"] = json!(true);
+    cache.update(&ev("GUILD_MEMBER_ADD", &m));
+
+    let list = cache.guild_members_with_ids(g);
+    assert_eq!(list.len(), 1);
+    let (uid, cached_member) = &list[0];
+    assert_eq!(*uid, bot_uid);
+    assert!(cached_member.user.is_none());
+    assert!(cache.user(*uid).unwrap().bot);
+    assert_eq!(cache.guild_member_ids(g), vec![bot_uid]);
+
+    // guild_voice_states returns all cached voice states of a guild.
+    let full = replay(all());
+    assert_eq!(full.guild_voice_states(g).len(), 1);
+}

@@ -236,6 +236,37 @@ pub struct PermissionOverwrite {
     pub deny: Permissions,
 }
 
+impl PermissionOverwrite {
+    /// Create a permission overwrite.
+    pub const fn new(
+        id: Id<GenericMarker>,
+        kind: OverwriteType,
+        allow: Permissions,
+        deny: Permissions,
+    ) -> Self {
+        Self {
+            id,
+            kind,
+            allow,
+            deny,
+        }
+    }
+
+    /// Create a role permission overwrite.
+    pub const fn role(
+        role_id: Id<crate::id::marker::RoleMarker>,
+        allow: Permissions,
+        deny: Permissions,
+    ) -> Self {
+        Self::new(role_id.cast(), OverwriteType::Role, allow, deny)
+    }
+
+    /// Create a member permission overwrite.
+    pub const fn member(user_id: Id<UserMarker>, allow: Permissions, deny: Permissions) -> Self {
+        Self::new(user_id.cast(), OverwriteType::Member, allow, deny)
+    }
+}
+
 int_enum! {
     /// Target of a permission overwrite.
     pub enum OverwriteType: u8 {
