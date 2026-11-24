@@ -116,4 +116,18 @@ async fn run(token: String) -> cordex::Result<()> {
 }
 ```
 
-For quick outbound messages outside an interaction reply, use `ctx.send(channel_id, "Hello!")` or `ctx.dm(user_id, "Check your DMs!")`.
+For quick outbound messages outside an interaction reply, use `ctx.send(channel_id, message)` or `ctx.dm(user_id, message)` — both accept plain text (`&str`/`String`) or a full `Reply` (embeds, Components V2 with automatic `IS_COMPONENTS_V2` flag).
+
+## Typed Event Shortcuts & Entity Lookups
+
+For common gateway events you do not need a manual `on_event` match:
+
+- `Bot::on_guild_create`, `Bot::on_member_join`, `Bot::on_member_leave`, `Bot::on_reaction_add`, `Bot::on_voice_state` (each enables its required event flag and intent automatically).
+- `Context::get_guild`, `get_channel`, `get_member`, `get_user` check the cache first (when enabled) and fall back to REST on a miss.
+- `Context::sync_guild_commands(app, guild, &commands)` runs the same diff check as startup registration and skips unchanged bulk overwrites.
+
+## Interaction Permissions & Optional Options
+
+- `ctx.bot_can(Permissions::KICK_MEMBERS)` and `ctx.user_can(Permissions::KICK_MEMBERS)` check precomputed interaction permissions without cache or REST calls (`app_permissions()` / `member_permissions()`).
+- Every required option helper on `CommandContext` has an optional counterpart: `string_option_opt`, `integer_option_opt`, `number_option_opt`, `boolean_option_opt`, `user_option_opt`, `member_option_opt`, `role_option_opt`, `channel_option_opt`, and `attachment_option_opt`.
+- See `crates/facade/examples/moderation.rs` for a complete example combining permission checks, role hierarchy (`cache.can_moderate`), optional options, and audit-log reasons.

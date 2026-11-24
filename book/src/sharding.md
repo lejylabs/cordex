@@ -27,3 +27,18 @@ See `crates/facade/examples/manual_sharding.rs`.
 ## Thread-per-core
 
 Pin shard `n` to dedicated `current_thread` Tokio runtimes via `RuntimeHandles` and `.spawn_with(Arc::new(spawner))`. See `crates/facade/examples/thread_per_core.rs`.
+
+## Shard Ranges in `Bot`
+
+When using the simple `Bot` layer across multiple processes, pass a shard range directly with `Bot::shard_range(start..end, total)`:
+
+```rust,no_run
+use cordex::prelude::*;
+
+# async fn run() -> cordex::Result<()> {
+Bot::new("token")
+    .shard_range(0..4, 8)
+    .run_until_ctrl_c()
+    .await
+# }
+```

@@ -38,4 +38,10 @@ See `crates/facade/examples/components_v2.rs` for a full runnable bot.
 
 ## Modals
 
-Build modals with `Modal::new(custom_id, title)` and read submitted values in `ModalContext` (`ctx.value(id)` for text inputs and radio groups, `ctx.checked(id)` for checkboxes). See `crates/facade/examples/embeds_and_modals.rs`.
+Build modals with `Modal::new(custom_id, title)` and read submitted values in `ModalContext` (`ctx.value(id)` for text inputs and radio groups, `ctx.checked(id)` for checkboxes). You can also wait for a modal inline with `ctx.wait_for_modal(custom_id, timeout)`. See `crates/facade/examples/embeds_and_modals.rs`.
+
+## Prefix Routing, Fallbacks & V2 Limits
+
+- `Bot::on_component` and `Bot::on_modal` match by exact `custom_id` first, then by the longest `:`-delimited prefix (e.g. `"giveaway:join:42"` checks `"giveaway:join:42"`, `"giveaway:join"`, then `"giveaway"`).
+- Register `Bot::on_unknown_component` / `Bot::on_unknown_modal` to handle expired or unrecognized buttons/modals gracefully.
+- Validate Components V2 message limits locally before sending with `Component::validate_v2_limits(&components)` (`<= 10` top-level, `<= 40` total nested components).

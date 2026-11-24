@@ -50,3 +50,13 @@ With `GUILDS`, `CHANNELS`, `ROLES`, `MEMBERS`, and `CacheParts::MEMBER_ROLES | C
 ## Backfill
 
 The cache never makes network calls on its own. To load message history or guild members from before startup, use `cordex::backfill::messages`, `cordex::backfill::guild_messages`, or `cordex::backfill::guild_members` (or feed fetched entries directly with `cache.insert_messages` / `cache.insert_members`).
+
+## Previous-State Snapshots (Diffs)
+
+`cache.update_with_previous(&event)` returns a `PreviousState` (`User`, `Guild`, `Channel`, `Thread`, `Role`, `Member`, `VoiceState`, `Message`, or `None`) containing the entry that was replaced or removed. In `Bot::on_event`, the snapshot is exposed directly via `ctx.previous()` — useful for audit-log diffs, autorole `pending` transitions, or voice channel switches without maintaining a second shadow cache.
+
+## Role Hierarchy & Memory Maintenance
+
+- `cache.can_moderate(guild_id, moderator_id, target_id)` checks Discord's role hierarchy rules (owner protection, `ADMINISTRATOR` protection, highest role position + ID tie-breaker).
+- `cache.shrink_to_fit()` releases over-allocated map/deque capacity after the initial `GUILD_CREATE` burst.
+- `cache.prune_members(max_per_guild)` trims cached members per guild while preferring to keep the bot itself and active voice members, releasing orphaned users.
