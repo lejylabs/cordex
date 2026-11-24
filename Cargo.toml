@@ -27,7 +27,7 @@ cordex-http = { version = "0.1.7", path = "crates/http", default-features = fals
 cordex-gateway = { version = "0.1.7", path = "crates/gateway" }
 cordex-cache = { version = "0.1.7", path = "crates/cache" }
 cordex-interactions = { version = "0.1.7", path = "crates/interactions" }
-cordex-voice = { version = "0.1.7", path = "crates/voice" }
+cordex-voice = { version = "0.1.7", path = "crates/voice", default-features = false }
 cordex-lavalink = { version = "0.1.7", path = "crates/lavalink" }
 
 # External crates (PLAN.md §3), approved 2026-11-22. Newest versions the
