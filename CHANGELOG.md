@@ -20,6 +20,10 @@ All notable changes are listed here. The project follows
   - Added cache-first + REST-fallback helpers on `Context`: `get_guild`, `get_channel`, `get_member`, `get_user`, plus `sync_guild_commands` (diff-checked bulk overwrite).
   - Added `app_permissions`, `member_permissions`, `bot_can`, and `user_can` on `CommandContext`, `ComponentContext`, and `ModalContext`.
   - Added `EventContext::previous()` (with `cache` feature) exposing the `PreviousState` from `InMemoryCache::update_with_previous`.
+  - Added `CommandContext::*_option_opt` shortcuts (`string_option_opt`, `integer_option_opt`, `number_option_opt`, `boolean_option_opt`, `user_option_opt`, `member_option_opt`, `role_option_opt`, `channel_option_opt`, `attachment_option_opt`).
+  - Added `Context::wait_for_modal(custom_id, timeout)` for inline modal flows.
+  - Added typed event shortcuts on `Bot`: `on_guild_create`, `on_member_join`, `on_member_leave`, `on_reaction_add`, `on_voice_state`.
+  - Added `examples/moderation.rs` showcasing `bot_can`, `user_can`, `can_moderate`, `string_option_opt`, and audit-log reasons.
   - Added `Bot::shard_range(range, total)` for multi-process shard clustering.
   - Added `Bot::on_unknown_component` and `Bot::on_unknown_modal` fallback handlers.
   - Upgraded `Bot::on_component` / `Bot::on_modal` routing to longest `:`-delimited prefix matching (e.g. `"giveaway:join:42"` checks `"giveaway:join:42"`, `"giveaway:join"`, then `"giveaway"`).

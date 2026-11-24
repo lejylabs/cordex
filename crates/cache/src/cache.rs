@@ -298,8 +298,7 @@ impl InMemoryCache {
                     .keys()
                     .copied()
                     .filter(|uid| {
-                        bot_id != Some(*uid)
-                            && !active_voice.is_some_and(|vs| vs.contains(uid))
+                        bot_id != Some(*uid) && !active_voice.is_some_and(|vs| vs.contains(uid))
                     })
                     .take(to_remove)
                     .collect();
@@ -502,10 +501,7 @@ impl InMemoryCache {
             }
             Event::ChannelDelete(ch) => {
                 let removed = self.channels.write().remove(&ch.id);
-                let gid = removed
-                    .as_ref()
-                    .and_then(|r| r.guild_id)
-                    .or(ch.guild_id);
+                let gid = removed.as_ref().and_then(|r| r.guild_id).or(ch.guild_id);
                 if let Some(prev) = removed {
                     previous = PreviousState::Channel(prev);
                 }

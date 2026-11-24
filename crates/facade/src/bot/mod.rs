@@ -116,6 +116,21 @@ struct Handlers {
     message: Vec<Handler<MessageContext>>,
     ready: Vec<Handler<ReadyContext>>,
     event: Vec<Handler<EventContext>>,
+    guild_create: Vec<Handler<(Context, Arc<cordex_model::gateway::event::GuildCreate>)>>,
+    member_join: Vec<Handler<(Context, Arc<cordex_model::Member>)>>,
+    member_leave: Vec<
+        Handler<(
+            Context,
+            Arc<cordex_model::gateway::event::GuildMemberRemove>,
+        )>,
+    >,
+    reaction_add: Vec<
+        Handler<(
+            Context,
+            Arc<cordex_model::gateway::event::MessageReactionAdd>,
+        )>,
+    >,
+    voice_state: Vec<Handler<(Context, Arc<cordex_model::voice::VoiceState>)>>,
     before_command: Option<BeforeCommand>,
     on_error: Option<ErrorHandler>,
 }
@@ -536,6 +551,85 @@ impl Bot {
         self
     }
 
+    /// Handler for `GUILD_CREATE` (when a guild becomes available or the bot
+    /// joins one). Adds `Intents::GUILDS`.
+    pub fn on_guild_create<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::gateway::event::GuildCreate>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::GUILDS;
+        self.handlers
+            .guild_create
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `GUILD_MEMBER_ADD`. Adds the privileged
+    /// `Intents::GUILD_MEMBERS` intent (enable it in the Developer Portal).
+    pub fn on_member_join<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::Member>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::GUILD_MEMBERS;
+        self.handlers
+            .member_join
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `GUILD_MEMBER_REMOVE`. Adds the privileged
+    /// `Intents::GUILD_MEMBERS` intent (enable it in the Developer Portal).
+    pub fn on_member_leave<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::gateway::event::GuildMemberRemove>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::GUILD_MEMBERS;
+        self.handlers
+            .member_leave
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `MESSAGE_REACTION_ADD`. Adds
+    /// `Intents::GUILD_MESSAGE_REACTIONS` and
+    /// `Intents::DIRECT_MESSAGE_REACTIONS`.
+    pub fn on_reaction_add<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::gateway::event::MessageReactionAdd>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::GUILD_MESSAGE_REACTIONS | Intents::DIRECT_MESSAGE_REACTIONS;
+        self.handlers
+            .reaction_add
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `VOICE_STATE_UPDATE`. Adds `Intents::GUILD_VOICE_STATES`.
+    pub fn on_voice_state<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::voice::VoiceState>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::GUILD_VOICE_STATES;
+        self.handlers
+            .voice_state
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
     /// Events worth parsing: only what a handler or the cache reads. The
     /// gateway skips the rest after reading the event name (READY always
     /// arrives).
@@ -548,12 +642,29 @@ impl Bot {
         if !(h.commands.is_empty()
             && h.autocomplete.is_empty()
             && h.components.is_empty()
-            && h.modals.is_empty())
+            && h.modals.is_empty()
+            && h.unknown_component.is_none()
+            && h.unknown_modal.is_none())
         {
             names.push("INTERACTION_CREATE");
         }
         if !h.message.is_empty() {
             names.push("MESSAGE_CREATE");
+        }
+        if !h.guild_create.is_empty() {
+            names.push("GUILD_CREATE");
+        }
+        if !h.member_join.is_empty() {
+            names.push("GUILD_MEMBER_ADD");
+        }
+        if !h.member_leave.is_empty() {
+            names.push("GUILD_MEMBER_REMOVE");
+        }
+        if !h.reaction_add.is_empty() {
+            names.push("MESSAGE_REACTION_ADD");
+        }
+        if !h.voice_state.is_empty() {
+            names.push("VOICE_STATE_UPDATE");
         }
         #[cfg(feature = "cache")]
         if let Some(config) = &self.cache {
@@ -944,11 +1055,15 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
         voice.update_from_event(&event);
     }
     let taken = shared.standby.process(&event) > 0;
-    // A component interaction a waiter took (`ctx.wait_for_button`) is
-    // answered there; routing it to `on_component` too would answer twice.
+    // A component or modal interaction a waiter took (`ctx.wait_for_button` /
+    // `ctx.wait_for_modal`) is answered there; routing it to `on_component` /
+    // `on_modal` too would answer twice.
     if taken
         && let Event::InteractionCreate(interaction) = &event
-        && interaction.kind == InteractionType::MessageComponent
+        && matches!(
+            interaction.kind,
+            InteractionType::MessageComponent | InteractionType::ModalSubmit
+        )
     {
         return;
     }
@@ -978,11 +1093,33 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
         Event::Ready(ready) => route_ready(&ctx, || Arc::new(Ready::clone(ready)), ready.user.id),
         Event::MessageCreate(message) => route_message(&ctx, || Arc::new(Message::clone(message))),
         Event::InteractionCreate(interaction) => route_interaction(ctx, interaction.clone()),
+        Event::GuildCreate(g) => route_typed(&ctx, &handlers.guild_create, "guild_create", || {
+            Arc::new(g.clone())
+        }),
+        Event::GuildMemberAdd(m) => route_typed(&ctx, &handlers.member_join, "member_join", || {
+            Arc::new((**m).clone())
+        }),
+        Event::GuildMemberRemove(r) => {
+            route_typed(&ctx, &handlers.member_leave, "member_leave", || {
+                Arc::new((**r).clone())
+            });
+        }
+        Event::MessageReactionAdd(r) => {
+            route_typed(&ctx, &handlers.reaction_add, "reaction_add", || {
+                Arc::new((**r).clone())
+            });
+        }
+        Event::VoiceStateUpdate(v) => {
+            route_typed(&ctx, &handlers.voice_state, "voice_state", || {
+                Arc::new((**v).clone())
+            });
+        }
         _ => {}
     }
 }
 
 fn route_owned(ctx: Context, event: Event) {
+    let handlers = &ctx.shared.handlers;
     match event {
         Event::Ready(ready) => {
             let id = ready.user.id;
@@ -990,7 +1127,47 @@ fn route_owned(ctx: Context, event: Event) {
         }
         Event::MessageCreate(message) => route_message(&ctx, || Arc::from(message)),
         Event::InteractionCreate(interaction) => route_interaction(ctx, interaction),
+        Event::GuildCreate(g) => {
+            route_typed(&ctx, &handlers.guild_create, "guild_create", || {
+                Arc::from(g)
+            });
+        }
+        Event::GuildMemberAdd(m) => {
+            route_typed(&ctx, &handlers.member_join, "member_join", || Arc::from(m));
+        }
+        Event::GuildMemberRemove(r) => {
+            route_typed(&ctx, &handlers.member_leave, "member_leave", || {
+                Arc::from(r)
+            });
+        }
+        Event::MessageReactionAdd(r) => {
+            route_typed(&ctx, &handlers.reaction_add, "reaction_add", || {
+                Arc::from(r)
+            });
+        }
+        Event::VoiceStateUpdate(v) => {
+            route_typed(&ctx, &handlers.voice_state, "voice_state", || Arc::from(v));
+        }
         _ => {}
+    }
+}
+
+fn route_typed<T>(
+    ctx: &Context,
+    handlers: &[Handler<(Context, Arc<T>)>],
+    kind: &'static str,
+    payload: impl FnOnce() -> Arc<T>,
+) {
+    if handlers.is_empty() {
+        return;
+    }
+    let payload = payload();
+    for handler in handlers {
+        spawn_guarded(
+            kind,
+            ctx.clone(),
+            handler((ctx.clone(), Arc::clone(&payload))),
+        );
     }
 }
 

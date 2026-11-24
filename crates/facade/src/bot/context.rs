@@ -232,6 +232,30 @@ impl Context {
         self.component_context(event)
     }
 
+    /// Wait for a modal submission with `custom_id`, answerable like in an
+    /// `on_modal` handler (`ctx.reply(..)`, `ctx.value(..)`). The interaction
+    /// is not passed to `on_modal` handlers as well.
+    pub async fn wait_for_modal(
+        &self,
+        custom_id: impl Into<String>,
+        timeout: Duration,
+    ) -> Option<ModalContext> {
+        let target = custom_id.into();
+        let event = self
+            .wait_for(timeout, move |event| match event {
+                Event::InteractionCreate(i) => {
+                    i.kind == InteractionType::ModalSubmit
+                        && matches!(
+                            i.data.as_ref(),
+                            Some(InteractionData::ModalSubmit(d)) if d.custom_id.as_ref() == target
+                        )
+                }
+                _ => false,
+            })
+            .await?;
+        self.modal_context(event)
+    }
+
     /// All button presses and selects on `message_id` until `timeout`
     /// (counted from now) or until the returned value is dropped, e.g. for
     /// polls or paging. Each click is answerable like in `on_component`
@@ -303,6 +327,23 @@ impl Context {
         };
         let handle = InteractionHandle::new(self.shared.http.clone(), &interaction);
         Some(ComponentContext {
+            ctx: self.clone(),
+            interaction,
+            data,
+            handle,
+        })
+    }
+
+    /// `ModalContext` for a modal submit interaction event.
+    fn modal_context(&self, event: Event) -> Option<ModalContext> {
+        let Event::InteractionCreate(mut interaction) = event else {
+            return None;
+        };
+        let Some(InteractionData::ModalSubmit(data)) = interaction.data.take() else {
+            return None;
+        };
+        let handle = InteractionHandle::new(self.shared.http.clone(), &interaction);
+        Some(ModalContext {
             ctx: self.clone(),
             interaction,
             data,
@@ -651,6 +692,51 @@ impl CommandContext {
     /// Required attachment option.
     pub fn attachment_option(&self, name: &str) -> Result<&Attachment> {
         Ok(self.options().attachment(name)?)
+    }
+
+    /// Optional string option (`None` when not given).
+    pub fn string_option_opt(&self, name: &str) -> Result<Option<&str>> {
+        Ok(self.options().string_opt(name)?)
+    }
+
+    /// Optional integer option (`None` when not given).
+    pub fn integer_option_opt(&self, name: &str) -> Result<Option<i64>> {
+        Ok(self.options().integer_opt(name)?)
+    }
+
+    /// Optional number option (`None` when not given).
+    pub fn number_option_opt(&self, name: &str) -> Result<Option<f64>> {
+        Ok(self.options().number_opt(name)?)
+    }
+
+    /// Optional boolean option (`None` when not given).
+    pub fn boolean_option_opt(&self, name: &str) -> Result<Option<bool>> {
+        Ok(self.options().boolean_opt(name)?)
+    }
+
+    /// Optional user option (`None` when not given).
+    pub fn user_option_opt(&self, name: &str) -> Result<Option<&User>> {
+        Ok(self.options().user_opt(name)?.map(|u| u.user))
+    }
+
+    /// Optional user option with member data (`None` when not given).
+    pub fn member_option_opt(&self, name: &str) -> Result<Option<ResolvedUser<'_>>> {
+        Ok(self.options().user_opt(name)?)
+    }
+
+    /// Optional role option (`None` when not given).
+    pub fn role_option_opt(&self, name: &str) -> Result<Option<&Role>> {
+        Ok(self.options().role_opt(name)?)
+    }
+
+    /// Optional channel option (`None` when not given).
+    pub fn channel_option_opt(&self, name: &str) -> Result<Option<&Channel>> {
+        Ok(self.options().channel_opt(name)?)
+    }
+
+    /// Optional attachment option (`None` when not given).
+    pub fn attachment_option_opt(&self, name: &str) -> Result<Option<&Attachment>> {
+        Ok(self.options().attachment_opt(name)?)
     }
 
     /// Optional string option.
