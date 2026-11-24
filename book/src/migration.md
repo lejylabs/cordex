@@ -61,3 +61,6 @@ If you prefer Twilight's explicit low-level control, every `cordex-*` crate can 
 - `twilight-gateway` → `cordex-gateway` (with `Shard`, `ShardManager`, `EventTypeFlags`, `Standby`)
 - `twilight-cache-inmemory` → `cordex-cache` (`cache.update(&event)` + `CachePolicy::Lazy` + `CacheParts` + `wanted_events()`)
 - `twilight-standby` → built into `cordex-gateway::Standby`
+- `twilight-gateway-queue` → built into `cordex-gateway::identify` (`IdentifyQueue`, `LocalIdentifyQueue`)
+- `twilight-mention` → built into `cordex-model::mention` (`Mentionable`, `parse_mentions`)
+- `twilight-util` → built into `cordex-model` (builders, `permission_calc`, `cdn`, `parse_message_link`, `parse_webhook_url`, `parse_invite_url`) and `cordex-interactions`

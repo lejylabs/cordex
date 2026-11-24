@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::application::Application;
 use crate::channel::Channel;
+use crate::error::ParseError;
 use crate::guild::{Guild, Role};
 use crate::id::Id;
 use crate::id::marker::{ChannelMarker, GuildMarker, RoleMarker};
@@ -157,6 +158,50 @@ pub struct InviteDelete {
     pub code: Box<str>,
 }
 
+/// Parse a Discord invite URL into its invite code.
+///
+/// Accepts `discord.gg/{code}` and `discord.com/invite/{code}` (plus
+/// `discordapp.com`, optional `www.`/`ptb.`/`canary.` subdomain, `http://`
+/// or `https://`, and optional trailing slash, query string or fragment).
+pub fn parse_invite_url(url: &str) -> Result<&str, ParseError> {
+    let trimmed = url.trim();
+    let rest = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"))
+        .ok_or(ParseError::InviteUrl)?;
+    let rest = rest.split(['?', '#']).next().unwrap_or(rest);
+    let (host, path) = rest.split_once('/').ok_or(ParseError::InviteUrl)?;
+    let path = path.trim_end_matches('/');
+
+    let code = if matches!(host, "discord.gg" | "www.discord.gg") {
+        path
+    } else if matches!(
+        host,
+        "discord.com"
+            | "www.discord.com"
+            | "ptb.discord.com"
+            | "canary.discord.com"
+            | "discordapp.com"
+            | "www.discordapp.com"
+            | "ptb.discordapp.com"
+            | "canary.discordapp.com"
+    ) {
+        path.strip_prefix("invite/").ok_or(ParseError::InviteUrl)?
+    } else {
+        return Err(ParseError::InviteUrl);
+    };
+
+    if code.is_empty()
+        || !code
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    {
+        return Err(ParseError::InviteUrl);
+    }
+
+    Ok(code)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,5 +224,54 @@ mod tests {
         let json = r#"{"code":"x","channel":null,"flags":1}"#;
         let invite: Invite = serde_json::from_str(json).unwrap();
         assert!(invite.flags.contains(GuildInviteFlags::IS_GUEST_INVITE));
+    }
+
+    #[test]
+    fn parses_invite_urls() {
+        assert_eq!(parse_invite_url("https://discord.gg/abc123").unwrap(), "abc123");
+        assert_eq!(
+            parse_invite_url("https://www.discord.gg/my-vanity/?event=42#top").unwrap(),
+            "my-vanity"
+        );
+        assert_eq!(
+            parse_invite_url("https://discord.com/invite/rust-lang").unwrap(),
+            "rust-lang"
+        );
+        assert_eq!(
+            parse_invite_url("https://ptb.discord.com/invite/xyz789/").unwrap(),
+            "xyz789"
+        );
+        assert_eq!(
+            parse_invite_url("http://canary.discordapp.com/invite/AbC-123?foo=bar").unwrap(),
+            "AbC-123"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_invite_urls() {
+        assert_eq!(
+            parse_invite_url("https://example.com/invite/abc"),
+            Err(ParseError::InviteUrl)
+        );
+        assert_eq!(
+            parse_invite_url("https://discord.gg/"),
+            Err(ParseError::InviteUrl)
+        );
+        assert_eq!(
+            parse_invite_url("https://discord.gg/a/b"),
+            Err(ParseError::InviteUrl)
+        );
+        assert_eq!(
+            parse_invite_url("https://discord.com/abc"),
+            Err(ParseError::InviteUrl)
+        );
+        assert_eq!(
+            parse_invite_url("https://discord.com/invite/"),
+            Err(ParseError::InviteUrl)
+        );
+        assert_eq!(
+            parse_invite_url("discord.gg/abc"),
+            Err(ParseError::InviteUrl)
+        );
     }
 }

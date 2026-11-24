@@ -62,7 +62,7 @@ For custom interactive flows, `ctx.button_clicks(message_id, timeout)` streams c
 - **Send / DM:** `ctx.send(channel_id, "Hello!")` and `ctx.dm(user_id, "Hi!")`
 - **React / Delete:** `msg_ctx.react("👍").await?` and `msg_ctx.delete().await?`
 - **Forwarding:** `ctx.forward_message(source_channel_id, message_id, target_channel_id).await?`
-- **Parse Discord message links:** `cordex::model::message::parse_message_link(url)` returns a typed `MessageLink { guild_id, channel_id, message_id }`.
+- **Parse Discord links:** `cordex::model::message::parse_message_link(url)` returns a typed `MessageLink { guild_id, channel_id, message_id }`; `cordex::model::parse_invite_url(url)` extracts invite codes (`discord.gg/…`, `discord.com/invite/…`); `cordex::model::parse_webhook_url(url)` parses webhook execute URLs.
 
 ## Typing Indicator (RAII Guard)
 

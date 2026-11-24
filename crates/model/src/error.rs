@@ -16,4 +16,7 @@ pub enum ParseError {
     /// Not a Discord webhook execute URL.
     #[error("invalid webhook URL")]
     WebhookUrl,
+    /// Not a Discord invite URL.
+    #[error("invalid invite URL")]
+    InviteUrl,
 }

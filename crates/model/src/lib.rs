@@ -43,7 +43,7 @@ pub use error::ParseError;
 pub use guild::{Ban, Guild, Member, Role, UnavailableGuild};
 pub use id::Id;
 pub use image_hash::ImageHash;
-pub use invite::Invite;
+pub use invite::{Invite, parse_invite_url};
 pub use mention::{Mentionable, ParsedMention, parse_mentions};
 pub use message::Message;
 pub use message::embed::EmbedError;
