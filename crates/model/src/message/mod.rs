@@ -12,8 +12,8 @@ pub use allowed_mentions::{AllowedMentionType, AllowedMentions};
 pub use attachment::{Attachment, AttachmentFlags};
 pub use builder::MessageBuilder;
 pub use embed::{
-    AUTHOR_LIMIT, DESCRIPTION_LIMIT, Embed, EmbedAuthor, EmbedError, EmbedField, EmbedFlags,
-    EmbedFooter, EmbedMedia, EmbedMediaFlags, EmbedProvider, EmbedType, EmbedVideo,
+    AUTHOR_LIMIT, DESCRIPTION_LIMIT, Embed, EmbedAudio, EmbedAuthor, EmbedError, EmbedField,
+    EmbedFlags, EmbedFooter, EmbedMedia, EmbedMediaFlags, EmbedProvider, EmbedType, EmbedVideo,
     FIELD_COUNT_LIMIT, FIELD_NAME_LIMIT, FIELD_VALUE_LIMIT, FOOTER_LIMIT, TITLE_LIMIT, TOTAL_LIMIT,
 };
 pub use link::{MessageLink, parse_message_link};

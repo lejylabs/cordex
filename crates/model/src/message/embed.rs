@@ -101,6 +101,9 @@ pub struct Embed {
     /// Video (cannot be set by bots).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video: Option<EmbedVideo>,
+    /// Audio (cannot be set by bots).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<EmbedAudio>,
     /// Provider (cannot be set by bots).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<EmbedProvider>,
@@ -412,6 +415,24 @@ bitflags::bitflags! {
 }
 
 bitflags_serde_int!(EmbedMediaFlags, u64);
+
+/// Embed audio (cannot be set by bots).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct EmbedAudio {
+    /// Source URL of the audio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<Box<str>>,
+    /// Proxied URL of the audio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_url: Option<Box<str>>,
+    /// Media type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<Box<str>>,
+    /// Description of the audio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Box<str>>,
+}
 
 /// Embed provider.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

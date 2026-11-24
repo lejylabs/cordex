@@ -911,6 +911,12 @@ const FIELDS: &[(&str, &str, &str, &str)] = &[
     ),
     (
         "message/embed.rs",
+        "EmbedAudio",
+        "resources/message.mdx",
+        "Embed Audio Structure",
+    ),
+    (
+        "message/embed.rs",
         "EmbedMedia",
         "resources/message.mdx",
         "Embed Image Structure",
