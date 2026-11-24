@@ -191,11 +191,7 @@ pub fn parse_invite_url(url: &str) -> Result<&str, ParseError> {
         return Err(ParseError::InviteUrl);
     };
 
-    if code.is_empty()
-        || !code
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
-    {
+    if code.is_empty() || !code.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
         return Err(ParseError::InviteUrl);
     }
 
@@ -228,7 +224,10 @@ mod tests {
 
     #[test]
     fn parses_invite_urls() {
-        assert_eq!(parse_invite_url("https://discord.gg/abc123").unwrap(), "abc123");
+        assert_eq!(
+            parse_invite_url("https://discord.gg/abc123").unwrap(),
+            "abc123"
+        );
         assert_eq!(
             parse_invite_url("https://www.discord.gg/my-vanity/?event=42#top").unwrap(),
             "my-vanity"

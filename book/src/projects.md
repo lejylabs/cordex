@@ -8,7 +8,7 @@ Want your project listed here? **Open a Pull Request** editing [`book/src/projec
 
 | Project | Description | Crates / Features | Links |
 | --- | --- | --- | --- |
-| **zeny.gg** | All-in-one Discord bot for moderation, utilities, and community management. | `cordex` (`cache`, `voice`, `lavalink`) | [Website](https://zeny.gg) |
+| **zeny.gg** | All-in-one Discord bot for moderation, utilities, and community management. | `cordex` (`cache`) | [Website](https://zeny.gg) |
 
 ## How to Submit Your Project
 
