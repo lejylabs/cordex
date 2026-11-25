@@ -64,18 +64,18 @@ jobs:
       fail-fast: false
       matrix:
         # Debian is the acceptance platform; Ubuntu is the closest runner.
-        # Windows is the development platform. Runners: Blacksmith.
+        # Windows is the development platform. Runners: GitHub-hosted (free for public repos).
         include:
           - name: linux
-            runner: blacksmith-4vcpu-ubuntu-2604
+            runner: ubuntu-latest
           - name: windows
-            runner: blacksmith-4vcpu-windows-2025
+            runner: windows-latest
     needs: changes
     # A matrix job skipped by `if` reports the unexpanded name
     # `check (${{ matrix.name }})`, so the required checks never resolve.
-    # Instead it always runs, on a free GitHub runner with every step
-    # skipped when nothing but prose changed.
-    runs-on: ${{ needs.changes.outputs.code == 'true' && matrix.runner || 'ubuntu-latest' }}
+    # Instead it always runs, with every step skipped when nothing but
+    # prose changed.
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
       CODE: ${{ needs.changes.outputs.code }}
@@ -109,7 +109,7 @@ jobs:
     name: msrv (1.95)
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2604
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -131,7 +131,7 @@ jobs:
     name: feature combinations
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2604
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -152,7 +152,7 @@ jobs:
     name: package (publish dry run)
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2604
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -175,7 +175,7 @@ jobs:
     name: coverage (docs/coverage.md)
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2604
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
