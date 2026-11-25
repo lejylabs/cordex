@@ -28,6 +28,7 @@ flamegraph*.svg
 # Local planning document, not versioned
 /PLAN.md
 /docs/zenybot-inventory.md
+/PLAN_V02.md
 
 # OS files
 Thumbs.db

@@ -1,0 +1,18 @@
+[package]
+name = "cordex-migrate"
+description = "Analyzer and safe mechanical migration CLI for moving Serenity, Poise, and Twilight Discord bots to cordex."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords = ["discord", "discord-api", "cordex", "migration", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+documentation = "https://docs.rs/cordex-migrate"
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
