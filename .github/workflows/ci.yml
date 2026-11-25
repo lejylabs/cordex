@@ -23,6 +23,39 @@ env:
   RUST_BACKTRACE: "1"
 
 jobs:
+  # Prose-only changes skip the expensive jobs. Not `paths-ignore`: the
+  # ruleset requires these checks, and a workflow that never starts leaves
+  # them pending forever, while a job skipped by `if` counts as passed.
+  # Only root-level `*.md` counts as prose: crate READMEs are rustdoc
+  # (doctests), and `docs/` feeds `xtask coverage --check`.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          code=true
+          zero=0000000000000000000000000000000000000000
+          prose='^([^/]+\.md|LICENSE-[^/]+|book/.*|\.github/workflows/(pages|discord-docs)\.yml)$'
+          if [ "$EVENT" != workflow_dispatch ] && [ -n "$BASE" ] && [ "$BASE" != "$zero" ]; then
+            if gh api "repos/$GITHUB_REPOSITORY/compare/$BASE...$HEAD" --jq '.files[].filename' > files.txt; then
+              count=$(grep -c . files.txt || true)
+              # The compare API lists at most 300 files; run everything then.
+              if [ "$count" -gt 0 ] && [ "$count" -lt 300 ] && ! grep -qvE "$prose" files.txt; then
+                code=false
+              fi
+            fi
+          fi
+          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+
   check:
     # Stable job names (`check (linux)`, `check (windows)`) so required
     # status checks survive runner label changes.
@@ -37,31 +70,45 @@ jobs:
             runner: blacksmith-4vcpu-ubuntu-2604
           - name: windows
             runner: blacksmith-4vcpu-windows-2025
-    runs-on: ${{ matrix.runner }}
+    needs: changes
+    # A matrix job skipped by `if` reports the unexpanded name
+    # `check (${{ matrix.name }})`, so the required checks never resolve.
+    # Instead it always runs, on a free GitHub runner with every step
+    # skipped when nothing but prose changed.
+    runs-on: ${{ needs.changes.outputs.code == 'true' && matrix.runner || 'ubuntu-latest' }}
     timeout-minutes: 30
+    env:
+      CODE: ${{ needs.changes.outputs.code }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: env.CODE == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # Installs the toolchain pinned in rust-toolchain.toml (with rustfmt
       # and clippy).
       - name: Install toolchain
+        if: env.CODE == 'true'
         run: rustup show active-toolchain || rustup toolchain install
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - if: env.CODE == 'true'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: check
 
-      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+      - if: env.CODE == 'true'
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: cargo-deny@0.21.0
 
       - name: cargo xtask check
+        if: env.CODE == 'true'
         run: cargo xtask check
 
   msrv:
     name: msrv (1.95)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 30
     steps:
@@ -82,6 +129,8 @@ jobs:
 
   features:
     name: feature combinations
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 30
     steps:
@@ -101,6 +150,8 @@ jobs:
 
   package:
     name: package (publish dry run)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 30
     steps:
@@ -122,6 +173,8 @@ jobs:
     # docs/coverage.md must match the code and the pinned docs commit, so
     # the coverage number in releases stays honest.
     name: coverage (docs/coverage.md)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2604
     timeout-minutes: 15
     steps:
