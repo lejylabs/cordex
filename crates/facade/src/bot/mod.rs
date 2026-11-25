@@ -51,9 +51,11 @@
 
 mod context;
 mod cooldown;
+mod module;
 mod sync;
 
-pub use cooldown::Cooldowns;
+pub use cooldown::{CooldownScope, Cooldowns};
+pub use module::BotModule;
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -90,6 +92,8 @@ type ErrorHandler =
     Arc<dyn Fn(Context, Error) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 type BeforeCommand =
     Arc<dyn Fn(CommandContext) -> Pin<Box<dyn Future<Output = Result<bool>> + Send>> + Send + Sync>;
+type CooldownMessage = Arc<dyn Fn(Duration) -> String + Send + Sync>;
+type RouteParams = Box<[(Box<str>, Box<str>)]>;
 
 fn boxed<C, F, Fut>(f: F) -> Handler<C>
 where
@@ -97,6 +101,97 @@ where
     Fut: Future<Output = Result<()>> + Send + 'static,
 {
     Arc::new(move |ctx| Box::pin(f(ctx)))
+}
+
+fn wrap_with_guards(
+    handler: Handler<CommandContext>,
+    guards: Arc<[BeforeCommand]>,
+) -> Handler<CommandContext> {
+    Arc::new(move |ctx: CommandContext| {
+        let handler = Arc::clone(&handler);
+        let guards = Arc::clone(&guards);
+        Box::pin(async move {
+            for guard in guards.iter() {
+                if !guard(ctx.clone()).await? {
+                    return Ok(());
+                }
+            }
+            handler(ctx).await
+        })
+    })
+}
+
+struct PrefixRoute<C> {
+    prefix: Box<str>,
+    handler: Handler<C>,
+}
+
+enum PatternSegment {
+    Literal(Box<str>),
+    Param(Box<str>),
+}
+
+struct PatternRoute<C> {
+    delimiter: char,
+    segments: Box<[PatternSegment]>,
+    literal_count: usize,
+    handler: Handler<C>,
+}
+
+impl<C> PatternRoute<C> {
+    fn parse(pattern: &str, handler: Handler<C>) -> Self {
+        let delimiter = if pattern.contains(':') || !pattern.contains('/') {
+            ':'
+        } else {
+            '/'
+        };
+        let mut literal_count = 0usize;
+        let segments: Vec<PatternSegment> = pattern
+            .split(delimiter)
+            .map(|seg| {
+                if let Some(name) = seg
+                    .strip_prefix('{')
+                    .and_then(|rest| rest.strip_suffix('}'))
+                    && !name.is_empty()
+                {
+                    PatternSegment::Param(name.into())
+                } else {
+                    literal_count += 1;
+                    PatternSegment::Literal(seg.into())
+                }
+            })
+            .collect();
+        Self {
+            delimiter,
+            segments: segments.into_boxed_slice(),
+            literal_count,
+            handler,
+        }
+    }
+
+    fn matches(&self, id: &str) -> Option<RouteParams> {
+        let parts: Vec<&str> = id.split(self.delimiter).collect();
+        if parts.len() != self.segments.len() {
+            return None;
+        }
+        let mut params = Vec::new();
+        for (segment, actual) in self.segments.iter().zip(parts) {
+            match segment {
+                PatternSegment::Literal(expected) => {
+                    if actual != &**expected {
+                        return None;
+                    }
+                }
+                PatternSegment::Param(name) => {
+                    if actual.is_empty() {
+                        return None;
+                    }
+                    params.push((name.clone(), Box::<str>::from(actual)));
+                }
+            }
+        }
+        Some(params.into_boxed_slice())
+    }
 }
 
 /// Default interval of the reshard check ([`Bot::reshard_interval`]).
@@ -108,9 +203,14 @@ pub const DEFAULT_ERROR_MESSAGE: &str = "Something went wrong while handling thi
 #[derive(Default)]
 struct Handlers {
     commands: HashMap<Box<str>, Handler<CommandContext>>,
+    command_cooldowns: HashMap<Box<str>, cooldown::CommandCooldown>,
     autocomplete: HashMap<Box<str>, Handler<AutocompleteContext>>,
     components: HashMap<Box<str>, Handler<ComponentContext>>,
+    component_prefixes: Vec<PrefixRoute<ComponentContext>>,
+    component_patterns: Vec<PatternRoute<ComponentContext>>,
     modals: HashMap<Box<str>, Handler<ModalContext>>,
+    modal_prefixes: Vec<PrefixRoute<ModalContext>>,
+    modal_patterns: Vec<PatternRoute<ModalContext>>,
     unknown_component: Option<Handler<ComponentContext>>,
     unknown_modal: Option<Handler<ModalContext>>,
     message: Vec<Handler<MessageContext>>,
@@ -131,8 +231,40 @@ struct Handlers {
         )>,
     >,
     voice_state: Vec<Handler<(Context, Arc<cordex_model::voice::VoiceState>)>>,
-    before_command: Option<BeforeCommand>,
+    before_command: Vec<BeforeCommand>,
     on_error: Option<ErrorHandler>,
+}
+
+impl Handlers {
+    fn merge(&mut self, other: Self) {
+        self.commands.extend(other.commands);
+        self.command_cooldowns.extend(other.command_cooldowns);
+        self.autocomplete.extend(other.autocomplete);
+        self.components.extend(other.components);
+        self.component_prefixes.extend(other.component_prefixes);
+        self.component_patterns.extend(other.component_patterns);
+        self.modals.extend(other.modals);
+        self.modal_prefixes.extend(other.modal_prefixes);
+        self.modal_patterns.extend(other.modal_patterns);
+        if other.unknown_component.is_some() {
+            self.unknown_component = other.unknown_component;
+        }
+        if other.unknown_modal.is_some() {
+            self.unknown_modal = other.unknown_modal;
+        }
+        self.message.extend(other.message);
+        self.ready.extend(other.ready);
+        self.event.extend(other.event);
+        self.guild_create.extend(other.guild_create);
+        self.member_join.extend(other.member_join);
+        self.member_leave.extend(other.member_leave);
+        self.reaction_add.extend(other.reaction_add);
+        self.voice_state.extend(other.voice_state);
+        self.before_command.extend(other.before_command);
+        if other.on_error.is_some() {
+            self.on_error = other.on_error;
+        }
+    }
 }
 
 /// State every context points to.
@@ -148,8 +280,12 @@ struct Shared {
     handlers: Handlers,
     data: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
     error_message: Option<Box<str>>,
+    cooldown_message: Option<CooldownMessage>,
+    cooldown_tracker: Cooldowns<(Box<str>, u64)>,
     auto_defer: bool,
     standby: Standby,
+    has_message_content_intent: bool,
+    warned_empty_content: AtomicBool,
 }
 
 #[cfg(feature = "voice")]
@@ -201,6 +337,7 @@ pub struct Bot {
     handlers: Handlers,
     data: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
     error_message: Option<Box<str>>,
+    cooldown_message: Option<CooldownMessage>,
     auto_defer: bool,
     default_allowed_mentions: Option<AllowedMentions>,
     presence: Option<cordex_model::gateway::presence::UpdatePresence>,
@@ -235,6 +372,7 @@ impl Bot {
             handlers: Handlers::default(),
             data: HashMap::new(),
             error_message: Some(DEFAULT_ERROR_MESSAGE.into()),
+            cooldown_message: None,
             auto_defer: true,
             default_allowed_mentions: None,
             presence: None,
@@ -245,6 +383,37 @@ impl Bot {
             #[cfg(feature = "voice")]
             voice: false,
         }
+    }
+
+    /// Create a bot by reading the `DISCORD_TOKEN` environment variable.
+    ///
+    /// Returns [`Error::MissingEnv`] with a clear hint when the variable is
+    /// missing or empty.
+    pub fn from_env() -> Result<Self> {
+        Self::from_env_var("DISCORD_TOKEN")
+    }
+
+    /// Create a bot by reading the environment variable `name`.
+    ///
+    /// Returns [`Error::MissingEnv`] when the variable is missing or empty.
+    pub fn from_env_var(name: &str) -> Result<Self> {
+        let token = std::env::var(name)
+            .ok()
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| Error::MissingEnv(name.into()))?;
+        Ok(Self::new(token))
+    }
+
+    /// Mount a [`BotModule`] (commands, component/modal/event handlers,
+    /// intents, and module-scoped `before_command` guards).
+    pub fn mount(mut self, module: BotModule) -> Self {
+        let (intents, extra_events, commands, handlers) = module.finalize();
+        self.intents |= intents;
+        self.extra_events |= extra_events;
+        module::merge_commands(&mut self.commands, commands);
+        self.handlers.merge(handlers);
+        self
     }
 
     /// Enable voice signaling ([`cordex_voice::VoiceManager`]): adds
@@ -342,6 +511,16 @@ impl Bot {
         self
     }
 
+    /// Customize the ephemeral message sent when a command registered with
+    /// [`command_with_cooldown`](Self::command_with_cooldown) is on cooldown.
+    pub fn cooldown_message<F>(mut self, format: F) -> Self
+    where
+        F: Fn(Duration) -> String + Send + Sync + 'static,
+    {
+        self.cooldown_message = Some(Arc::new(format));
+        self
+    }
+
     /// Switch automatic deferring of commands and modals off (default
     /// on: after 2.5 s without an answer).
     pub fn auto_defer(mut self, enabled: bool) -> Self {
@@ -386,13 +565,16 @@ impl Bot {
 
     /// Hook run before every slash, user or message command handler.
     /// Return `Ok(true)` to proceed with the command, or `Ok(false)` to stop
-    /// (for cooldowns, maintenance mode, blacklists, or logging).
+    /// (for cooldowns, maintenance mode, blacklists, or logging). Multiple
+    /// hooks run in registration order.
     pub fn before_command<F, Fut>(mut self, handler: F) -> Self
     where
         F: Fn(CommandContext) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<bool>> + Send + 'static,
     {
-        self.handlers.before_command = Some(Arc::new(move |ctx| Box::pin(handler(ctx))));
+        self.handlers
+            .before_command
+            .push(Arc::new(move |ctx| Box::pin(handler(ctx))));
         self
     }
 
@@ -409,6 +591,29 @@ impl Bot {
         self.commands.retain(|c| c.name() != command.name());
         self.commands.push(command);
         self
+    }
+
+    /// Register a command with a built-in per-command cooldown.
+    ///
+    /// When triggered while on cooldown, the bot replies ephemerally with the
+    /// remaining wait time (customizable via
+    /// [`cooldown_message`](Self::cooldown_message)) and skips the handler.
+    pub fn command_with_cooldown<F, Fut>(
+        mut self,
+        command: Command,
+        duration: Duration,
+        scope: CooldownScope,
+        handler: F,
+    ) -> Self
+    where
+        F: Fn(CommandContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        let name: Box<str> = command.name().into();
+        self.handlers
+            .command_cooldowns
+            .insert(name, cooldown::CommandCooldown { duration, scope });
+        self.command(command, handler)
     }
 
     /// Shortcut for registering a slash command without options.
@@ -480,6 +685,54 @@ impl Bot {
         self.on_component(custom_id, handler)
     }
 
+    /// Handler for any button or select menu whose `custom_id` starts with
+    /// `prefix` (e.g. `"ticket_close_"`). The unmatched remainder is exposed
+    /// via [`ComponentContext::matched_tail`]. Longest matching prefix wins.
+    pub fn on_component_prefix<F, Fut>(mut self, prefix: &str, handler: F) -> Self
+    where
+        F: Fn(ComponentContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers.component_prefixes.push(PrefixRoute {
+            prefix: prefix.into(),
+            handler: boxed(handler),
+        });
+        self
+    }
+
+    /// Alias of [`on_component_prefix`](Self::on_component_prefix) for buttons.
+    pub fn on_button_prefix<F, Fut>(self, prefix: &str, handler: F) -> Self
+    where
+        F: Fn(ComponentContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.on_component_prefix(prefix, handler)
+    }
+
+    /// Handler for components whose `custom_id` matches a `{param}` segment
+    /// pattern delimited by `:` or `/` (e.g. `"ticket:{action}:{id}"`).
+    /// Captured values are read via [`ComponentContext::param`] and
+    /// [`ComponentContext::param_id`].
+    pub fn on_component_pattern<F, Fut>(mut self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(ComponentContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers
+            .component_patterns
+            .push(PatternRoute::parse(pattern, boxed(handler)));
+        self
+    }
+
+    /// Alias of [`on_component_pattern`](Self::on_component_pattern) for buttons.
+    pub fn on_button_pattern<F, Fut>(self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(ComponentContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.on_component_pattern(pattern, handler)
+    }
+
     /// Handler for submitted modals with this `custom_id` (same `:` rule
     /// as [`on_component`](Self::on_component)).
     pub fn on_modal<F, Fut>(mut self, custom_id: &str, handler: F) -> Self
@@ -490,6 +743,34 @@ impl Bot {
         self.handlers
             .modals
             .insert(custom_id.into(), boxed(handler));
+        self
+    }
+
+    /// Handler for any submitted modal whose `custom_id` starts with `prefix`.
+    /// Read the remainder with [`ModalContext::matched_tail`].
+    pub fn on_modal_prefix<F, Fut>(mut self, prefix: &str, handler: F) -> Self
+    where
+        F: Fn(ModalContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers.modal_prefixes.push(PrefixRoute {
+            prefix: prefix.into(),
+            handler: boxed(handler),
+        });
+        self
+    }
+
+    /// Handler for submitted modals matching a `{param}` segment pattern
+    /// (e.g. `"report:{target_id}"`). Read captured values via
+    /// [`ModalContext::param`] and [`ModalContext::param_id`].
+    pub fn on_modal_pattern<F, Fut>(mut self, pattern: &str, handler: F) -> Self
+    where
+        F: Fn(ModalContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers
+            .modal_patterns
+            .push(PatternRoute::parse(pattern, boxed(handler)));
         self
     }
 
@@ -642,7 +923,11 @@ impl Bot {
         if !(h.commands.is_empty()
             && h.autocomplete.is_empty()
             && h.components.is_empty()
+            && h.component_prefixes.is_empty()
+            && h.component_patterns.is_empty()
             && h.modals.is_empty()
+            && h.modal_prefixes.is_empty()
+            && h.modal_patterns.is_empty()
             && h.unknown_component.is_none()
             && h.unknown_modal.is_none())
         {
@@ -709,8 +994,8 @@ impl Bot {
         }
         let http = http.build()?;
         let event_types = self.event_types();
-        let fixed_shards = self.shards;
-        let presence = self.presence;
+        let fixed_shards = self.shards.clone();
+        let presence = self.presence.clone();
         let mut manager = build_manager(
             &self.token,
             self.intents,
@@ -721,46 +1006,24 @@ impl Bot {
         )
         .await?;
         let mut events = manager.events();
-
-        let manager = Arc::new(std::sync::Mutex::new(Arc::new(manager)));
-        #[cfg(feature = "voice")]
-        let voice = self.voice.then(|| {
-            Arc::new(cordex_voice::VoiceManager::new(Arc::new(BotVoiceGateway {
-                manager: Arc::clone(&manager),
-            })))
-        });
-
-        let shared = Arc::new(Shared {
-            http,
-            manager,
-            #[cfg(feature = "cache")]
-            cache: self
-                .cache
-                .map(|config| Arc::new(cordex_cache::InMemoryCache::new(config))),
-            #[cfg(feature = "voice")]
-            voice,
-            me: OnceLock::new(),
-            handlers: self.handlers,
-            data: self.data,
-            error_message: self.error_message,
-            auto_defer: self.auto_defer,
-            standby: Standby::new(),
-        });
-        let commands: Arc<[Command]> = self.commands.into();
+        let token = self.token.clone();
+        let intents = self.intents;
+        let reshard_interval = self.reshard_interval;
         let guild_commands = self.guild_commands;
         let registered = AtomicBool::new(!self.register_commands);
+        let (shared, commands) = self.build_shared(http, manager);
 
         shared.manager().start().await?;
 
         // Resharding: a task prepares a new manager and hands it over here.
         let (switch_tx, mut switch_rx) = tokio::sync::mpsc::channel::<Reshard>(1);
         if fixed_shards.is_none()
-            && let Some(interval) = self.reshard_interval
+            && let Some(interval) = reshard_interval
         {
             tokio::spawn(reshard_loop(
                 Arc::clone(&shared),
-                self.token.clone(),
-                self.intents,
+                token,
+                intents,
                 event_types,
                 presence,
                 interval,
@@ -797,6 +1060,38 @@ impl Bot {
             on_manager_event(&shared, item, &registered, guild_commands, &commands).await?;
         }
         Ok(())
+    }
+
+    fn build_shared(self, http: Client, manager: ShardManager) -> (Arc<Shared>, Arc<[Command]>) {
+        let manager = Arc::new(std::sync::Mutex::new(Arc::new(manager)));
+        #[cfg(feature = "voice")]
+        let voice = self.voice.then(|| {
+            Arc::new(cordex_voice::VoiceManager::new(Arc::new(BotVoiceGateway {
+                manager: Arc::clone(&manager),
+            })))
+        });
+
+        let shared = Arc::new(Shared {
+            http,
+            manager,
+            #[cfg(feature = "cache")]
+            cache: self
+                .cache
+                .map(|config| Arc::new(cordex_cache::InMemoryCache::new(config))),
+            #[cfg(feature = "voice")]
+            voice,
+            me: OnceLock::new(),
+            handlers: self.handlers,
+            data: self.data,
+            error_message: self.error_message,
+            cooldown_message: self.cooldown_message,
+            cooldown_tracker: Cooldowns::new(),
+            auto_defer: self.auto_defer,
+            standby: Standby::new(),
+            has_message_content_intent: self.intents.contains(Intents::MESSAGE_CONTENT),
+            warned_empty_content: AtomicBool::new(false),
+        });
+        (shared, self.commands.into())
     }
 }
 
@@ -1202,6 +1497,23 @@ fn route_message(ctx: &Context, message: impl FnOnce() -> Arc<Message>) {
     if ctx.shared.me.get() == Some(&message.author.id) {
         return;
     }
+    if !ctx.shared.has_message_content_intent
+        && message.guild_id.is_some()
+        && !message.author.bot
+        && message.content.is_empty()
+        && message.attachments.is_empty()
+        && message.embeds.is_empty()
+        && !ctx
+            .shared
+            .warned_empty_content
+            .swap(true, Ordering::Relaxed)
+    {
+        tracing::warn!(
+            channel_id = %message.channel_id,
+            "received a guild message with empty content because MESSAGE_CONTENT is not enabled; \
+             call Bot::message_content() and turn on Message Content Intent in the Discord Developer Portal"
+        );
+    }
     for handler in handlers {
         spawn_guarded(
             "message",
@@ -1214,21 +1526,147 @@ fn route_message(ctx: &Context, message: impl FnOnce() -> Arc<Message>) {
     }
 }
 
-/// Look up a component/modal handler: exact id first, then longest `:`-delimited
-/// prefix (e.g. `"giveaway:join:42"` checks `"giveaway:join:42"`, then
-/// `"giveaway:join"`, then `"giveaway"`).
-fn lookup<'a, C>(map: &'a HashMap<Box<str>, Handler<C>>, id: &str) -> Option<&'a Handler<C>> {
+struct MatchedRoute<C> {
+    handler: Handler<C>,
+    matched_tail: Box<str>,
+    params: RouteParams,
+}
+
+/// Look up a component/modal handler:
+/// 1. Exact id in `map`, or longest `:`-delimited prefix in `map`
+///    (e.g. `"giveaway:join:42"` checks `"giveaway:join:42"`, `"giveaway:join"`, `"giveaway"`).
+/// 2. Segment pattern in `patterns` (`"ticket:{action}:{id}"`; highest literal segment count wins).
+/// 3. General string prefix in `prefixes` (`"ticket_close_"`; longest prefix wins).
+fn lookup_route<C>(
+    map: &HashMap<Box<str>, Handler<C>>,
+    patterns: &[PatternRoute<C>],
+    prefixes: &[PrefixRoute<C>],
+    id: &str,
+) -> Option<MatchedRoute<C>> {
     if let Some(handler) = map.get(id) {
-        return Some(handler);
+        return Some(MatchedRoute {
+            handler: Arc::clone(handler),
+            matched_tail: Box::from(""),
+            params: Box::from([]),
+        });
     }
     let mut prefix = id;
     while let Some((head, _)) = prefix.rsplit_once(':') {
         if let Some(handler) = map.get(head) {
-            return Some(handler);
+            let tail = id
+                .strip_prefix(head)
+                .and_then(|rest| rest.strip_prefix(':'))
+                .unwrap_or("");
+            return Some(MatchedRoute {
+                handler: Arc::clone(handler),
+                matched_tail: Box::from(tail),
+                params: Box::from([]),
+            });
         }
         prefix = head;
     }
+
+    let mut best_pattern: Option<(usize, &PatternRoute<C>, RouteParams)> = None;
+    for route in patterns {
+        if let Some(params) = route.matches(id)
+            && best_pattern
+                .as_ref()
+                .is_none_or(|(best_lit, _, _)| route.literal_count > *best_lit)
+        {
+            best_pattern = Some((route.literal_count, route, params));
+        }
+    }
+    if let Some((_, route, params)) = best_pattern {
+        return Some(MatchedRoute {
+            handler: Arc::clone(&route.handler),
+            matched_tail: Box::from(""),
+            params,
+        });
+    }
+
+    let mut best_prefix: Option<&PrefixRoute<C>> = None;
+    for route in prefixes {
+        if id.starts_with(&*route.prefix)
+            && best_prefix.is_none_or(|prev| route.prefix.len() > prev.prefix.len())
+        {
+            best_prefix = Some(route);
+        }
+    }
+    if let Some(route) = best_prefix {
+        let tail = id.strip_prefix(&*route.prefix).unwrap_or("");
+        return Some(MatchedRoute {
+            handler: Arc::clone(&route.handler),
+            matched_tail: Box::from(tail),
+            params: Box::from([]),
+        });
+    }
+
     None
+}
+
+fn cooldown_scope_key(ctx: &CommandContext, scope: CooldownScope) -> u64 {
+    let user_id = ctx.user().map_or(0, |u| u.id.get());
+    match scope {
+        CooldownScope::User => user_id,
+        CooldownScope::Channel => ctx.channel_id().map_or(user_id, Id::get),
+        CooldownScope::Guild => ctx.guild_id().map_or(user_id, Id::get),
+        CooldownScope::Global => 0,
+    }
+}
+
+fn format_cooldown_wait(custom: Option<&CooldownMessage>, remaining: Duration) -> String {
+    if let Some(formatter) = custom {
+        return formatter(remaining);
+    }
+    let secs = remaining.as_secs().max(1);
+    format!("This command is on cooldown. Try again in {secs}s.")
+}
+
+fn prepare_command_future(
+    ctx: Context,
+    interaction: Box<Interaction>,
+    data: cordex_model::interaction::CommandData,
+    handle: &InteractionHandle,
+) -> Option<BoxFuture> {
+    let handlers = &ctx.shared.handlers;
+    let Some(handler) = handlers.commands.get(&*data.name).cloned() else {
+        tracing::warn!(command = %data.name, "no handler for command");
+        let handle = handle.clone();
+        tokio::spawn(async move {
+            let reply = Reply::new("This command is not available.").ephemeral();
+            let _ = handle.respond(reply).await;
+        });
+        return None;
+    };
+    let cooldown = handlers.command_cooldowns.get(&*data.name).copied();
+    let before: Arc<[BeforeCommand]> = handlers.before_command.clone().into();
+    let auto_defer = ctx.shared.auto_defer;
+    let cmd_ctx = CommandContext {
+        ctx,
+        interaction,
+        data,
+        handle: handle.clone(),
+    };
+    if let Some(cd) = cooldown {
+        let scope_key = cooldown_scope_key(&cmd_ctx, cd.scope);
+        let key = (Box::<str>::from(cmd_ctx.name()), scope_key);
+        if let Some(wait) = cmd_ctx.shared.cooldown_tracker.check(key, cd.duration) {
+            let msg = format_cooldown_wait(cmd_ctx.shared.cooldown_message.as_ref(), wait);
+            let handle = handle.clone();
+            tokio::spawn(async move {
+                let _ = handle.respond(Reply::new(msg).ephemeral()).await;
+            });
+            return None;
+        }
+    }
+    if auto_defer {
+        handle.auto_defer(DEFAULT_AUTO_DEFER, false);
+    }
+    Some(if before.is_empty() {
+        handler(cmd_ctx)
+    } else {
+        wrap_with_guards(handler, before)(cmd_ctx)
+    })
 }
 
 fn route_interaction(ctx: Context, mut interaction: Box<Interaction>) {
@@ -1254,67 +1692,69 @@ fn route_interaction(ctx: Context, mut interaction: Box<Interaction>) {
             })
         }
         Some(InteractionData::Command(data)) => {
-            let Some(handler) = handlers.commands.get(&*data.name).cloned() else {
-                tracing::warn!(command = %data.name, "no handler for command");
-                tokio::spawn(async move {
-                    let reply = Reply::new("This command is not available.").ephemeral();
-                    let _ = handle.respond(reply).await;
-                });
+            let Some(fut) = prepare_command_future(ctx, interaction, data, &handle) else {
                 return;
             };
-            if auto_defer {
-                handle.auto_defer(DEFAULT_AUTO_DEFER, false);
-            }
-            let before = handlers.before_command.clone();
-            let cmd_ctx = CommandContext {
-                ctx,
-                interaction,
-                data,
-                handle: handle.clone(),
-            };
-            if let Some(before) = before {
-                Box::pin(async move {
-                    if before(cmd_ctx.clone()).await? {
-                        handler(cmd_ctx).await
-                    } else {
-                        Ok(())
-                    }
-                })
-            } else {
-                handler(cmd_ctx)
-            }
+            fut
         }
         Some(InteractionData::MessageComponent(data)) => {
-            let Some(handler) = lookup(&handlers.components, &data.custom_id)
-                .or(handlers.unknown_component.as_ref())
-                .cloned()
-            else {
+            let matched = lookup_route(
+                &handlers.components,
+                &handlers.component_patterns,
+                &handlers.component_prefixes,
+                &data.custom_id,
+            )
+            .or_else(|| {
+                handlers
+                    .unknown_component
+                    .as_ref()
+                    .map(|handler| MatchedRoute {
+                        handler: Arc::clone(handler),
+                        matched_tail: Box::from(""),
+                        params: Box::from([]),
+                    })
+            });
+            let Some(matched) = matched else {
                 tracing::debug!(custom_id = %data.custom_id, "no component handler");
                 return;
             };
-            handler(ComponentContext {
+            (matched.handler)(ComponentContext {
                 ctx,
                 interaction,
                 data,
                 handle: handle.clone(),
+                matched_tail: matched.matched_tail,
+                params: matched.params,
             })
         }
         Some(InteractionData::ModalSubmit(data)) => {
-            let Some(handler) = lookup(&handlers.modals, &data.custom_id)
-                .or(handlers.unknown_modal.as_ref())
-                .cloned()
-            else {
+            let matched = lookup_route(
+                &handlers.modals,
+                &handlers.modal_patterns,
+                &handlers.modal_prefixes,
+                &data.custom_id,
+            )
+            .or_else(|| {
+                handlers.unknown_modal.as_ref().map(|handler| MatchedRoute {
+                    handler: Arc::clone(handler),
+                    matched_tail: Box::from(""),
+                    params: Box::from([]),
+                })
+            });
+            let Some(matched) = matched else {
                 tracing::debug!(custom_id = %data.custom_id, "no modal handler");
                 return;
             };
             if auto_defer {
                 handle.auto_defer(DEFAULT_AUTO_DEFER, false);
             }
-            handler(ModalContext {
+            (matched.handler)(ModalContext {
                 ctx,
                 interaction,
                 data,
                 handle: handle.clone(),
+                matched_tail: matched.matched_tail,
+                params: matched.params,
             })
         }
         _ => return,

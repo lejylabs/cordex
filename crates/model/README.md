@@ -5,17 +5,19 @@
 Discord API v10 models for [cordex]: every object, event, opcode, enum value
 and flag of the official bot API, plus helpers that need no network.
 
-- **Typed everything**: snowflakes (`Id<UserMarker>`, `Id<GuildMarker>`, …
-  that cannot be mixed up), flags (`Permissions`, `Intents`, `MessageFlags`,
-  …), timestamps, all REST objects and gateway events.
+- **Typed everything**: snowflakes (`Id<UserMarker>`, `Id<GuildMarker>`, … plus
+  short aliases `UserId`, `GuildId`, `ChannelId`, `RoleId`, `MessageId`, … that
+  cannot be mixed up), flags (`Permissions`, `Intents`, `MessageFlags`, …),
+  timestamps, all REST objects and gateway events.
 - **Never fails on new Discord data**: unknown fields are ignored, unknown
   enum values and events are kept (`Unknown(..)`), unknown flag bits survive
   a round trip.
 - **Small and fast**: large payloads are boxed, `Event` stays at most 48 bytes,
   `GUILD_CREATE` is read without buffering it twice.
 - **Helpers**: `MessageBuilder` with Markdown escaping, embed builder with
-  Discord's limits, CDN URLs, mentions and timestamp markdown, mention parsing,
-  permission calculator, webhook, invite and message URL parsing.
+  Discord's limits (`Embed::success`/`error`/`info`/`warn` + `colors`), CDN
+  URLs, mentions and timestamp markdown, mention parsing, permission
+  calculator, webhook, invite and message URL parsing.
 - **No async, no network**: usable in any project.
 
 Most bots use the facade crate [`cordex`][facade], which re-exports this crate.

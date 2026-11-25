@@ -331,6 +331,8 @@ impl Context {
             interaction,
             data,
             handle,
+            matched_tail: Box::from(""),
+            params: Box::from([]),
         })
     }
 
@@ -348,6 +350,8 @@ impl Context {
             interaction,
             data,
             handle,
+            matched_tail: Box::from(""),
+            params: Box::from([]),
         })
     }
 
@@ -545,6 +549,32 @@ macro_rules! interaction_methods {
                 })
             }
 
+            /// Return `Err(Error::MissingPermission)` unless the invoking user
+            /// holds `permission` (or `ADMINISTRATOR`).
+            pub fn require_user_perm(&self, permission: cordex_model::Permissions) -> Result<()> {
+                if self.user_can(permission) {
+                    Ok(())
+                } else {
+                    Err(crate::Error::MissingPermission {
+                        permission,
+                        actor: "user",
+                    })
+                }
+            }
+
+            /// Return `Err(Error::MissingPermission)` unless the bot holds
+            /// `permission` (or `ADMINISTRATOR`).
+            pub fn require_bot_perm(&self, permission: cordex_model::Permissions) -> Result<()> {
+                if self.bot_can(permission) {
+                    Ok(())
+                } else {
+                    Err(crate::Error::MissingPermission {
+                        permission,
+                        actor: "bot",
+                    })
+                }
+            }
+
             /// Answer with a message. After a defer (also the automatic
             /// one) this edits the deferred response instead.
             pub async fn reply(&self, reply: impl Into<Reply>) -> Result<()> {
@@ -609,6 +639,36 @@ macro_rules! modal_method {
             pub async fn modal(&self, modal: Modal) -> Result<()> {
                 Ok(self.handle.show_modal(modal).await?)
             }
+
+            /// Open `modal` and wait inline for the invoking user to submit it
+            /// (up to `timeout`), returning `Ok(None)` if they cancel or time
+            /// out. The submit is consumed here and is not delivered to
+            /// [`Bot::on_modal`](super::Bot::on_modal) handlers.
+            ///
+            /// Must be the first answer (not after a defer).
+            pub async fn ask_modal(
+                &self,
+                modal: Modal,
+                timeout: Duration,
+            ) -> Result<Option<ModalContext>> {
+                let target: Box<str> = modal.custom_id().into();
+                let author = self.user().map(|u| u.id);
+                // Subscribe before sending the modal so fast submits cannot race.
+                let mut stream = self.shared.standby.wait_for_stream(move |event| match event {
+                    Event::InteractionCreate(i) => {
+                        i.kind == InteractionType::ModalSubmit
+                            && author.is_none_or(|id| i.author().is_some_and(|u| u.id == id))
+                            && matches!(
+                                i.data.as_ref(),
+                                Some(InteractionData::ModalSubmit(d)) if d.custom_id.as_ref() == &*target
+                            )
+                    }
+                    _ => false,
+                });
+                self.handle.show_modal(modal).await?;
+                let received = tokio::time::timeout(timeout, stream.recv()).await.ok().flatten();
+                Ok(received.and_then(|event| self.modal_context(event)))
+            }
         }
     )+};
 }
@@ -647,6 +707,24 @@ impl CommandContext {
     /// Path of the invoked subcommand (`["group", "sub"]`), empty without.
     pub fn subcommand(&self) -> Vec<&str> {
         self.options().subcommand()
+    }
+
+    /// Subcommand group name when invoked as `/cmd <group> <sub>`, `None`
+    /// otherwise.
+    pub fn subcommand_group(&self) -> Option<&str> {
+        let sub = self.subcommand();
+        (sub.len() == 2).then(|| sub[0])
+    }
+
+    /// Leaf subcommand name (`"add"` for both `/role add` and `/role mod add`),
+    /// `None` without a subcommand.
+    pub fn subcommand_name(&self) -> Option<&str> {
+        self.subcommand().last().copied()
+    }
+
+    /// Space-joined subcommand path (`""`, `"add"`, or `"mod add"`).
+    pub fn subcommand_path(&self) -> String {
+        self.subcommand().join(" ")
     }
 
     /// Required string option.
@@ -861,6 +939,139 @@ impl CommandContext {
         let _ = self.edit(page_reply(index, true)).await;
         Ok(())
     }
+
+    /// Ask the invoking user a yes/no confirmation question with `Confirm` /
+    /// `Cancel` buttons. Disables the buttons once answered or on timeout and
+    /// returns `Ok(true)` if confirmed, `Ok(false)` if cancelled or timed out.
+    pub async fn confirm(&self, prompt: impl Into<Reply>, timeout: Duration) -> Result<bool> {
+        self.confirm_with(prompt, "Confirm", "Cancel", timeout)
+            .await
+    }
+
+    /// Like [`confirm`](Self::confirm), with custom labels for the confirm and
+    /// cancel buttons.
+    pub async fn confirm_with(
+        &self,
+        prompt: impl Into<Reply>,
+        yes_label: impl AsRef<str>,
+        no_label: impl AsRef<str>,
+        timeout: Duration,
+    ) -> Result<bool> {
+        let base = prompt.into();
+        let yes_label = yes_label.as_ref();
+        let no_label = no_label.as_ref();
+        let author = self.user().map(|u| u.id);
+
+        let build_reply = |disabled: bool| {
+            let mut yes = cordex_model::component::Button::success("cordex_confirm:yes", yes_label);
+            let mut no = cordex_model::component::Button::danger("cordex_confirm:no", no_label);
+            if disabled {
+                yes = yes.disabled();
+                no = no.disabled();
+            }
+            let row = cordex_model::component::ActionRow::new([yes, no]);
+            base.clone().components(vec![row.into()])
+        };
+
+        if self.handle.state().await == ResponseState::Pending {
+            self.defer().await?;
+        }
+        let message = self.edit(build_reply(false)).await?;
+        let mut clicks = self.button_clicks(message.id, timeout);
+        while let Some(click) = clicks.next().await {
+            if author.is_some() && click.user().map(|u| u.id) != author {
+                let _ = click
+                    .reply_ephemeral("Only the command author can respond to this prompt.")
+                    .await;
+                continue;
+            }
+            match click.custom_id() {
+                "cordex_confirm:yes" => {
+                    let _ = click.update(build_reply(true)).await;
+                    return Ok(true);
+                }
+                "cordex_confirm:no" => {
+                    let _ = click.update(build_reply(true)).await;
+                    return Ok(false);
+                }
+                _ => {}
+            }
+        }
+        let _ = self.edit(build_reply(true)).await;
+        Ok(false)
+    }
+
+    /// Ask the invoking user to pick from a string select menu. Disables the
+    /// menu once answered or on timeout and returns the selected values (or
+    /// `Ok(None)` on timeout).
+    pub async fn select(
+        &self,
+        prompt: impl Into<Reply>,
+        options: impl IntoIterator<Item = cordex_model::component::SelectOption>,
+        timeout: Duration,
+    ) -> Result<Option<Vec<String>>> {
+        let base = prompt.into();
+        let options: Vec<cordex_model::component::SelectOption> = options.into_iter().collect();
+        if options.is_empty() {
+            return Ok(None);
+        }
+        let author = self.user().map(|u| u.id);
+
+        let build_reply = |disabled: bool| {
+            let mut menu =
+                cordex_model::component::StringSelect::new("cordex_select", options.clone());
+            if disabled {
+                menu = menu.disabled();
+            }
+            let row = cordex_model::component::ActionRow::new([menu]);
+            base.clone().components(vec![row.into()])
+        };
+
+        if self.handle.state().await == ResponseState::Pending {
+            self.defer().await?;
+        }
+        let message = self.edit(build_reply(false)).await?;
+        let mut clicks = self.button_clicks(message.id, timeout);
+        while let Some(click) = clicks.next().await {
+            if author.is_some() && click.user().map(|u| u.id) != author {
+                let _ = click
+                    .reply_ephemeral("Only the command author can use this menu.")
+                    .await;
+                continue;
+            }
+            if click.custom_id() == "cordex_select" {
+                let selected: Vec<String> =
+                    click.values().iter().map(ToString::to_string).collect();
+                let _ = click.update(build_reply(true)).await;
+                return Ok(Some(selected));
+            }
+        }
+        let _ = self.edit(build_reply(true)).await;
+        Ok(None)
+    }
+
+    /// Reply with `prompt` and wait for the invoking user's next message in
+    /// the same channel (up to `timeout`).
+    ///
+    /// Requires `MESSAGE_CREATE` to be parsed (an `on_message` handler or
+    /// `Bot::parse_events(EventTypeFlags::MESSAGE_CREATE)`) and the message
+    /// intents.
+    pub async fn prompt(
+        &self,
+        prompt: impl Into<Reply>,
+        timeout: Duration,
+    ) -> Result<Option<Message>> {
+        let Some(channel_id) = self.channel_id() else {
+            return Ok(None);
+        };
+        let author = self.user().map(|u| u.id);
+        self.reply(prompt).await?;
+        Ok(self
+            .wait_for_message(channel_id, timeout, move |msg| {
+                author.is_none_or(|id| msg.author.id == id)
+            })
+            .await)
+    }
 }
 
 /// Autocomplete request for a command option.
@@ -929,6 +1140,8 @@ pub struct ComponentContext {
     pub(super) interaction: Box<Interaction>,
     pub(super) data: MessageComponentData,
     pub(super) handle: InteractionHandle,
+    pub(super) matched_tail: Box<str>,
+    pub(super) params: Box<[(Box<str>, Box<str>)]>,
 }
 
 impl fmt::Debug for ComponentContext {
@@ -952,6 +1165,29 @@ impl ComponentContext {
             .custom_id
             .split_once(':')
             .map_or("", |(_, arg)| arg)
+    }
+
+    /// Unmatched remainder after a matched prefix from
+    /// [`Bot::on_component_prefix`](super::Bot::on_component_prefix) /
+    /// [`Bot::on_button_prefix`](super::Bot::on_button_prefix) or a `:` prefix
+    /// match (empty for exact or pattern matches).
+    pub fn matched_tail(&self) -> &str {
+        &self.matched_tail
+    }
+
+    /// Value captured for `{name}` by
+    /// [`Bot::on_component_pattern`](super::Bot::on_component_pattern) /
+    /// [`Bot::on_button_pattern`](super::Bot::on_button_pattern).
+    pub fn param(&self, name: &str) -> Option<&str> {
+        self.params
+            .iter()
+            .find(|(k, _)| &**k == name)
+            .map(|(_, v)| &**v)
+    }
+
+    /// Parse a captured `{name}` parameter as a typed snowflake [`Id<T>`].
+    pub fn param_id<T>(&self, name: &str) -> Option<Id<T>> {
+        self.param(name)?.parse().ok()
     }
 
     /// Selected values of a select menu (empty for buttons).
@@ -981,6 +1217,8 @@ pub struct ModalContext {
     pub(super) interaction: Box<Interaction>,
     pub(super) data: ModalSubmitData,
     pub(super) handle: InteractionHandle,
+    pub(super) matched_tail: Box<str>,
+    pub(super) params: Box<[(Box<str>, Box<str>)]>,
 }
 
 impl fmt::Debug for ModalContext {
@@ -1003,6 +1241,27 @@ impl ModalContext {
             .custom_id
             .split_once(':')
             .map_or("", |(_, arg)| arg)
+    }
+
+    /// Unmatched remainder after a matched prefix from
+    /// [`Bot::on_modal_prefix`](super::Bot::on_modal_prefix) or a `:` prefix
+    /// match.
+    pub fn matched_tail(&self) -> &str {
+        &self.matched_tail
+    }
+
+    /// Value captured for `{name}` by
+    /// [`Bot::on_modal_pattern`](super::Bot::on_modal_pattern).
+    pub fn param(&self, name: &str) -> Option<&str> {
+        self.params
+            .iter()
+            .find(|(k, _)| &**k == name)
+            .map(|(_, v)| &**v)
+    }
+
+    /// Parse a captured `{name}` parameter as a typed snowflake [`Id<T>`].
+    pub fn param_id<T>(&self, name: &str) -> Option<Id<T>> {
+        self.param(name)?.parse().ok()
     }
 
     /// Value of the text input or radio group with this `custom_id`

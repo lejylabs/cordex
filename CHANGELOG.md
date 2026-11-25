@@ -6,9 +6,27 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+## 0.1.9 - 2026-11-25
+
+- **New zero-dependency CLI crate `cordex-migrate`:**
+  - `cordex-migrate analyze [PATH]` scans `Cargo.toml` and `src/**/*.rs` for `serenity`, `poise`, `songbird`, and `twilight-*` usage, recommends the exact `cordex` dependency and minimal feature set, and lists safe auto-rewrites vs. manual follow-ups.
+  - `cordex-migrate apply [PATH] [--dry-run | --write] [--no-todos]` performs deterministic mechanical rewrites outside comments and string literals and inserts idempotent `// TODO(cordex-migrate): ...` guidance notes linked to the expanded migration guide.
 - **`cordex-model`:**
   - Added `EmbedAudio` and `Embed.audio` (pinned `discord-api-docs@5a61ef8ebaf5`, #3).
   - Added `parse_invite_url(url)` (re-exported at crate root) and `ParseError::InviteUrl` for parsing `discord.gg/{code}` and `discord.com/invite/{code}` URLs.
+  - Added zero-cost snowflake ID type aliases (`GuildId`, `ChannelId`, `UserId`, `RoleId`, `MessageId`, `EmojiId`, `ApplicationId`, `AttachmentId`, `WebhookId`, `CommandId`, `InteractionId`, and all remaining markers in `cordex_model::id`; common aliases re-exported at crate root and in `cordex::prelude`).
+  - Added `cordex_model::message::colors` RGB constants (`BLURPLE`, `GREEN`, `YELLOW`, `RED`, `ORANGE`, `BLUE`, `TEAL`, `PURPLE`, `FUCHSIA`, `WHITE`, `DARK_GREY`, `BLACK`) and preset constructors `Embed::success`, `Embed::error`, `Embed::info`, and `Embed::warn`.
+  - Added `StringSelect::disabled()`.
+- **`cordex` facade (`Bot`):**
+  - Added `BotModule` and `Bot::mount` (nestable) to split commands, component/modal handlers, events, intents, and module-scoped `before_command` guards across files.
+  - Added dynamic component and modal routing: `on_component_prefix` / `on_button_prefix` / `on_modal_prefix` (longest prefix wins, exposing `ctx.matched_tail()`) and `{param}` segment pattern routing via `on_component_pattern` / `on_button_pattern` / `on_modal_pattern` (exposing `ctx.param(...)` and `ctx.param_id::<T>(...)`).
+  - Added high-level inline interactive flows: `CommandContext::confirm` / `confirm_with`, `CommandContext::select`, `CommandContext::prompt`, and `ask_modal` on `CommandContext` and `ComponentContext` (subscribes to `Standby` before opening the modal to prevent submit races).
+  - Added command-level cooldowns (`Bot::command_with_cooldown`, `BotModule::command_with_cooldown`, `CooldownScope::{User, Channel, Guild, Global}`, `Bot::cooldown_message`) and chained `Bot::before_command` hooks.
+  - Added subcommand helpers on `CommandContext`: `subcommand_group()`, `subcommand_name()`, and `subcommand_path()`.
+  - Added beginner-safety shortcuts: `Bot::from_env()` / `Bot::from_env_var(...)` (`Error::MissingEnv`), `require_user_perm` / `require_bot_perm` (`Error::MissingPermission`), and a one-shot runtime `tracing::warn!` when guild messages arrive with empty content because `MESSAGE_CONTENT` is disabled.
+- **Documentation:**
+  - Greatly expanded `book/src/migration.md` with `cordex-migrate` walkthroughs, crate & type/method cheatsheets, 10 side-by-side Serenity/Poise & Twilight recipes, and a gotchas checklist.
+  - Updated `book/src/simple-layer.md`, `book/src/messages.md`, `book/src/commands.md`, and READMEs for all `0.1.9` additions.
 
 ## 0.1.8 - 2026-11-24
 

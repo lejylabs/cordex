@@ -20,7 +20,7 @@ Add `cordex` and `tokio` to `Cargo.toml` (requires Rust 1.95+):
 
 ```toml
 [dependencies]
-cordex = "0.1.8"
+cordex = "0.1.9"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -33,9 +33,7 @@ use cordex::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let token = std::env::var("DISCORD_TOKEN")?;
-
-    Bot::new(token)
+    Bot::from_env()?
         .slash("ping", "Replies with Pong!", |ctx: CommandContext| async move {
             ctx.reply("Pong!").await
         })

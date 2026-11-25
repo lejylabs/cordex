@@ -20,7 +20,7 @@ Read the full [cordex Guide][guide] (quickstart, commands, caching, migration fr
 
 ```toml
 [dependencies]
-cordex = "0.1.8"
+cordex = "0.1.9"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -137,13 +137,18 @@ One small file per task in [`crates/facade/examples`][examples]:
 
 ## What is included
 
-- **Simple layer** (`cordex::bot`): `Bot` with plain async closures for
-  commands, autocomplete, buttons, select menus, modals, messages and any
-  event; typed shared state (`Bot::data` / `ctx.data::<T>()`), `on_error` and
-  `before_command` hooks, graceful shutdown (`run_until_ctrl_c()` /
-  `run_until()`), `ctx.paginate(...)`, `ctx.send(...)` / `ctx.dm(...)`,
+- **Simple layer** (`cordex::bot`): `Bot` (and `Bot::from_env()`) with plain
+  async closures for commands, autocomplete, buttons, select menus, modals,
+  messages and any event; modular bot composition (`BotModule` / `Bot::mount`),
+  prefix and `{param}` pattern component/modal routing, command-level cooldowns
+  (`command_with_cooldown`), typed shared state (`Bot::data` /
+  `ctx.data::<T>()`), `on_error` and `before_command` hooks, graceful shutdown
+  (`run_until_ctrl_c()` / `run_until()`), `ctx.paginate(...)`,
+  `ctx.confirm(...)` / `ctx.select(...)` / `ctx.prompt(...)` /
+  `ctx.ask_modal(...)`, `ctx.send(...)` / `ctx.dm(...)`,
   `ctx.wait_for_button` / `button_clicks` / `wait_for_message` /
-  `wait_for_reaction`, and automatic resharding while running when Discord
+  `wait_for_reaction`, permission guards (`require_user_perm` /
+  `require_bot_perm`), and automatic resharding while running when Discord
   recommends more shards.
 - **Gateway**: zlib-stream compression, heartbeat with zombie detection,
   resume and reconnect, close codes with fix hints, outbound rate limit,
@@ -166,9 +171,11 @@ One small file per task in [`crates/facade/examples`][examples]:
   layout (container, section, text display, thumbnail, media gallery, file,
   separator); the `IS_COMPONENTS_V2` flag is set automatically.
 - **Helpers**: `MessageBuilder` with Markdown escaping, embed builder with
-  Discord's limits, CDN URLs (avatars, icons, emojis, stickers), mentions and
-  timestamp markdown, mention parsing, webhook URL parsing, permission
-  calculator, default allowed mentions.
+  Discord's limits (`Embed::success`/`error`/`info`/`warn` + `colors`), short
+  ID aliases (`GuildId`, `ChannelId`, `UserId`, `RoleId`, `MessageId`, …), CDN
+  URLs (avatars, icons, emojis, stickers), mentions and timestamp markdown,
+  mention parsing, webhook/invite/message URL parsing, permission calculator,
+  default allowed mentions.
 
 ## Crates
 
@@ -176,14 +183,15 @@ Most bots only need `cordex`. The parts work on their own too:
 
 | Crate | Content |
 |---|---|
-| [`cordex`][crates link] | Facade: simple layer `Bot`, re-exports behind features, `prelude`, `backfill` |
-| [`cordex-model`][model] | Models, snowflakes, flags, gateway payloads, CDN URLs, mentions, permission calculator (no async) |
+| [`cordex`][crates link] | Facade: simple layer `Bot` & `BotModule`, re-exports behind features, `prelude`, `backfill` |
+| [`cordex-model`][model] | Models, snowflakes & ID aliases, flags, gateway payloads, CDN URLs, mentions, permission calculator (no async) |
 | [`cordex-http`][http] | REST client, rate limiter, invalid request guard |
 | [`cordex-gateway`][gateway] | Shards, shard manager, identify queue, `Standby` |
 | [`cordex-interactions`][interactions] | Command builders, responses, modals, HTTP endpoint |
 | [`cordex-cache`][cache] | Optional in-memory cache, every resource and part switchable |
 | [`cordex-voice`][voice] | Optional pure-Rust voice signaling & session coordination (Lavalink v4 & custom backends) |
 | [`cordex-lavalink`][lavalink] | Optional pure-Rust Lavalink v4 client (WebSocket + REST + `cordex-voice` bridge) |
+| [`cordex-migrate`][migrate] | Zero-dependency CLI to analyze and mechanically migrate Serenity/Poise & Twilight bots to `cordex` |
 
 ## Features
 
@@ -285,3 +293,4 @@ any additional terms or conditions.
 [cache]: https://crates.io/crates/cordex-cache
 [voice]: https://crates.io/crates/cordex-voice
 [lavalink]: https://crates.io/crates/cordex-lavalink
+[migrate]: https://crates.io/crates/cordex-migrate

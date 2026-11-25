@@ -22,22 +22,19 @@ Available helpers include `push`, `push_line`, `push_safe`, `push_bold[_safe]`, 
 
 ## Embeds & Attachments
 
-Build rich embeds with `EmbedBuilder` (validates Discord's character limits locally before sending):
+Build rich embeds with `Embed` (validates Discord's character limits locally before sending), using either `Embed::new()` + `colors::*` or preset constructors (`Embed::success`, `Embed::error`, `Embed::info`, `Embed::warn`):
 
 ```rust,no_run
 use cordex::prelude::*;
 
-let embed = EmbedBuilder::new()
-    .title("Server Status")
-    .description("All shards connected.")
-    .color(0x57F287)
-    .field("Latency", "24 ms", true)
-    .build()?;
+let embed = Embed::success("All shards connected.")?
+    .title("Server Status")?
+    .field("Latency", "24 ms", true)?;
 
-ctx.reply(Reply::new("").embed(embed)).await?;
+ctx.reply(Reply::embed(embed)).await?;
 ```
 
-## Pagination & Button Collectors
+## Pagination, Confirmations & Interactive Flows
 
 For multi-page responses, `CommandContext::paginate` renders `◀` / `1 / N` / `▶` buttons, restricts clicks to the command author, resets the idle timeout on every click, and disables the buttons when the timeout expires:
 
@@ -54,6 +51,13 @@ async fn pages(ctx: CommandContext) -> cordex::Result<()> {
     ctx.paginate(pages, Duration::from_secs(60)).await
 }
 ```
+
+Additional built-in inline flows on `CommandContext`:
+
+- `ctx.confirm("Delete this item?", Duration::from_secs(30)).await? -> bool` (or `confirm_with` for custom button labels)
+- `ctx.select("Pick one", options, Duration::from_secs(30)).await? -> Option<Vec<String>>`
+- `ctx.prompt("Reply in chat…", Duration::from_secs(60)).await? -> Option<Message>`
+- `ctx.ask_modal(modal, Duration::from_secs(60)).await? -> Option<ModalContext>` (also on `ComponentContext`)
 
 For custom interactive flows, `ctx.button_clicks(message_id, timeout)` streams clicks with `.idle_timeout(...)` and `.stop()`.
 

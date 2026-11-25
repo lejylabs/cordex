@@ -53,6 +53,15 @@ pub enum Error {
     Lavalink(cordex_lavalink::LavalinkError),
     /// An embed builder check failed.
     Embed(cordex_model::EmbedError),
+    /// A required environment variable (e.g. `DISCORD_TOKEN`) was missing or empty.
+    MissingEnv(Box<str>),
+    /// The invoking user or the bot is missing a required Discord permission.
+    MissingPermission {
+        /// The permission that was required.
+        permission: cordex_model::Permissions,
+        /// Who is missing the permission (`"user"` or `"bot"`).
+        actor: &'static str,
+    },
 }
 
 /// `Result` with the facade [`Error`].
@@ -73,6 +82,16 @@ impl fmt::Display for Error {
             #[cfg(feature = "lavalink")]
             Self::Lavalink(err) => fmt::Display::fmt(err, f),
             Self::Embed(err) => fmt::Display::fmt(err, f),
+            Self::MissingEnv(var) => write!(
+                f,
+                "environment variable `{var}` is not set (export it in your shell or add it to a .env file)"
+            ),
+            Self::MissingPermission { permission, actor } => {
+                write!(
+                    f,
+                    "missing required permission `{permission:?}` for {actor}"
+                )
+            }
         }
     }
 }
@@ -92,6 +111,7 @@ impl StdError for Error {
             #[cfg(feature = "lavalink")]
             Self::Lavalink(err) => Some(err),
             Self::Embed(err) => Some(err),
+            Self::MissingEnv(_) | Self::MissingPermission { .. } => None,
         }
     }
 }
@@ -153,17 +173,18 @@ pub mod prelude {
     pub use cordex_model::gateway::{Event, Intents};
     pub use cordex_model::mention::{Mentionable, ParsedMention, parse_mentions};
     pub use cordex_model::message::{
-        AllowedMentions, Embed, EmbedError, MessageBuilder, MessageLink, parse_message_link,
+        AllowedMentions, Embed, EmbedError, MessageBuilder, MessageLink, colors, parse_message_link,
     };
     pub use cordex_model::{
-        Channel, Guild, Id, Member, Message, Permissions, Role, Timestamp, TimestampStyle, Token,
-        User, parse_webhook_url,
+        ApplicationId, AttachmentId, Channel, ChannelId, CommandId, EmojiId, Guild, GuildId, Id,
+        InteractionId, Member, Message, MessageId, Permissions, Role, RoleId, Timestamp,
+        TimestampStyle, Token, User, UserId, WebhookId, parse_webhook_url,
     };
 
     #[cfg(feature = "bot")]
     pub use crate::bot::{
-        AutocompleteContext, Bot, CommandContext, ComponentContext, Context, Cooldowns,
-        EventContext, MessageContext, ModalContext, ReadyContext,
+        AutocompleteContext, Bot, BotModule, CommandContext, ComponentContext, Context,
+        CooldownScope, Cooldowns, EventContext, MessageContext, ModalContext, ReadyContext,
     };
     #[cfg(feature = "cache")]
     pub use cordex_cache::{CacheConfig, CacheParts, CachePolicy, InMemoryCache, ResourceType};

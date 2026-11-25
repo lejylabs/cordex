@@ -5,7 +5,7 @@ resolver = "3"
 members = ["crates/*", "xtask"]
 
 [workspace.package]
-version = "0.1.8"
+version = "0.1.9"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0"
@@ -22,13 +22,13 @@ unused_workspace_dependencies = "allow"
 
 [workspace.dependencies]
 # Internal crates.
-cordex-model = { version = "0.1.8", path = "crates/model" }
-cordex-http = { version = "0.1.8", path = "crates/http", default-features = false }
-cordex-gateway = { version = "0.1.8", path = "crates/gateway" }
-cordex-cache = { version = "0.1.8", path = "crates/cache" }
-cordex-interactions = { version = "0.1.8", path = "crates/interactions" }
-cordex-voice = { version = "0.1.8", path = "crates/voice", default-features = false }
-cordex-lavalink = { version = "0.1.8", path = "crates/lavalink" }
+cordex-model = { version = "0.1.9", path = "crates/model" }
+cordex-http = { version = "0.1.9", path = "crates/http", default-features = false }
+cordex-gateway = { version = "0.1.9", path = "crates/gateway" }
+cordex-cache = { version = "0.1.9", path = "crates/cache" }
+cordex-interactions = { version = "0.1.9", path = "crates/interactions" }
+cordex-voice = { version = "0.1.9", path = "crates/voice", default-features = false }
+cordex-lavalink = { version = "0.1.9", path = "crates/lavalink" }
 
 # External crates (PLAN.md §3), approved 2026-11-22. Newest versions the
 # 3-day rule allowed on that day, `default-features = false`, only the

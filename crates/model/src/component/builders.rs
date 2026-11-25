@@ -150,6 +150,13 @@ impl StringSelect {
         self.max_values = Some(max);
         self
     }
+
+    /// Greyed out, not selectable.
+    #[must_use]
+    pub fn disabled(mut self) -> Self {
+        self.disabled = true;
+        self
+    }
 }
 
 impl SelectOption {

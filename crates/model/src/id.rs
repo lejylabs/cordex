@@ -251,6 +251,59 @@ pub mod marker {
     }
 }
 
+/// Application snowflake ID (`Id<ApplicationMarker>`).
+pub type ApplicationId = Id<marker::ApplicationMarker>;
+/// Application command snowflake ID (`Id<CommandMarker>`).
+pub type CommandId = Id<marker::CommandMarker>;
+/// Attachment snowflake ID (`Id<AttachmentMarker>`).
+pub type AttachmentId = Id<marker::AttachmentMarker>;
+/// Audit log entry snowflake ID (`Id<AuditLogEntryMarker>`).
+pub type AuditLogEntryId = Id<marker::AuditLogEntryMarker>;
+/// Auto moderation rule snowflake ID (`Id<AutoModerationRuleMarker>`).
+pub type AutoModerationRuleId = Id<marker::AutoModerationRuleMarker>;
+/// Channel or thread snowflake ID (`Id<ChannelMarker>`).
+pub type ChannelId = Id<marker::ChannelMarker>;
+/// Emoji snowflake ID (`Id<EmojiMarker>`).
+pub type EmojiId = Id<marker::EmojiMarker>;
+/// Entitlement snowflake ID (`Id<EntitlementMarker>`).
+pub type EntitlementId = Id<marker::EntitlementMarker>;
+/// Generic snowflake ID (`Id<GenericMarker>`).
+pub type GenericId = Id<marker::GenericMarker>;
+/// Guild snowflake ID (`Id<GuildMarker>`).
+pub type GuildId = Id<marker::GuildMarker>;
+/// Integration snowflake ID (`Id<IntegrationMarker>`).
+pub type IntegrationId = Id<marker::IntegrationMarker>;
+/// Social SDK lobby snowflake ID (`Id<LobbyMarker>`).
+pub type LobbyId = Id<marker::LobbyMarker>;
+/// Interaction snowflake ID (`Id<InteractionMarker>`).
+pub type InteractionId = Id<marker::InteractionMarker>;
+/// Message snowflake ID (`Id<MessageMarker>`).
+pub type MessageId = Id<marker::MessageMarker>;
+/// Role snowflake ID (`Id<RoleMarker>`).
+pub type RoleId = Id<marker::RoleMarker>;
+/// Guild scheduled event snowflake ID (`Id<ScheduledEventMarker>`).
+pub type ScheduledEventId = Id<marker::ScheduledEventMarker>;
+/// SKU snowflake ID (`Id<SkuMarker>`).
+pub type SkuId = Id<marker::SkuMarker>;
+/// Soundboard sound snowflake ID (`Id<SoundMarker>`).
+pub type SoundId = Id<marker::SoundMarker>;
+/// Stage instance snowflake ID (`Id<StageMarker>`).
+pub type StageId = Id<marker::StageMarker>;
+/// Sticker snowflake ID (`Id<StickerMarker>`).
+pub type StickerId = Id<marker::StickerMarker>;
+/// Sticker pack snowflake ID (`Id<StickerPackMarker>`).
+pub type StickerPackId = Id<marker::StickerPackMarker>;
+/// Forum / media channel tag snowflake ID (`Id<TagMarker>`).
+pub type TagId = Id<marker::TagMarker>;
+/// Subscription snowflake ID (`Id<SubscriptionMarker>`).
+pub type SubscriptionId = Id<marker::SubscriptionMarker>;
+/// Team snowflake ID (`Id<TeamMarker>`).
+pub type TeamId = Id<marker::TeamMarker>;
+/// User snowflake ID (`Id<UserMarker>`).
+pub type UserId = Id<marker::UserMarker>;
+/// Webhook snowflake ID (`Id<WebhookMarker>`).
+pub type WebhookId = Id<marker::WebhookMarker>;
+
 #[cfg(test)]
 mod tests {
     use super::marker::{ChannelMarker, GuildMarker};
@@ -308,7 +361,8 @@ mod tests {
 
     #[test]
     fn cast_keeps_value() {
-        let guild = Id::<GuildMarker>::new(5).unwrap();
-        assert_eq!(guild.cast::<ChannelMarker>().get(), 5);
+        let guild: GuildId = Id::<GuildMarker>::new(5).unwrap();
+        let channel: ChannelId = guild.cast();
+        assert_eq!(channel.get(), 5);
     }
 }

@@ -27,8 +27,12 @@ async fn test_context(bot: Bot) -> Context {
         handlers: bot.handlers,
         data: bot.data,
         error_message: bot.error_message,
+        cooldown_message: bot.cooldown_message,
+        cooldown_tracker: Cooldowns::new(),
         auto_defer: bot.auto_defer,
         standby: Standby::new(),
+        has_message_content_intent: bot.intents.contains(Intents::MESSAGE_CONTENT),
+        warned_empty_content: AtomicBool::new(false),
     });
     Context {
         shared,
@@ -37,17 +41,74 @@ async fn test_context(bot: Bot) -> Context {
 }
 
 #[test]
-fn lookup_prefers_exact_id_then_prefix() {
+fn lookup_prefers_exact_id_then_colon_then_pattern_then_prefix() {
     let mut map: HashMap<Box<str>, Handler<()>> = HashMap::new();
     map.insert("vote".into(), noop());
     map.insert("vote:special".into(), noop());
 
-    let exact = lookup(&map, "vote:special").map(Arc::as_ptr);
-    assert_eq!(exact, map.get("vote:special").map(Arc::as_ptr));
-    let prefix = lookup(&map, "vote:42").map(Arc::as_ptr);
-    assert_eq!(prefix, map.get("vote").map(Arc::as_ptr));
-    assert!(lookup(&map, "other").is_none());
-    assert!(lookup(&map, "other:1").is_none());
+    let patterns = vec![
+        PatternRoute::parse("ticket:{action}:{id}", noop()),
+        PatternRoute::parse("ticket:close:{id}", noop()),
+    ];
+    let prefixes = vec![
+        PrefixRoute {
+            prefix: "btn_".into(),
+            handler: noop(),
+        },
+        PrefixRoute {
+            prefix: "btn_admin_".into(),
+            handler: noop(),
+        },
+    ];
+
+    // Exact match wins over `:` prefix.
+    let exact = lookup_route(&map, &patterns, &prefixes, "vote:special").unwrap();
+    assert_eq!(
+        Arc::as_ptr(&exact.handler),
+        Arc::as_ptr(&map["vote:special"])
+    );
+    assert_eq!(&*exact.matched_tail, "");
+
+    // `:` prefix match exposes tail.
+    let colon = lookup_route(&map, &patterns, &prefixes, "vote:42").unwrap();
+    assert_eq!(Arc::as_ptr(&colon.handler), Arc::as_ptr(&map["vote"]));
+    assert_eq!(&*colon.matched_tail, "42");
+
+    // More specific pattern (more literal segments) wins and captures params.
+    let specific = lookup_route(&map, &patterns, &prefixes, "ticket:close:12345").unwrap();
+    assert_eq!(
+        Arc::as_ptr(&specific.handler),
+        Arc::as_ptr(&patterns[1].handler)
+    );
+    assert_eq!(specific.params.as_ref(), &[("id".into(), "12345".into())]);
+
+    let generic = lookup_route(&map, &patterns, &prefixes, "ticket:open:99").unwrap();
+    assert_eq!(
+        Arc::as_ptr(&generic.handler),
+        Arc::as_ptr(&patterns[0].handler)
+    );
+    assert_eq!(
+        generic.params.as_ref(),
+        &[("action".into(), "open".into()), ("id".into(), "99".into())]
+    );
+
+    // Longest string prefix wins and exposes tail.
+    let admin = lookup_route(&map, &patterns, &prefixes, "btn_admin_ban_7").unwrap();
+    assert_eq!(
+        Arc::as_ptr(&admin.handler),
+        Arc::as_ptr(&prefixes[1].handler)
+    );
+    assert_eq!(&*admin.matched_tail, "ban_7");
+
+    let general = lookup_route(&map, &patterns, &prefixes, "btn_ok").unwrap();
+    assert_eq!(
+        Arc::as_ptr(&general.handler),
+        Arc::as_ptr(&prefixes[0].handler)
+    );
+    assert_eq!(&*general.matched_tail, "ok");
+
+    assert!(lookup_route(&map, &patterns, &prefixes, "other").is_none());
+    assert!(lookup_route(&map, &patterns, &prefixes, "other:1").is_none());
 }
 
 #[test]
@@ -166,8 +227,69 @@ async fn on_error_hook_receives_handler_errors() {
 
 #[test]
 fn before_command_hook_is_registered() {
-    let bot = Bot::new("t").before_command(|_ctx: CommandContext| async { Ok(true) });
-    assert!(bot.handlers.before_command.is_some());
+    let bot = Bot::new("t")
+        .before_command(|_ctx: CommandContext| async { Ok(true) })
+        .before_command(|_ctx: CommandContext| async { Ok(true) });
+    assert_eq!(bot.handlers.before_command.len(), 2);
+}
+
+#[test]
+fn module_mount_merges_commands_intents_and_routes() {
+    let child = BotModule::new()
+        .slash("ban", "Ban a user", |_ctx: CommandContext| async { Ok(()) })
+        .on_button_pattern("ticket:{action}:{id}", |_ctx: ComponentContext| async {
+            Ok(())
+        });
+
+    let moderation = BotModule::new()
+        .before_command(|_ctx: CommandContext| async { Ok(true) })
+        .command_with_cooldown(
+            Command::slash("warn", "Warn a user"),
+            Duration::from_secs(10),
+            CooldownScope::User,
+            |_ctx: CommandContext| async { Ok(()) },
+        )
+        .on_message(|_ctx: MessageContext| async { Ok(()) })
+        .mount(child);
+
+    let bot = Bot::new("t")
+        .slash("ping", "Ping", |_ctx: CommandContext| async { Ok(()) })
+        .mount(moderation);
+
+    assert_eq!(bot.commands.len(), 3);
+    assert!(bot.handlers.commands.contains_key("ping"));
+    assert!(bot.handlers.commands.contains_key("warn"));
+    assert!(bot.handlers.commands.contains_key("ban"));
+    assert!(bot.handlers.command_cooldowns.contains_key("warn"));
+    assert_eq!(bot.handlers.component_patterns.len(), 1);
+    assert!(
+        bot.intents
+            .contains(Intents::GUILD_MESSAGES | Intents::DIRECT_MESSAGES)
+    );
+    // Module-scoped `before_command` wraps module commands without polluting root guards.
+    assert!(bot.handlers.before_command.is_empty());
+    assert!(bot.event_types().wants("INTERACTION_CREATE"));
+    assert!(bot.event_types().wants("MESSAGE_CREATE"));
+}
+
+#[test]
+fn from_env_var_reports_missing_variable() {
+    let err = Bot::from_env_var("CORDEX_TEST_NONEXISTENT_TOKEN_987654").unwrap_err();
+    assert!(matches!(err, Error::MissingEnv(_)), "{err}");
+    assert!(
+        err.to_string()
+            .contains("CORDEX_TEST_NONEXISTENT_TOKEN_987654"),
+        "{err}"
+    );
+}
+
+#[test]
+fn pattern_and_prefix_routes_enable_interaction_events() {
+    let bot = Bot::new("t").on_button_prefix("ticket_", |_ctx: ComponentContext| async { Ok(()) });
+    assert!(bot.event_types().wants("INTERACTION_CREATE"));
+
+    let bot = Bot::new("t").on_modal_pattern("report:{id}", |_ctx: ModalContext| async { Ok(()) });
+    assert!(bot.event_types().wants("INTERACTION_CREATE"));
 }
 
 #[test]

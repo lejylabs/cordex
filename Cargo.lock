@@ -221,7 +221,7 @@ dependencies = [
 
 [[package]]
 name = "cordex"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "cordex-cache",
  "cordex-gateway",
@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-cache"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "bitflags",
  "cordex-model",
@@ -249,7 +249,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-gateway"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "bitflags",
  "bytes",
@@ -274,7 +274,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-http"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "bytes",
  "cordex-model",
@@ -297,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-interactions"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "bytes",
  "cordex-http",
@@ -317,7 +317,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-lavalink"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "bytes",
  "cordex-model",
@@ -342,11 +342,11 @@ dependencies = [
 
 [[package]]
 name = "cordex-migrate"
-version = "0.1.8"
+version = "0.1.9"
 
 [[package]]
 name = "cordex-model"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "bitflags",
  "criterion",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-voice"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "cordex-gateway",
  "cordex-model",
@@ -1900,7 +1900,7 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "xtask"
-version = "0.1.8"
+version = "0.1.9"
 
 [[package]]
 name = "zerocopy"

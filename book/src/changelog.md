@@ -4,7 +4,8 @@ Release notes for `cordex`, organized by version. The project follows [Semantic 
 
 | Version | Date | Highlights |
 | --- | --- | --- |
-| [Unreleased](changelog/unreleased.md) | — | `EmbedAudio` / `Embed.audio`, `parse_invite_url` & `ParseError::InviteUrl` |
+| [Unreleased](changelog/unreleased.md) | — | — |
+| [0.1.9](changelog/0.1.9.md) | 2026-11-25 | `cordex-migrate` CLI + full migration guide, `BotModule`, prefix/pattern routing, `confirm`/`select`/`prompt`/`ask_modal`, command cooldowns, `Embed` presets, ID aliases, `Bot::from_env`, `EmbedAudio`, `parse_invite_url` |
 | [0.1.8](changelog/0.1.8.md) | 2026-11-24 | `PreviousState` diffs, role-hierarchy `can_moderate`, cache-first `Context` helpers, `shard_range`, prefix component routing |
 | [0.1.7](changelog/0.1.7.md) | 2026-11-24 | New `cordex-voice` & `cordex-lavalink` crates |
 | [0.1.6](changelog/0.1.6.md) | 2026-11-24 | `guild_members_with_ids`, `guild_voice_states`, `permission_overwrites` builders |

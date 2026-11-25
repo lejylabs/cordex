@@ -60,7 +60,7 @@ cargo run -p cordex-migrate -- apply path/to/your-bot --write
 
 | Serenity / Poise | Twilight | `cordex` |
 |---|---|---|
-| `GuildId`, `ChannelId`, `UserId`, `RoleId`, `MessageId` | `Id<GuildMarker>`, `Id<ChannelMarker>`, `Id<UserMarker>`, … | `Id<GuildMarker>`, `Id<ChannelMarker>`, `Id<UserMarker>`, … |
+| `GuildId`, `ChannelId`, `UserId`, `RoleId`, `MessageId` | `Id<GuildMarker>`, `Id<ChannelMarker>`, `Id<UserMarker>`, … | `GuildId`, `ChannelId`, `UserId`, `RoleId`, `MessageId` (aliases for `Id<*Marker>`, all in `prelude`) |
 | `serenity::all::*` / `serenity::prelude::*` | individual crate imports | `use cordex::prelude::*;` |
 | `Client` (`serenity::Client`) | `Shard` + `twilight_http::Client` | `Bot` (high-level) or `ShardManager` + `cordex::http::Client` (low-level) |
 | `Context` / `poise::Context<'_, Data, Err>` | `Arc<Client>` + `Arc<InMemoryCache>` | `CommandContext`, `ComponentContext`, `ModalContext`, `MessageContext`, `Context` |

@@ -7,6 +7,26 @@ use std::time::{Duration, Instant};
 
 const PRUNE_THRESHOLD: usize = 1024;
 
+/// Scope of a command-level cooldown registered via
+/// [`Bot::command_with_cooldown`](super::Bot::command_with_cooldown).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CooldownScope {
+    /// Separate cooldown per invoking user.
+    User,
+    /// Separate cooldown per channel (falls back to user ID if unavailable).
+    Channel,
+    /// Separate cooldown per guild (falls back to user ID in DMs).
+    Guild,
+    /// Single global cooldown shared across all users and guilds.
+    Global,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct CommandCooldown {
+    pub(super) duration: Duration,
+    pub(super) scope: CooldownScope,
+}
+
 /// Thread-safe, per-key cooldown tracker (e.g. per user ID, guild ID, or
 /// `(user_id, command_name)`).
 ///

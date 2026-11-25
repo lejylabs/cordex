@@ -62,8 +62,10 @@ For advanced options (min/max values, choices, channel types, autocomplete), pas
 
 By default, `Bot` registers commands globally on the first `READY` — and skips the overwrite if Discord's registered commands already match your local definitions.
 
-- **Instant testing on a dev server:** use `.guild_command(guild_id, command, handler)` (guild commands update immediately, unlike global commands).
+- **Instant testing on a dev server:** use `.guild_commands(guild_id)` (guild commands update immediately, unlike global commands).
 - **External deployment:** call `.register_commands(false)` if a separate deploy script or another process manages command registration.
+- **Modular bots:** group related commands, component/modal handlers, events, and module-scoped `before_command` guards in a `BotModule` and attach it with `Bot::mount(module)`.
+- **Subcommands:** inspect the invoked subcommand with `ctx.subcommand()`, `ctx.subcommand_group()`, `ctx.subcommand_name()`, and `ctx.subcommand_path()`.
 
 ## Auto-Defer & Ephemeral Replies
 
@@ -84,8 +86,9 @@ async fn slow_command(ctx: CommandContext) -> cordex::Result<()> {
 
 When editing messages, interaction responses, or webhook messages via `cordex-http` / `cordex-model`, you can explicitly remove existing components, embeds, or attachments with `.components(vec![])`, `.clear_embeds()`, and `.clear_attachments()` (for example `InteractionResponse::update_message("Closed.").clear_components()`).
 
-## Pre-Command Hooks, Cooldowns & Error Handling
+## Pre-Command Hooks, Cooldowns, Permissions & Error Handling
 
-- **`.before_command(|ctx| ...)`** runs before every command handler. Return `Ok(false)` to block execution (e.g., for permission checks, maintenance mode, or cooldowns).
-- **`cordex::bot::Cooldowns<K>`** is a built-in, thread-safe cooldown tracker you can store in `.data(...)`.
+- **`.before_command(|ctx| ...)`** runs before every command handler (chainable; module-scoped when added on a `BotModule`). Return `Ok(false)` to block execution.
+- **`.command_with_cooldown(cmd, duration, CooldownScope::User, handler)`** enforces per-command cooldowns (`User`, `Channel`, `Guild`, or `Global`) with automatic ephemeral notices (customizable via `.cooldown_message(...)`). For custom keys, `cordex::bot::Cooldowns<K>` is also available.
+- **`ctx.require_user_perm(perm)?` / `ctx.require_bot_perm(perm)?`** return `Error::MissingPermission` when a required permission is absent.
 - **`.on_error(|ctx, err| ...)`** catches every `Err` returned by any handler in one central place.

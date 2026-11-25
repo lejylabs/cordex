@@ -41,7 +41,10 @@ pub use channel::{Channel, ChannelType};
 pub use emoji::Emoji;
 pub use error::ParseError;
 pub use guild::{Ban, Guild, Member, Role, UnavailableGuild};
-pub use id::Id;
+pub use id::{
+    ApplicationId, AttachmentId, ChannelId, CommandId, EmojiId, GuildId, Id, InteractionId,
+    MessageId, RoleId, UserId, WebhookId,
+};
 pub use image_hash::ImageHash;
 pub use invite::{Invite, parse_invite_url};
 pub use mention::{Mentionable, ParsedMention, parse_mentions};

@@ -129,5 +129,21 @@ For common gateway events you do not need a manual `on_event` match:
 ## Interaction Permissions & Optional Options
 
 - `ctx.bot_can(Permissions::KICK_MEMBERS)` and `ctx.user_can(Permissions::KICK_MEMBERS)` check precomputed interaction permissions without cache or REST calls (`app_permissions()` / `member_permissions()`).
+- `ctx.require_user_perm(Permissions::KICK_MEMBERS)?` and `ctx.require_bot_perm(...)` return `Err(cordex::Error::MissingPermission { .. })` directly so handlers can short-circuit with `?`.
 - Every required option helper on `CommandContext` has an optional counterpart: `string_option_opt`, `integer_option_opt`, `number_option_opt`, `boolean_option_opt`, `user_option_opt`, `member_option_opt`, `role_option_opt`, `channel_option_opt`, and `attachment_option_opt`.
+- Subcommand helpers: `ctx.subcommand_group()`, `ctx.subcommand_name()`, and `ctx.subcommand_path()`.
 - See `crates/facade/examples/moderation.rs` for a complete example combining permission checks, role hierarchy (`cache.can_moderate`), optional options, and audit-log reasons.
+
+## Built-in Interactive Flows, Dynamic Routing & Modules
+
+- **Confirmation, select menus, chat prompts & inline modals:**
+  - `ctx.confirm("Delete this item?", Duration::from_secs(30)).await? -> bool` (or `confirm_with` for custom button labels)
+  - `ctx.select("Pick a role", options, Duration::from_secs(30)).await? -> Option<Vec<String>>`
+  - `ctx.prompt("Reply with your bio:", Duration::from_secs(60)).await? -> Option<Message>`
+  - `ctx.ask_modal(modal, Duration::from_secs(60)).await? -> Option<ModalContext>` (opens a modal and waits inline for the invoking user's submit)
+- **Dynamic component & modal routing:**
+  - `Bot::on_button_prefix("ticket_close_", |ctx| ...)` with `ctx.matched_tail()`
+  - `Bot::on_button_pattern("ticket:{action}:{id}", |ctx| ...)` with `ctx.param("action")` and `ctx.param_id::<ChannelMarker>("id")` (also available as `on_component_prefix`, `on_component_pattern`, `on_modal_prefix`, `on_modal_pattern`)
+- **Command-level cooldowns:** `Bot::command_with_cooldown(cmd, Duration::from_secs(5), CooldownScope::User, handler)` (customize the message with `Bot::cooldown_message(...)`).
+- **Modular bots (`BotModule`):** Split commands, component handlers, events, and module-scoped `before_command` guards into separate files and attach them with `Bot::mount(moderation::module())`.
+- **Shortcuts & presets:** `Bot::from_env()?` reads `DISCORD_TOKEN` with a clear error message, `Embed::success` / `error` / `info` / `warn` + `colors::BLURPLE` build styled embeds, and short ID aliases (`GuildId`, `ChannelId`, `UserId`, `RoleId`, `MessageId`, …) are re-exported in `cordex::prelude`.

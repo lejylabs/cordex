@@ -23,6 +23,34 @@ pub const AUTHOR_LIMIT: usize = 256;
 /// Combined text of one embed (title, description, fields, footer, author).
 pub const TOTAL_LIMIT: usize = 6000;
 
+/// Common RGB color constants for [`Embed::color`].
+pub mod colors {
+    /// Discord Blurple (`#5865F2`).
+    pub const BLURPLE: u32 = 0x0058_65F2;
+    /// Discord Green (`#57F287`).
+    pub const GREEN: u32 = 0x0057_F287;
+    /// Discord Yellow (`#FEE75C`).
+    pub const YELLOW: u32 = 0x00FE_E75C;
+    /// Discord Fuchsia (`#EB459E`).
+    pub const FUCHSIA: u32 = 0x00EB_459E;
+    /// Discord Red (`#ED4245`).
+    pub const RED: u32 = 0x00ED_4245;
+    /// Orange (`#E67E22`).
+    pub const ORANGE: u32 = 0x00E6_7E22;
+    /// Blue (`#3498DB`).
+    pub const BLUE: u32 = 0x0034_98DB;
+    /// Teal (`#1ABC9C`).
+    pub const TEAL: u32 = 0x001A_BC9C;
+    /// Purple (`#9B59B6`).
+    pub const PURPLE: u32 = 0x009B_59B6;
+    /// White (`#FFFFFF`).
+    pub const WHITE: u32 = 0x00FF_FFFF;
+    /// Dark embed grey (`#2B2D31`).
+    pub const DARK_GREY: u32 = 0x002B_2D31;
+    /// Black (`#000000`).
+    pub const BLACK: u32 = 0x0000_0000;
+}
+
 /// A local embed-builder check failed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -128,6 +156,26 @@ impl Embed {
             kind: Some(EmbedType::Rich),
             ..Self::default()
         }
+    }
+
+    /// Green success embed with `description`.
+    pub fn success(description: impl Into<Box<str>>) -> Result<Self, EmbedError> {
+        Self::new().color(colors::GREEN).description(description)
+    }
+
+    /// Red error embed with `description`.
+    pub fn error(description: impl Into<Box<str>>) -> Result<Self, EmbedError> {
+        Self::new().color(colors::RED).description(description)
+    }
+
+    /// Blurple informational embed with `description`.
+    pub fn info(description: impl Into<Box<str>>) -> Result<Self, EmbedError> {
+        Self::new().color(colors::BLURPLE).description(description)
+    }
+
+    /// Yellow warning embed with `description`.
+    pub fn warn(description: impl Into<Box<str>>) -> Result<Self, EmbedError> {
+        Self::new().color(colors::YELLOW).description(description)
     }
 
     /// Title (max. 256 characters).
@@ -549,6 +597,22 @@ impl EmbedField {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preset_embeds_set_expected_colors() {
+        let ok = Embed::success("Done").unwrap();
+        assert_eq!(ok.color, Some(colors::GREEN));
+        assert_eq!(ok.description.as_deref(), Some("Done"));
+
+        let err = Embed::error("Failed").unwrap();
+        assert_eq!(err.color, Some(colors::RED));
+
+        let info = Embed::info("Heads up").unwrap();
+        assert_eq!(info.color, Some(colors::BLURPLE));
+
+        let warn = Embed::warn("Careful").unwrap();
+        assert_eq!(warn.color, Some(colors::YELLOW));
+    }
 
     #[test]
     fn empty_field_texts_are_rejected() {

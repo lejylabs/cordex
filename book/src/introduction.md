@@ -4,7 +4,7 @@
 
 - **100 % measured bot API coverage** against `discord-api-docs` (`docs/coverage.md`).
 - **Simple layer (`cordex::bot`)** for everyday bots in ~20 lines, built directly on top of the low-level crates.
-- **Modular crates:** `cordex-model`, `cordex-http`, `cordex-gateway`, `cordex-interactions`, `cordex-cache`, `cordex-voice`, `cordex-lavalink`, and the `cordex` facade.
+- **Modular crates:** `cordex-model`, `cordex-http`, `cordex-gateway`, `cordex-interactions`, `cordex-cache`, `cordex-voice`, `cordex-lavalink`, `cordex-migrate` (CLI), and the `cordex` facade.
 - **No `unsafe`**, no hidden caching, and pure-Rust opt-in voice signaling & Lavalink v4 (no C/FFI audio transport).
 
 ## Installation
@@ -13,7 +13,7 @@ Add `cordex` and `tokio` to your `Cargo.toml` (Rust 1.95 or newer):
 
 ```toml
 [dependencies]
-cordex = "0.1.8"
+cordex = "0.1.9"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
