@@ -57,6 +57,8 @@ metrics = ["cordex-http?/metrics", "cordex-gateway?/metrics"]
 oauth2 = ["cordex-http?/oauth2"]
 # Optional derive macros (`#[derive(CommandArgs)]`, `#[derive(CommandChoice)]`).
 macros = ["cordex-interactions?/macros"]
+# Direct PostgreSQL `ToSql`/`FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
+postgres-types = ["cordex-model/postgres-types"]
 # Use zstd-stream gateway transport compression instead of zlib-stream (requires a C compiler).
 zstd-stream = ["cordex-gateway?/zstd-stream"]
 

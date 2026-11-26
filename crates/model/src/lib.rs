@@ -25,6 +25,8 @@ pub mod message;
 pub mod permission_calc;
 pub mod permissions;
 pub mod poll;
+#[cfg(feature = "postgres-types")]
+mod postgres_types;
 pub mod scheduled_event;
 pub mod sku;
 pub mod soundboard;

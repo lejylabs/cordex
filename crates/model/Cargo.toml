@@ -15,6 +15,11 @@ readme = "README.md"
 [lints]
 workspace = true
 
+[features]
+default = []
+# Direct PostgreSQL `ToSql`/`FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
+postgres-types = ["dep:postgres-types", "dep:bytes"]
+
 [dependencies]
 
 serde.workspace = true
@@ -22,6 +27,8 @@ serde_json.workspace = true
 bitflags.workspace = true
 thiserror.workspace = true
 time.workspace = true
+bytes = { workspace = true, optional = true }
+postgres-types = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true

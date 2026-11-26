@@ -77,6 +77,9 @@ proc-macro2 = { version = "1.0.107", default-features = false, features = ["proc
 quote = { version = "1.0.47", default-features = false, features = ["proc-macro"] }
 syn = { version = "2.0.119", default-features = false, features = ["derive", "parsing", "printing", "proc-macro"] }
 
+# Optional PostgreSQL type integration (`postgres-types` feature on cordex-model)
+postgres-types = { version = "0.2.14", default-features = false }
+
 # Examples, tests, benchmarks only (Phase 7); never in library [dependencies]
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "fmt", "env-filter", "ansi"] }
 mimalloc = { version = "0.1.52", default-features = false }
