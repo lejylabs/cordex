@@ -1,6 +1,6 @@
 # Production Resilience, Scheduler & Observability
 
-`cordex` `0.2.0` includes zero-dependency building blocks for long-running production bots.
+`cordex` includes zero-dependency building blocks for long-running production bots.
 
 ## Zero-Downtime `RESUME` Persistence (`SessionStore`)
 

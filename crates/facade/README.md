@@ -185,6 +185,9 @@ Most bots only need `cordex`. The parts work on their own too:
 | [`cordex-voice`][voice] | Optional pure-Rust voice signaling & session coordination (Lavalink v4 & custom backends) |
 | [`cordex-lavalink`][lavalink] | Optional pure-Rust Lavalink v4 client (WebSocket + REST + `cordex-voice` bridge) |
 | [`cordex-migrate`][migrate] | Zero-dependency CLI to analyze and mechanically migrate Serenity/Poise & Twilight bots to `cordex` |
+| [`cordex-test`][test] | Offline testing harness (`TestBot`, mock HTTP recorder, deterministic time, `.jsonl` gateway replay) |
+| [`cordex-macros`][macros] | Optional derive macros (`#[derive(CommandArgs)]`, `#[derive(CommandChoice)]`) |
+| [`cordex-axum`][axum] | Axum integration (`VerifiedInteraction` Ed25519 extractor, `interactions_router`, `/healthz` & `/readyz`) |
 
 ## Features
 
@@ -200,6 +203,13 @@ Most bots only need `cordex`. The parts work on their own too:
 | `lavalink` | no | Pure-Rust Lavalink v4 client (`cordex-lavalink`, enables `voice`) |
 | `interactions-verify` | no | `verify_signature()` for HTTP interactions in any web framework |
 | `interactions-server` | no | Standalone hyper endpoint for HTTP interactions |
+| `oauth2` | no | Discord OAuth2 client in `cordex::http::oauth2` (PKCE, token exchange/refresh/revoke, Bearer endpoints) |
+| `macros` | no | Optional derive macros (`#[derive(CommandArgs)]`, `#[derive(CommandChoice)]`) |
+| `postgres-types` | no | Direct PostgreSQL `ToSql` / `FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
+| `rusqlite` | no | Direct SQLite `ToSql` / `FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
+| `redis` | no | Direct Redis `ToRedisArgs` / `FromRedisValue` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
+| `mysql` | no | Direct MySQL/MariaDB (`mysql_common`) value conversions for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
+| `simd-json` | no | Opt-in SIMD-accelerated JSON deserialization (`cordex_model::simd_json::from_slice`) |
 | `metrics` | no | Export HTTP and gateway counters through the `metrics` crate |
 | `zstd-stream` | no | Use `zstd-stream` gateway compression instead of pure-Rust `zlib-stream` (requires a C compiler) |
 
@@ -287,3 +297,6 @@ any additional terms or conditions.
 [voice]: https://crates.io/crates/cordex-voice
 [lavalink]: https://crates.io/crates/cordex-lavalink
 [migrate]: https://crates.io/crates/cordex-migrate
+[test]: https://crates.io/crates/cordex-test
+[macros]: https://crates.io/crates/cordex-macros
+[axum]: https://crates.io/crates/cordex-axum
