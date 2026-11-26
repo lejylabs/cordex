@@ -80,7 +80,7 @@ syn = { version = "2.0.119", default-features = false, features = ["derive", "pa
 # Optional PostgreSQL type integration (`postgres-types` feature on cordex-model)
 postgres-types = { version = "0.2.14", default-features = false }
 # Optional SQLite, Redis & MySQL/MariaDB type integrations (opt-in on cordex-model)
-rusqlite = { version = "0.43.0", default-features = false }
+rusqlite = { version = "0.43.0", default-features = false, features = ["bundled"] }
 redis = { version = "1.0", default-features = false }
 mysql_common = { version = "0.38.2", default-features = false }
 
