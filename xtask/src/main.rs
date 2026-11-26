@@ -39,6 +39,17 @@ const INTERNAL_DEPS: &[(&str, &[&str])] = &[
             "lavalink",
         ],
     ),
+    (
+        "test",
+        &[
+            "cordex",
+            "cordex-model",
+            "cordex-http",
+            "cordex-gateway",
+            "cordex-cache",
+            "cordex-interactions",
+        ],
+    ),
 ];
 
 /// `cordex-model` stays free of async and network code.
