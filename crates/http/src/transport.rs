@@ -69,7 +69,8 @@ impl HyperTransport {
         let mut builder = HyperClient::builder(TokioExecutor::new());
         builder
             .pool_idle_timeout(Duration::from_secs(30))
-            .pool_timer(TokioTimer::new());
+            .pool_timer(TokioTimer::new())
+            .timer(TokioTimer::new());
         #[cfg(feature = "http2")]
         if !http1_only {
             builder
