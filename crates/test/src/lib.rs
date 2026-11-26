@@ -1,6 +1,6 @@
 //! Offline testing harness and gateway-replay runner for `cordex` bots.
 //!
-//! Drive any [`cordex::Bot`] completely offline in `cargo test` with an
+//! Drive any [`cordex::bot::Bot`] completely offline in `cargo test` with an
 //! in-memory mock HTTP recorder, ergonomic interaction/event builders,
 //! deterministic `tokio::time::pause()` support, and `.jsonl` gateway replay.
 

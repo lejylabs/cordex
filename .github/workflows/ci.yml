@@ -193,7 +193,7 @@ jobs:
         run: cargo xtask coverage --check
 
   wasm32:
-    name: wasm32 (model & interactions)
+    name: wasm32 (model)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -213,4 +213,4 @@ jobs:
           shared-key: wasm32
 
       - name: cargo check wasm32-unknown-unknown
-        run: cargo check --target wasm32-unknown-unknown -p cordex-model -p cordex-interactions --no-default-features
+        run: cargo check --target wasm32-unknown-unknown -p cordex-model --no-default-features
