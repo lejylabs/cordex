@@ -51,6 +51,7 @@ const INTERNAL_DEPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("macros", &[]),
+    ("axum", &["facade", "model", "interactions"]),
 ];
 
 /// `cordex-model` stays free of async and network code.

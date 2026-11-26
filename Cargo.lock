@@ -83,6 +83,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
+dependencies = [
+ "axum-core",
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper-util",
+ "itoa",
+ "matchit",
+ "memchr",
+ "mime",
+ "percent-encoding",
+ "pin-project-lite",
+ "serde_core",
+ "serde_json",
+ "serde_path_to_error",
+ "sync_wrapper",
+ "tokio",
+ "tower",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "axum-core"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08c78f31d7b1291f7ee735c1c6780ccde7785daae9a9206026862dab7d8792d1"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "http",
+ "http-body",
+ "http-body-util",
+ "mime",
+ "pin-project-lite",
+ "sync_wrapper",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -250,7 +297,7 @@ checksum = "be95d4a884358a21a199689323c29e9256b4a1b315e22f183d155422041d3a9a"
 
 [[package]]
 name = "cordex"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cordex-cache",
  "cordex-gateway",
@@ -266,8 +313,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "cordex-axum"
+version = "0.2.1"
+dependencies = [
+ "axum",
+ "bytes",
+ "cordex",
+ "cordex-interactions",
+ "cordex-model",
+ "ed25519-dalek",
+ "http",
+ "serde_json",
+ "tokio",
+ "tower-service",
+]
+
+[[package]]
 name = "cordex-cache"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bitflags",
  "cordex-model",
@@ -278,7 +341,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-gateway"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bitflags",
  "bytes",
@@ -303,7 +366,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-http"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bytes",
  "cordex-model",
@@ -326,7 +389,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-interactions"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bytes",
  "cordex-http",
@@ -347,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-lavalink"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bytes",
  "cordex-model",
@@ -372,7 +435,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-macros"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -381,11 +444,11 @@ dependencies = [
 
 [[package]]
 name = "cordex-migrate"
-version = "0.2.0"
+version = "0.2.1"
 
 [[package]]
 name = "cordex-model"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bitflags",
  "bytes",
@@ -400,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-test"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bytes",
  "cordex",
@@ -419,7 +482,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-voice"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cordex-gateway",
  "cordex-model",
@@ -1035,6 +1098,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "matchit"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
+
+[[package]]
 name = "md-5"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1059,6 +1128,12 @@ dependencies = [
  "portable-atomic",
  "rapidhash",
 ]
+
+[[package]]
+name = "mime"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5848f5a9e8117cf94f2f90faac24a87ff81600ff8628c1e3deaab572e76bfa1"
 
 [[package]]
 name = "miniz_oxide"
@@ -1560,6 +1635,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_path_to_error"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
+dependencies = [
+ "itoa",
+ "serde",
+ "serde_core",
+]
+
+[[package]]
 name = "sha1_smol"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1683,6 +1769,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "sync_wrapper"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
 
 [[package]]
 name = "thiserror"
@@ -1839,6 +1931,27 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
 ]
+
+[[package]]
+name = "tower"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
+dependencies = [
+ "futures-core",
+ "futures-util",
+ "pin-project-lite",
+ "sync_wrapper",
+ "tokio",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "tower-layer"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
 
 [[package]]
 name = "tower-service"
@@ -2081,7 +2194,7 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "xtask"
-version = "0.2.0"
+version = "0.2.1"
 
 [[package]]
 name = "zerocopy"

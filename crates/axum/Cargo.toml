@@ -1,0 +1,29 @@
+[package]
+name = "cordex-axum"
+description = "Axum integration for cordex: Ed25519 VerifiedInteraction extractor, interactions router, and /healthz /readyz routes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+documentation = "https://docs.rs/cordex-axum"
+
+[lints]
+workspace = true
+
+[dependencies]
+cordex = { version = "0.2.1", path = "../facade" }
+cordex-model.workspace = true
+cordex-interactions = { workspace = true, features = ["verify"] }
+axum.workspace = true
+bytes.workspace = true
+http.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+ed25519-dalek.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }
+tower-service = "0.3.3"
