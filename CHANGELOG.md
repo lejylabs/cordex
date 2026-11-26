@@ -6,8 +6,6 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
-## 0.2.1 - 2026-11-26
-
 - **New opt-in derive-macro crate `cordex-macros` (`macros` feature):**
   - Added `#[derive(CommandArgs)]` and `#[derive(CommandChoice)]` plus `CommandArgs` / `CommandChoice` traits, `Command::with_args::<A>()`, and `CommandOption::choices(...)` (strictly opt-in, off by default).
 - **Opt-in PostgreSQL type integration (`postgres-types` feature on `cordex-model` & `cordex`):**
