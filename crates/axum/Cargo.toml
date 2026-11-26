@@ -15,7 +15,7 @@ documentation = "https://docs.rs/cordex-axum"
 workspace = true
 
 [dependencies]
-cordex = { version = "0.2.1", path = "../facade" }
+cordex = { version = "0.2.2", path = "../facade" }
 cordex-model.workspace = true
 cordex-interactions = { workspace = true, features = ["verify"] }
 axum.workspace = true

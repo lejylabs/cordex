@@ -6,6 +6,11 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+## 0.2.2 - 2026-11-26
+
+- **Bug Fix (`cordex-http`):**
+  - Supplied `TokioTimer::new()` via `.timer(...)` on the `hyper` client builder in `HyperTransport::new` so HTTP/2 keep-alive no longer panics at runtime (`You must supply a timer.`) when HTTP/2 is negotiated.
+
 ## 0.2.1 - 2026-11-26
 
 - **New opt-in derive-macro crate `cordex-macros` (`macros` feature):**
