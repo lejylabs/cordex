@@ -8,7 +8,7 @@
 
 use std::future::Future;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use cordex_model::gateway::Event;
@@ -36,6 +36,7 @@ impl Sink {
 }
 
 struct Waiter {
+    id: u64,
     pred: Pred,
     sink: Sink,
 }
@@ -44,6 +45,25 @@ struct Waiter {
 struct StandbyInner {
     waiters: Mutex<Vec<Waiter>>,
     count: AtomicUsize,
+    next_id: AtomicU64,
+}
+
+/// Removes a `wait_for` waiter from [`StandbyInner`] as soon as the future is
+/// dropped (cancelled in `tokio::select!`, timed out, or unwound on panic),
+/// preventing zombie entries from lingering until the next gateway event.
+struct WaiterGuard {
+    inner: Arc<StandbyInner>,
+    id: u64,
+}
+
+impl Drop for WaiterGuard {
+    fn drop(&mut self) {
+        let mut guard = self.inner.waiters.lock();
+        if let Some(pos) = guard.iter().position(|w| w.id == self.id) {
+            guard.swap_remove(pos);
+            self.inner.count.store(guard.len(), Ordering::Release);
+        }
+    }
 }
 
 /// Shared list of event waiters. Cheap to clone (`Arc`).
@@ -61,6 +81,11 @@ impl Standby {
     /// Whether anyone is waiting.
     pub fn is_empty(&self) -> bool {
         self.inner.count.load(Ordering::Acquire) == 0
+    }
+
+    /// Number of currently registered event waiters.
+    pub fn len(&self) -> usize {
+        self.inner.count.load(Ordering::Acquire)
     }
 
     /// Offer `event` to waiters. Clones it only when at least one predicate
@@ -123,14 +148,21 @@ impl Standby {
         F: Fn(&Event) -> bool + Send + Sync + 'static,
     {
         let (tx, rx) = oneshot::channel();
+        let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let mut guard = self.inner.waiters.lock();
         guard.push(Waiter {
+            id,
             pred: Arc::new(pred),
             sink: Sink::Once(tx),
         });
         self.inner.count.store(guard.len(), Ordering::Release);
         drop(guard);
+        let drop_guard = WaiterGuard {
+            inner: Arc::clone(&self.inner),
+            id,
+        };
         async move {
+            let _guard = drop_guard;
             match tokio::time::timeout(timeout, rx).await {
                 Ok(Ok(event)) => Some(event),
                 _ => None,
@@ -145,8 +177,10 @@ impl Standby {
         F: Fn(&Event) -> bool + Send + Sync + 'static,
     {
         let (tx, rx) = mpsc::channel(STANDBY_STREAM_CAPACITY);
+        let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let mut guard = self.inner.waiters.lock();
         guard.push(Waiter {
+            id,
             pred: Arc::new(pred),
             sink: Sink::Stream(tx),
         });
@@ -217,5 +251,14 @@ mod tests {
         let standby = Standby::new();
         assert!(standby.is_empty());
         assert_eq!(standby.process(&resumed()), 0);
+    }
+
+    #[tokio::test]
+    async fn dropped_wait_for_removes_waiter_immediately() {
+        let standby = Standby::new();
+        let fut = standby.wait_for(Duration::from_secs(60), |_| true);
+        assert!(!standby.is_empty());
+        drop(fut);
+        assert!(standby.is_empty());
     }
 }

@@ -114,16 +114,29 @@ impl Context {
 
     /// Fetch a guild: returns the cached entry if the cache is enabled and
     /// holds it, otherwise falls back to REST (`GET /guilds/{id}`).
+    ///
+    /// When [`CacheConfig::write_through`](cordex_cache::CacheConfig::write_through)
+    /// is enabled, the fetched guild is stored back into the cache.
     pub async fn get_guild(&self, guild: Id<GuildMarker>) -> Result<cordex_model::Guild> {
         #[cfg(feature = "cache")]
         if let Some(cached) = self.cache().and_then(|c| c.guild(guild)) {
             return Ok((*cached).clone());
         }
-        Ok(self.http().get_guild(guild).await?)
+        let fetched = self.http().get_guild(guild).await?;
+        #[cfg(feature = "cache")]
+        if let Some(cache) = self.cache()
+            && cache.config().is_write_through()
+        {
+            cache.insert_guild(fetched.clone());
+        }
+        Ok(fetched)
     }
 
     /// Fetch a channel or thread: returns the cached entry if the cache is
     /// enabled and holds it, otherwise falls back to REST (`GET /channels/{id}`).
+    ///
+    /// When [`CacheConfig::write_through`](cordex_cache::CacheConfig::write_through)
+    /// is enabled, the fetched channel is stored back into the cache.
     pub async fn get_channel(&self, channel: Id<ChannelMarker>) -> Result<Channel> {
         #[cfg(feature = "cache")]
         if let Some(cached) = self
@@ -132,11 +145,21 @@ impl Context {
         {
             return Ok((*cached).clone());
         }
-        Ok(self.http().get_channel(channel).await?)
+        let fetched = self.http().get_channel(channel).await?;
+        #[cfg(feature = "cache")]
+        if let Some(cache) = self.cache()
+            && cache.config().is_write_through()
+        {
+            cache.insert_channel(fetched.clone());
+        }
+        Ok(fetched)
     }
 
     /// Fetch a guild member: returns the cached entry if the cache is enabled
     /// and holds it, otherwise falls back to REST (`GET /guilds/{g}/members/{u}`).
+    ///
+    /// When [`CacheConfig::write_through`](cordex_cache::CacheConfig::write_through)
+    /// is enabled, the fetched member is stored back into the cache.
     pub async fn get_member(
         &self,
         guild: Id<GuildMarker>,
@@ -146,17 +169,76 @@ impl Context {
         if let Some(cached) = self.cache().and_then(|c| c.member(guild, user)) {
             return Ok((*cached).clone());
         }
-        Ok(self.http().get_guild_member(guild, user).await?)
+        let fetched = self.http().get_guild_member(guild, user).await?;
+        #[cfg(feature = "cache")]
+        if let Some(cache) = self.cache()
+            && cache.config().is_write_through()
+        {
+            cache.insert_members(guild, [fetched.clone()]);
+        }
+        Ok(fetched)
     }
 
     /// Fetch a user: returns the cached entry if the cache is enabled and
     /// holds it, otherwise falls back to REST (`GET /users/{id}`).
+    ///
+    /// When [`CacheConfig::write_through`](cordex_cache::CacheConfig::write_through)
+    /// is enabled, the fetched user is stored back into the cache.
     pub async fn get_user(&self, user: Id<UserMarker>) -> Result<User> {
         #[cfg(feature = "cache")]
         if let Some(cached) = self.cache().and_then(|c| c.user(user)) {
             return Ok((*cached).clone());
         }
-        Ok(self.http().user(user).await?)
+        let fetched = self.http().user(user).await?;
+        #[cfg(feature = "cache")]
+        if let Some(cache) = self.cache()
+            && cache.config().is_write_through()
+        {
+            cache.insert_user(fetched.clone());
+        }
+        Ok(fetched)
+    }
+
+    /// Point-in-time health and diagnostics snapshot (shard states, latencies,
+    /// standby waiters, HTTP counters, and optional cache sizes).
+    pub fn health_snapshot(&self) -> super::HealthSnapshot {
+        let shards = self
+            .shards()
+            .status()
+            .into_iter()
+            .map(|s| super::ShardHealth {
+                id: s.id.number(),
+                state: s.state,
+                latency_ms: s
+                    .latency
+                    .latest
+                    .and_then(|d| u64::try_from(d.as_millis()).ok()),
+                last_heartbeat_ack_ms: s
+                    .last_heartbeat_ack
+                    .and_then(|d| u64::try_from(d.as_millis()).ok()),
+                reconnect_count: s.reconnect_count,
+                guild_count: s.guild_count,
+            })
+            .collect();
+        let http_metrics = self.http().metrics();
+        super::HealthSnapshot {
+            shards,
+            standby_waiters: self.shared.standby.len(),
+            http_requests: http_metrics.requests,
+            http_rate_limited: http_metrics.rate_limited_user + http_metrics.rate_limited_global,
+            #[cfg(feature = "cache")]
+            cache: self.cache().map(|c| {
+                let st = c.stats();
+                super::CacheHealth {
+                    guilds: st.guilds,
+                    channels: st.channels,
+                    threads: st.threads,
+                    users: st.users,
+                    members: st.members,
+                    messages: st.messages,
+                }
+            }),
+        }
     }
 
     /// Sync guild slash/context commands with Discord, skipping the bulk

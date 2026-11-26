@@ -1,6 +1,7 @@
 //! What the cache stores. Everything is off by default.
 
 use std::fmt;
+use std::time::Duration;
 
 bitflags::bitflags! {
     /// Resources the cache can store; each one is switched on by itself.
@@ -110,6 +111,9 @@ pub struct CacheConfig {
     message_cache_size: usize,
     max_members_per_guild: Option<usize>,
     max_presences_per_guild: Option<usize>,
+    max_users: Option<usize>,
+    member_ttl: Option<Duration>,
+    write_through: bool,
 }
 
 impl CacheConfig {
@@ -195,6 +199,50 @@ impl CacheConfig {
     pub fn max_presences_per_guild(mut self, max: Option<usize>) -> Self {
         self.max_presences_per_guild = max;
         self
+    }
+
+    /// Alias for [`Self::message_cache_size`]: max. messages kept per channel.
+    #[must_use]
+    pub fn max_messages_per_channel(mut self, count: usize) -> Self {
+        self.message_cache_size = count;
+        self
+    }
+
+    /// Max. total cached users across all guilds (default `None`: no cap).
+    #[must_use]
+    pub fn max_users(mut self, max: Option<usize>) -> Self {
+        self.max_users = max;
+        self
+    }
+
+    /// Optional TTL for cached members (default `None`: no expiry).
+    #[must_use]
+    pub fn member_ttl(mut self, ttl: Option<Duration>) -> Self {
+        self.member_ttl = ttl;
+        self
+    }
+
+    /// Enable write-through caching on REST fallback helpers (`get_guild`,
+    /// `get_channel`, `get_member`, `get_user`). Default `false`.
+    #[must_use]
+    pub fn write_through(mut self, enabled: bool) -> Self {
+        self.write_through = enabled;
+        self
+    }
+
+    /// Max. cached users cap, if configured.
+    pub fn max_users_cap(&self) -> Option<usize> {
+        self.max_users
+    }
+
+    /// Configured member TTL, if any.
+    pub fn member_ttl_duration(&self) -> Option<Duration> {
+        self.member_ttl
+    }
+
+    /// Whether write-through on REST fallback is enabled.
+    pub fn is_write_through(&self) -> bool {
+        self.write_through
     }
 
     /// All enabled resources (eager and lazy combined).

@@ -107,4 +107,20 @@ mod tests {
         cd.reset(&1_u64);
         assert_eq!(cd.check(1_u64, Duration::from_secs(10)), None);
     }
+
+    #[test]
+    fn prunes_expired_entries_at_threshold() {
+        let cd = Cooldowns::new();
+        for i in 0..PRUNE_THRESHOLD {
+            assert_eq!(cd.check(i, Duration::ZERO), None);
+        }
+        // Trigger lazy prune when map reaches PRUNE_THRESHOLD.
+        assert_eq!(cd.check(PRUNE_THRESHOLD, Duration::from_secs(60)), None);
+        let len = cd
+            .entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len();
+        assert_eq!(len, 1);
+    }
 }

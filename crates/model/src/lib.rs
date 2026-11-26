@@ -62,3 +62,44 @@ pub use webhook::{Webhook, parse_webhook_url};
 
 /// Discord API version this crate models.
 pub const API_VERSION: u8 = 10;
+
+#[cfg(test)]
+mod size_of_regressions {
+    use std::mem::size_of;
+
+    use crate::channel::Channel;
+    use crate::gateway::Event;
+    use crate::guild::{Guild, Member};
+    use crate::interaction::Interaction;
+    use crate::message::Message;
+    use crate::user::User;
+
+    /// Upper bounds for core model types (64-bit) so accidental struct bloat
+    /// or unboxed enum variants are caught immediately in CI.
+    #[test]
+    fn core_model_sizes_stay_bounded() {
+        assert!(size_of::<Event>() <= 48, "Event: {}", size_of::<Event>());
+        assert!(size_of::<User>() <= 256, "User: {}", size_of::<User>());
+        assert!(
+            size_of::<Member>() <= 384,
+            "Member: {}",
+            size_of::<Member>()
+        );
+        assert!(
+            size_of::<Channel>() <= 512,
+            "Channel: {}",
+            size_of::<Channel>()
+        );
+        assert!(size_of::<Guild>() <= 768, "Guild: {}", size_of::<Guild>());
+        assert!(
+            size_of::<Message>() <= 640,
+            "Message: {}",
+            size_of::<Message>()
+        );
+        assert!(
+            size_of::<Interaction>() <= 768,
+            "Interaction: {}",
+            size_of::<Interaction>()
+        );
+    }
+}

@@ -72,6 +72,7 @@ fn main() {
         println!("{name:<34} {blocks:>10} {bytes:>12}  {verdict}");
     }
     if over {
-        println!("\nat least one allocation budget is exceeded");
+        eprintln!("\nat least one allocation budget is exceeded");
+        std::process::exit(1);
     }
 }

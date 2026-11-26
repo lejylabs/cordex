@@ -19,7 +19,7 @@ pub use endpoint::{
     InteractionClient, MessageHistory,
 };
 pub use error::{DiscordErrorCode, HttpError, flatten_discord_errors};
-pub use limiter::{InProcessRateLimiter, RateLimitScope, RateLimiter};
+pub use limiter::{InProcessRateLimiter, RateLimitScope, RateLimiter, RequestPriority};
 pub use multipart::{File, Multipart};
 pub use request::{RequestBuilder, Response, encode_audit_log_reason};
 pub use route::{IntoPathParams, MajorParameters, Route};

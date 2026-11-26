@@ -550,4 +550,22 @@ mod tests {
         tokio::time::sleep(Duration::from_secs(3)).await;
         assert_eq!(log.lock().len(), 1);
     }
+
+    #[tokio::test]
+    async fn concurrent_defer_and_respond_never_double_ack() {
+        let (h, log) = setup();
+        let (defer_res, respond_res) = tokio::join!(h.defer(), h.respond("race"));
+        assert!(respond_res.is_ok(), "respond must succeed: {respond_res:?}");
+        assert!(
+            matches!(defer_res, Ok(()) | Err(InteractionError::AlreadyResponded)),
+            "unexpected defer result: {defer_res:?}"
+        );
+        assert_eq!(h.state().await, ResponseState::Responded);
+        let callbacks = log
+            .lock()
+            .iter()
+            .filter(|(_, path, _)| path.ends_with("/callback"))
+            .count();
+        assert_eq!(callbacks, 1, "must send exactly one initial callback");
+    }
 }

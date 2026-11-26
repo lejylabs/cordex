@@ -49,6 +49,28 @@ impl RateLimitScope {
     }
 }
 
+/// Scheduling priority for the global HTTP rate limiter.
+///
+/// Interaction callbacks default to [`Self::Critical`]; regular requests
+/// default to [`Self::Normal`]; bulk or background jobs can opt into
+/// [`Self::Background`] via [`RequestBuilder::priority`](crate::RequestBuilder::priority).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+pub enum RequestPriority {
+    /// Highest priority: interaction responses, defers, and modal replies.
+    Critical = 0,
+    /// Default priority for regular bot API calls.
+    #[default]
+    Normal = 1,
+    /// Lowest priority: bulk jobs, audit/log posts, and background tasks.
+    Background = 2,
+}
+
+impl RequestPriority {
+    const fn index(self) -> usize {
+        self as usize
+    }
+}
+
 /// Pluggable rate limiter. The default is [`InProcessRateLimiter`].
 pub trait RateLimiter: Send + Sync + 'static {
     /// Wait until `route` may be sent. Decrements the bucket; call [`record`](Self::record)
@@ -57,6 +79,15 @@ pub trait RateLimiter: Send + Sync + 'static {
         &'a self,
         route: &'a Route,
     ) -> Pin<Box<dyn Future<Output = Result<(), HttpError>> + Send + 'a>>;
+
+    /// Priority-aware variant of [`Self::acquire`]. Defaults to [`Self::acquire`].
+    fn acquire_with_priority<'a>(
+        &'a self,
+        route: &'a Route,
+        _priority: RequestPriority,
+    ) -> Pin<Box<dyn Future<Output = Result<(), HttpError>> + Send + 'a>> {
+        self.acquire(route)
+    }
 
     /// Update bucket state from response headers (including 429s).
     fn record(&self, route: &Route, headers: &HeaderMap, status: StatusCode);
@@ -302,9 +333,32 @@ impl GlobalLock {
     }
 }
 
+/// Maximum consecutive higher-priority grants before a waiting lower-priority
+/// request is allowed through (anti-starvation aging).
+const AGING_BURST: u32 = 8;
+
+struct GlobalRpsState {
+    tokens: f64,
+    last_refill: Instant,
+    waiters: [usize; 3],
+    high_streak: u32,
+}
+
+struct GlobalRpsWaiter<'a> {
+    rps: &'a GlobalRps,
+    idx: usize,
+}
+
+impl Drop for GlobalRpsWaiter<'_> {
+    fn drop(&mut self) {
+        let mut g = self.rps.state.lock();
+        g.waiters[self.idx] = g.waiters[self.idx].saturating_sub(1);
+    }
+}
+
 struct GlobalRps {
     rate: f64,
-    state: Mutex<(f64, Instant)>,
+    state: Mutex<GlobalRpsState>,
     notify: Notify,
 }
 
@@ -313,28 +367,74 @@ impl GlobalRps {
         let rate = f64::from(per_sec.max(1));
         Self {
             rate,
-            state: Mutex::new((rate, Instant::now())),
+            state: Mutex::new(GlobalRpsState {
+                tokens: rate,
+                last_refill: Instant::now(),
+                waiters: [0; 3],
+                high_streak: 0,
+            }),
             notify: Notify::new(),
         }
     }
 
-    fn refill_locked(rate: f64, state: &mut (f64, Instant)) {
+    fn refill_locked(rate: f64, state: &mut GlobalRpsState) {
         let now = Instant::now();
-        let elapsed = now.saturating_duration_since(state.1).as_secs_f64();
-        state.0 = (state.0 + elapsed * rate).min(rate);
-        state.1 = now;
+        let elapsed = now
+            .saturating_duration_since(state.last_refill)
+            .as_secs_f64();
+        state.tokens = (state.tokens + elapsed * rate).min(rate);
+        state.last_refill = now;
     }
 
-    async fn take(&self) {
+    fn can_take(state: &GlobalRpsState, priority: RequestPriority) -> bool {
+        match priority {
+            RequestPriority::Critical => {
+                let lower_waiting = state.waiters[1] > 0 || state.waiters[2] > 0;
+                !(lower_waiting && state.high_streak >= AGING_BURST)
+            }
+            RequestPriority::Normal => {
+                if state.waiters[0] > 0 && state.high_streak < AGING_BURST {
+                    return false;
+                }
+                !(state.waiters[2] > 0 && state.high_streak >= AGING_BURST * 2)
+            }
+            RequestPriority::Background => {
+                (state.waiters[0] == 0 && state.waiters[1] == 0) || state.high_streak >= AGING_BURST
+            }
+        }
+    }
+
+    async fn take(&self, priority: RequestPriority) {
+        let idx = priority.index();
+        {
+            self.state.lock().waiters[idx] += 1;
+        }
+        let _guard = GlobalRpsWaiter { rps: self, idx };
+
         loop {
             let wait = {
                 let mut g = self.state.lock();
                 Self::refill_locked(self.rate, &mut g);
-                if g.0 >= 1.0 {
-                    g.0 -= 1.0;
+                if g.tokens >= 1.0 && Self::can_take(&g, priority) {
+                    g.tokens -= 1.0;
+                    let lower_waiting = match priority {
+                        RequestPriority::Critical => g.waiters[1] > 0 || g.waiters[2] > 0,
+                        RequestPriority::Normal => g.waiters[2] > 0,
+                        RequestPriority::Background => false,
+                    };
+                    if lower_waiting {
+                        g.high_streak = g.high_streak.saturating_add(1);
+                    } else {
+                        g.high_streak = 0;
+                    }
                     None
+                } else if g.tokens >= 1.0 {
+                    // A different priority should go first; wake it and wait briefly.
+                    drop(g);
+                    self.notify.notify_waiters();
+                    Some(Duration::from_millis(1))
                 } else {
-                    let need = (1.0 - g.0) / self.rate;
+                    let need = (1.0 - g.tokens) / self.rate;
                     Some(Duration::from_secs_f64(need.max(0.001)))
                 }
             };
@@ -354,7 +454,7 @@ impl GlobalRps {
     fn give_back(&self) {
         let mut g = self.state.lock();
         Self::refill_locked(self.rate, &mut g);
-        g.0 = (g.0 + 1.0).min(self.rate);
+        g.tokens = (g.tokens + 1.0).min(self.rate);
         drop(g);
         self.notify.notify_waiters();
     }
@@ -493,11 +593,15 @@ impl InProcessRateLimiter {
         }
     }
 
-    async fn acquire_inner(&self, route: &Route) -> Result<(), HttpError> {
+    async fn acquire_inner(
+        &self,
+        route: &Route,
+        priority: RequestPriority,
+    ) -> Result<(), HttpError> {
         let key = RouteKey::from_route(route);
         self.global_lock.wait().await;
         if !route.global_exempt {
-            self.global_rps.take().await;
+            self.global_rps.take(priority).await;
         }
         loop {
             let bucket = self.bucket_for(&key);
@@ -578,7 +682,15 @@ impl RateLimiter for InProcessRateLimiter {
         &'a self,
         route: &'a Route,
     ) -> Pin<Box<dyn Future<Output = Result<(), HttpError>> + Send + 'a>> {
-        Box::pin(self.acquire_inner(route))
+        Box::pin(self.acquire_inner(route, RequestPriority::Normal))
+    }
+
+    fn acquire_with_priority<'a>(
+        &'a self,
+        route: &'a Route,
+        priority: RequestPriority,
+    ) -> Pin<Box<dyn Future<Output = Result<(), HttpError>> + Send + 'a>> {
+        Box::pin(self.acquire_inner(route, priority))
     }
 
     fn record(&self, route: &Route, headers: &HeaderMap, status: StatusCode) {

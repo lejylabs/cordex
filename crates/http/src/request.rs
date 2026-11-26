@@ -12,7 +12,9 @@ use serde::de::DeserializeOwned;
 
 use crate::client::{Client, ClientCounters};
 use crate::error::{HttpError, discord_from_body};
-use crate::limiter::{InvalidRequestGuard, PermitGuard, RateLimitScope, parse_secs};
+use crate::limiter::{
+    InvalidRequestGuard, PermitGuard, RateLimitScope, RequestPriority, parse_secs,
+};
 use crate::multipart::Multipart;
 use crate::route::Route;
 use crate::transport::RawResponse;
@@ -28,11 +30,17 @@ pub struct RequestBuilder {
     content_type: Option<HeaderValue>,
     reason: Option<HeaderValue>,
     query: String,
+    priority: RequestPriority,
 }
 
 impl RequestBuilder {
     pub(crate) fn new(client: Client, route: Route) -> Self {
         let reason = client.default_reason.clone();
+        let priority = if route.global_exempt {
+            RequestPriority::Critical
+        } else {
+            RequestPriority::Normal
+        };
         Self {
             client,
             route,
@@ -40,7 +48,15 @@ impl RequestBuilder {
             content_type: None,
             reason,
             query: String::new(),
+            priority,
         }
+    }
+
+    /// Override the global rate-limiter scheduling priority for this request.
+    #[must_use]
+    pub fn priority(mut self, priority: RequestPriority) -> Self {
+        self.priority = priority;
+        self
     }
 
     /// JSON body (`Content-Type: application/json`).
@@ -289,6 +305,7 @@ fn build_http_request(
         .map_err(HttpError::transport)
 }
 
+#[allow(clippy::too_many_lines)]
 async fn execute(builder: RequestBuilder) -> Result<Response, HttpError> {
     let RequestBuilder {
         client,
@@ -297,6 +314,7 @@ async fn execute(builder: RequestBuilder) -> Result<Response, HttpError> {
         content_type,
         reason,
         query,
+        priority,
     } = builder;
     let inner = &client.inner;
 
@@ -312,7 +330,10 @@ async fn execute(builder: RequestBuilder) -> Result<Response, HttpError> {
         }
         inner.guard.check()?;
 
-        inner.limiter.acquire(&route).await?;
+        inner
+            .limiter
+            .acquire_with_priority(&route, priority)
+            .await?;
         let mut permit = PermitGuard::new(&*inner.limiter, &route);
 
         let request = build_http_request(

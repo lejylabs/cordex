@@ -51,10 +51,14 @@
 
 mod context;
 mod cooldown;
+mod health;
 mod module;
 mod sync;
 
 pub use cooldown::{CooldownScope, Cooldowns};
+#[cfg(feature = "cache")]
+pub use health::CacheHealth;
+pub use health::{HealthSnapshot, ShardHealth};
 pub use module::BotModule;
 
 use std::any::{Any, TypeId};

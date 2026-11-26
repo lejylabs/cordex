@@ -6,6 +6,7 @@ pub mod event_flags;
 pub mod identify;
 pub mod manager;
 pub mod mock;
+pub mod session_store;
 pub mod shard;
 pub mod spawn;
 
@@ -31,6 +32,7 @@ pub use identify::{
     LocalIdentifyQueue,
 };
 pub use manager::{ManagerEvents, ShardManager, ShardManagerBuilder};
+pub use session_store::{FileSessionStore, SessionStore};
 pub use shard::{GatewayBotSource, Shard, ShardBuilder};
 pub use spawn::{CurrentRuntime, RuntimeHandles, ShardTask, Spawner};
 pub use standby::{STANDBY_STREAM_CAPACITY, Standby};

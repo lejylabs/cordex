@@ -1454,6 +1454,87 @@ impl InMemoryCache {
         self.members.read().get(&guild).map_or(0, HashMap::len)
     }
 
+    /// Insert or update a single guild (e.g. for write-through after a REST
+    /// fetch), respecting [`ResourceType::GUILDS`] and configured parts.
+    pub fn insert_guild(&self, mut guild: Guild) {
+        let guard = self.config.read();
+        let c: &CacheConfig = &guard;
+        if !c.has(ResourceType::GUILDS) {
+            return;
+        }
+        strip::guild(&mut guild, c);
+        self.guilds.write().insert(guild.id, Arc::new(guild));
+    }
+
+    /// Insert or update a single channel or thread (e.g. for write-through
+    /// after a REST fetch), respecting [`ResourceType::CHANNELS`] /
+    /// [`ResourceType::THREADS`] and configured parts.
+    pub fn insert_channel(&self, mut channel: Channel) {
+        let guard = self.config.read();
+        let c: &CacheConfig = &guard;
+        let is_thread = channel.kind.is_thread();
+        let resource = if is_thread {
+            ResourceType::THREADS
+        } else {
+            ResourceType::CHANNELS
+        };
+        if !c.has(resource) {
+            return;
+        }
+        strip::channel(&mut channel, c);
+        let id = channel.id;
+        let guild_id = channel.guild_id;
+        if is_thread {
+            self.threads.write().insert(id, Arc::new(channel));
+            if let Some(gid) = guild_id {
+                self.guild_threads
+                    .write()
+                    .entry(gid)
+                    .or_default()
+                    .insert(id);
+            }
+        } else {
+            self.channels.write().insert(id, Arc::new(channel));
+            if let Some(gid) = guild_id {
+                self.guild_channels
+                    .write()
+                    .entry(gid)
+                    .or_default()
+                    .insert(id);
+            }
+        }
+    }
+
+    /// Insert or update a single user (e.g. for write-through after a REST
+    /// fetch), respecting [`ResourceType::USERS`] and [`CacheConfig::max_users`].
+    pub fn insert_user(&self, mut user: User) {
+        let guard = self.config.read();
+        let c: &CacheConfig = &guard;
+        if !c.has(ResourceType::USERS) {
+            return;
+        }
+        strip::user(&mut user, c);
+        let mut users = self.users.write();
+        if let Some(cap) = c.max_users_cap()
+            && !users.contains_key(&user.id)
+            && users.len() >= cap
+        {
+            // Evict an arbitrary unreferenced user if at capacity, otherwise skip.
+            let refs = self.user_refs.read();
+            let victim = users
+                .keys()
+                .find(|id| refs.get(id).copied().unwrap_or(0) == 0)
+                .copied();
+            drop(refs);
+            if let Some(id) = victim {
+                users.remove(&id);
+            } else {
+                return;
+            }
+        }
+        users.insert(user.id, Arc::new(user));
+    }
+
     // ---- lookups -------------------------------------------------------
 
     /// The bot user (from `READY` / `USER_UPDATE`; needs [`ResourceType::USERS`]).
