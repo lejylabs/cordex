@@ -203,7 +203,7 @@ Most bots only need `cordex`. The parts work on their own too:
 | `lavalink` | no | Pure-Rust Lavalink v4 client (`cordex-lavalink`, enables `voice`) |
 | `interactions-verify` | no | `verify_signature()` for HTTP interactions in any web framework |
 | `interactions-server` | no | Standalone hyper endpoint for HTTP interactions |
-| `oauth2` | no | Discord OAuth2 client in `cordex::http::oauth2` (PKCE, token exchange/refresh/revoke, Bearer endpoints) |
+| `oauth2` | no | Discord `OAuth2` client in `cordex::http::oauth2` (PKCE, token exchange/refresh/revoke, Bearer endpoints) |
 | `macros` | no | Optional derive macros (`#[derive(CommandArgs)]`, `#[derive(CommandChoice)]`) |
 | `postgres-types` | no | Direct PostgreSQL `ToSql` / `FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
 | `rusqlite` | no | Direct SQLite `ToSql` / `FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
