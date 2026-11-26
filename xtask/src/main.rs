@@ -41,14 +41,7 @@ const INTERNAL_DEPS: &[(&str, &[&str])] = &[
     ),
     (
         "test",
-        &[
-            "cordex",
-            "cordex-model",
-            "cordex-http",
-            "cordex-gateway",
-            "cordex-cache",
-            "cordex-interactions",
-        ],
+        &["facade", "model", "http", "gateway", "cache", "interactions"],
     ),
 ];
 
