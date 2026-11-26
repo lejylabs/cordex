@@ -1535,3 +1535,36 @@ impl EventContext {
         &self.previous
     }
 }
+
+macro_rules! impl_interaction_locale {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl $ty {
+                /// Invoking user's Discord locale (e.g. `"en-US"`, `"de"`), if provided.
+                pub fn locale(&self) -> Option<&str> {
+                    self.interaction.locale.as_deref()
+                }
+
+                /// Guild's preferred locale, if invoked in a guild.
+                pub fn guild_locale(&self) -> Option<&str> {
+                    self.interaction.guild_locale.as_deref()
+                }
+
+                /// Effective locale falling back from user [`locale`](Self::locale)
+                /// → [`guild_locale`](Self::guild_locale) → `default`.
+                pub fn effective_locale<'a>(&'a self, default: &'a str) -> &'a str {
+                    self.locale()
+                        .or_else(|| self.guild_locale())
+                        .unwrap_or(default)
+                }
+            }
+        )+
+    };
+}
+
+impl_interaction_locale!(
+    CommandContext,
+    ComponentContext,
+    ModalContext,
+    AutocompleteContext,
+);

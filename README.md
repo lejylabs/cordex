@@ -7,13 +7,6 @@ It covers the whole official bot API — gateway, sharding, REST, interactions,
 an optional cache — and adds a simple layer, so a working bot takes a few
 lines. Low-level access stays available, but you never need it.
 
-> **`0.1.0` is the first regular release.** Before `1.0` a minor release
-> (`0.2.0`, …) may break the API; a patch release never does (see the
-> [changelog]). Coverage of the
-> official docs is measured, not estimated: [`docs/coverage.md`][coverage]
-> (currently 100 % of all endpoints, events, opcodes, enum values, object
-> fields and flags).
-
 Read the full [cordex Guide][guide] (quickstart, commands, caching, migration from Serenity/Twilight, FAQ) or join the [cordex Discord server][discord link] for questions and feedback.
 
 ## Installation

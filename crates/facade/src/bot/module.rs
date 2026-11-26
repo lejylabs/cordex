@@ -392,6 +392,52 @@ impl BotModule {
         self
     }
 
+    /// Register a periodic task that runs every `interval` after the first `READY`.
+    pub fn every<F, Fut>(mut self, interval: Duration, f: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers
+            .scheduled
+            .push(super::scheduler::ScheduledTask::Periodic {
+                interval,
+                immediate: false,
+                handler: boxed(f),
+            });
+        self
+    }
+
+    /// Like [`every`](Self::every), but runs the first tick immediately on `READY`.
+    pub fn every_immediate<F, Fut>(mut self, interval: Duration, f: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers
+            .scheduled
+            .push(super::scheduler::ScheduledTask::Periodic {
+                interval,
+                immediate: true,
+                handler: boxed(f),
+            });
+        self
+    }
+
+    /// Register a long-running background task started on the first `READY`.
+    pub fn background<F, Fut>(mut self, f: F) -> Self
+    where
+        F: Fn(Context, super::ShutdownToken) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers
+            .scheduled
+            .push(super::scheduler::ScheduledTask::Background {
+                handler: Arc::new(move |ctx, token| Box::pin(f(ctx, token))),
+            });
+        self
+    }
+
     /// Register an `around` middleware scoped strictly to commands in this module.
     pub fn around_command<F, Fut>(mut self, f: F) -> Self
     where

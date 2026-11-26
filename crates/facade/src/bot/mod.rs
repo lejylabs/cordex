@@ -54,6 +54,7 @@ mod cooldown;
 mod health;
 mod middleware;
 mod module;
+mod scheduler;
 mod sync;
 
 pub use cooldown::{CooldownScope, Cooldowns};
@@ -62,6 +63,7 @@ pub use health::CacheHealth;
 pub use health::{HealthSnapshot, ShardHealth};
 pub use middleware::Next;
 pub use module::BotModule;
+pub use scheduler::{SchedulerHandle, ShutdownToken};
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -239,6 +241,7 @@ struct Handlers {
     voice_state: Vec<Handler<(Context, Arc<cordex_model::voice::VoiceState>)>>,
     before_command: Vec<BeforeCommand>,
     around_command: Vec<middleware::AroundCommand>,
+    scheduled: Vec<scheduler::ScheduledTask>,
     on_error: Option<ErrorHandler>,
 }
 
@@ -269,6 +272,7 @@ impl Handlers {
         self.voice_state.extend(other.voice_state);
         self.before_command.extend(other.before_command);
         self.around_command.extend(other.around_command);
+        self.scheduled.extend(other.scheduled);
         if other.on_error.is_some() {
             self.on_error = other.on_error;
         }
@@ -1039,11 +1043,15 @@ impl Bot {
             ));
         }
 
+        let mut schedulers: Option<SchedulerHandle> = None;
         let mut shutdown = std::pin::pin!(shutdown);
         loop {
             let item = tokio::select! {
                 () = &mut shutdown => {
                     tracing::info!("shutdown signal received; closing shards");
+                    if let Some(handle) = schedulers.take() {
+                        handle.shutdown(Duration::from_secs(5)).await;
+                    }
                     shared.manager().shutdown(CloseMode::Terminate).await;
                     return Ok(());
                 }
@@ -1065,9 +1073,74 @@ impl Bot {
                 }
             };
             let Some(item) = item else { break };
+            if schedulers.is_none()
+                && !shared.handlers.scheduled.is_empty()
+                && matches!(
+                    item,
+                    ManagerEvent::Dispatch {
+                        event: Event::Ready(_),
+                        ..
+                    }
+                )
+            {
+                schedulers = Some(scheduler::spawn_all(&shared, &shared.handlers.scheduled));
+            }
             on_manager_event(&shared, item, &registered, guild_commands, &commands).await?;
         }
+        if let Some(handle) = schedulers.take() {
+            handle.shutdown(Duration::from_secs(5)).await;
+        }
         Ok(())
+    }
+
+    /// Register a periodic task that runs every `interval` after the first `READY`.
+    ///
+    /// Uses `MissedTickBehavior::Skip` and isolates errors/panics per tick.
+    pub fn every<F, Fut>(mut self, interval: Duration, f: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers
+            .scheduled
+            .push(scheduler::ScheduledTask::Periodic {
+                interval,
+                immediate: false,
+                handler: boxed(f),
+            });
+        self
+    }
+
+    /// Like [`every`](Self::every), but runs the first tick immediately on `READY`.
+    pub fn every_immediate<F, Fut>(mut self, interval: Duration, f: F) -> Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers
+            .scheduled
+            .push(scheduler::ScheduledTask::Periodic {
+                interval,
+                immediate: true,
+                handler: boxed(f),
+            });
+        self
+    }
+
+    /// Register a long-running background task started on the first `READY`.
+    ///
+    /// The task receives a [`ShutdownToken`] that is cancelled when the bot shuts down.
+    pub fn background<F, Fut>(mut self, f: F) -> Self
+    where
+        F: Fn(Context, ShutdownToken) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers
+            .scheduled
+            .push(scheduler::ScheduledTask::Background {
+                handler: Arc::new(move |ctx, token| Box::pin(f(ctx, token))),
+            });
+        self
     }
 
     /// Register an `around` middleware that wraps every command handler.
@@ -1187,6 +1260,12 @@ impl OfflineBot {
     /// Underlying [`Standby`] event waiter registry.
     pub fn standby(&self) -> &Standby {
         &self.shared.standby
+    }
+
+    /// Start all registered [`Bot::every`] / [`Bot::background`] tasks for
+    /// offline testing. Call [`SchedulerHandle::shutdown`] to stop them.
+    pub fn start_schedulers(&self) -> SchedulerHandle {
+        scheduler::spawn_all(&self.shared, &self.shared.handlers.scheduled)
     }
 }
 

@@ -76,6 +76,12 @@ impl TestBot {
         self.bot.context()
     }
 
+    /// Start all registered [`Bot::every`] / [`Bot::background`] tasks for
+    /// deterministic offline testing.
+    pub fn start_schedulers(&self) -> cordex::bot::SchedulerHandle {
+        self.bot.start_schedulers()
+    }
+
     /// Pre-seed a [`Guild`] into the bot's cache (if caching is enabled).
     pub fn seed_guild(&self, guild: Guild) {
         if let Some(cache) = self.bot.cache() {

@@ -9,6 +9,7 @@
 - [Commands & Interactions](commands.md)
 - [Messages, Embeds & Helpers](messages.md)
 - [Components & Modals](components.md)
+- [Localization (i18n)](i18n.md)
 
 # Core Systems
 

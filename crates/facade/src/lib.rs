@@ -177,7 +177,7 @@ pub mod prelude {
     };
     pub use cordex_model::{
         ApplicationId, AttachmentId, Channel, ChannelId, CommandId, EmojiId, Guild, GuildId, Id,
-        InteractionId, Member, Message, MessageId, Permissions, Role, RoleId, Timestamp,
+        InteractionId, Locale, Member, Message, MessageId, Permissions, Role, RoleId, Timestamp,
         TimestampStyle, Token, User, UserId, WebhookId, escape_markdown, escape_mentions,
         parse_webhook_url, split_message, split_message_2000, split_message_4096,
     };
@@ -186,6 +186,7 @@ pub mod prelude {
     pub use crate::bot::{
         AutocompleteContext, Bot, BotModule, CommandContext, ComponentContext, Context,
         CooldownScope, Cooldowns, EventContext, MessageContext, ModalContext, Next, ReadyContext,
+        SchedulerHandle, ShutdownToken,
     };
     #[cfg(feature = "cache")]
     pub use cordex_cache::{CacheConfig, CacheParts, CachePolicy, InMemoryCache, ResourceType};

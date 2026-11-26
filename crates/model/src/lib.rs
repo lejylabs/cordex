@@ -19,6 +19,7 @@ pub mod image_hash;
 pub mod interaction;
 pub mod invite;
 pub mod lobby;
+pub mod locale;
 pub mod mention;
 pub mod message;
 pub mod permission_calc;
@@ -51,6 +52,7 @@ pub use id::{
 };
 pub use image_hash::ImageHash;
 pub use invite::{Invite, parse_invite_url};
+pub use locale::Locale;
 pub use mention::{Mentionable, ParsedMention, parse_mentions};
 pub use message::Message;
 pub use message::embed::EmbedError;

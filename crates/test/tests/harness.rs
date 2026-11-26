@@ -160,3 +160,32 @@ async fn record_anonymize_and_replay_jsonl() -> Result<(), Box<dyn std::error::E
     assert_eq!(seen.load(Ordering::Relaxed), 1);
     Ok(())
 }
+
+#[tokio::test(start_paused = true)]
+async fn scheduler_runs_periodically_and_shuts_down() -> Result<(), Box<dyn std::error::Error>> {
+    let ticks = Arc::new(AtomicUsize::new(0));
+    let ticks_clone = Arc::clone(&ticks);
+    let bot = Bot::new("mock").every_immediate(Duration::from_secs(10), move |_ctx: Context| {
+        let ticks = Arc::clone(&ticks_clone);
+        async move {
+            ticks.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
+    });
+
+    let harness = TestBot::new(bot).await?;
+    let handle = harness.start_schedulers();
+    settle().await;
+    assert_eq!(ticks.load(Ordering::Relaxed), 1);
+
+    tokio::time::advance(Duration::from_secs(10)).await;
+    settle().await;
+    assert_eq!(ticks.load(Ordering::Relaxed), 2);
+
+    tokio::time::advance(Duration::from_secs(10)).await;
+    settle().await;
+    assert_eq!(ticks.load(Ordering::Relaxed), 3);
+
+    handle.shutdown(Duration::from_secs(1)).await;
+    Ok(())
+}

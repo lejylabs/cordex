@@ -257,6 +257,25 @@ impl Command {
         self
     }
 
+    /// Shorthand alias for [`name_localization`](Self::name_localization).
+    #[must_use]
+    pub fn name_localized(self, locale: impl AsRef<str>, name: impl AsRef<str>) -> Self {
+        self.name_localization(locale, name)
+    }
+
+    /// Add multiple localized names at once.
+    #[must_use]
+    pub fn name_localizations<L: AsRef<str>, V: AsRef<str>>(
+        mut self,
+        entries: impl IntoIterator<Item = (L, V)>,
+    ) -> Self {
+        for (locale, name) in entries {
+            self.name_localizations
+                .insert(locale.as_ref().into(), name.as_ref().into());
+        }
+        self
+    }
+
     /// Localized description.
     #[must_use]
     pub fn description_localization(
@@ -266,6 +285,29 @@ impl Command {
     ) -> Self {
         self.description_localizations
             .insert(locale.as_ref().into(), description.as_ref().into());
+        self
+    }
+
+    /// Shorthand alias for [`description_localization`](Self::description_localization).
+    #[must_use]
+    pub fn description_localized(
+        self,
+        locale: impl AsRef<str>,
+        description: impl AsRef<str>,
+    ) -> Self {
+        self.description_localization(locale, description)
+    }
+
+    /// Add multiple localized descriptions at once.
+    #[must_use]
+    pub fn description_localizations<L: AsRef<str>, V: AsRef<str>>(
+        mut self,
+        entries: impl IntoIterator<Item = (L, V)>,
+    ) -> Self {
+        for (locale, desc) in entries {
+            self.description_localizations
+                .insert(locale.as_ref().into(), desc.as_ref().into());
+        }
         self
     }
 
@@ -758,6 +800,25 @@ impl CommandOption {
         self
     }
 
+    /// Shorthand alias for [`name_localization`](Self::name_localization).
+    #[must_use]
+    pub fn name_localized(self, locale: impl AsRef<str>, name: impl AsRef<str>) -> Self {
+        self.name_localization(locale, name)
+    }
+
+    /// Add multiple localized names at once.
+    #[must_use]
+    pub fn name_localizations<L: AsRef<str>, V: AsRef<str>>(
+        mut self,
+        entries: impl IntoIterator<Item = (L, V)>,
+    ) -> Self {
+        for (locale, name) in entries {
+            self.name_localizations
+                .insert(locale.as_ref().into(), name.as_ref().into());
+        }
+        self
+    }
+
     /// Localized description.
     #[must_use]
     pub fn description_localization(
@@ -767,6 +828,29 @@ impl CommandOption {
     ) -> Self {
         self.description_localizations
             .insert(locale.as_ref().into(), description.as_ref().into());
+        self
+    }
+
+    /// Shorthand alias for [`description_localization`](Self::description_localization).
+    #[must_use]
+    pub fn description_localized(
+        self,
+        locale: impl AsRef<str>,
+        description: impl AsRef<str>,
+    ) -> Self {
+        self.description_localization(locale, description)
+    }
+
+    /// Add multiple localized descriptions at once.
+    #[must_use]
+    pub fn description_localizations<L: AsRef<str>, V: AsRef<str>>(
+        mut self,
+        entries: impl IntoIterator<Item = (L, V)>,
+    ) -> Self {
+        for (locale, desc) in entries {
+            self.description_localizations
+                .insert(locale.as_ref().into(), desc.as_ref().into());
+        }
         self
     }
 
