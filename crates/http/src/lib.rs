@@ -4,6 +4,8 @@ pub mod endpoint;
 pub mod error;
 pub mod limiter;
 pub mod mock;
+#[cfg(feature = "oauth2")]
+pub mod oauth2;
 pub mod route;
 
 mod client;

@@ -191,3 +191,26 @@ jobs:
 
       - name: cargo xtask coverage --check
         run: cargo xtask coverage --check
+
+  wasm32:
+    name: wasm32 (model & interactions)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install toolchain + wasm32 target
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: wasm32
+
+      - name: cargo check wasm32-unknown-unknown
+        run: cargo check --target wasm32-unknown-unknown -p cordex-model -p cordex-interactions --no-default-features

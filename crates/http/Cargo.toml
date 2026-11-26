@@ -21,6 +21,8 @@ default = ["http2"]
 http2 = ["hyper/http2", "hyper-util/http2", "hyper-rustls/http2"]
 # Export client counters through the `metrics` crate.
 metrics = ["dep:metrics"]
+# Discord OAuth2 client (authorize URLs, token exchange/refresh/revoke, bearer endpoints).
+oauth2 = []
 
 [dependencies]
 cordex-model.workspace = true

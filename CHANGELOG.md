@@ -8,9 +8,10 @@ All notable changes are listed here. The project follows
 
 ## 0.2.0 - 2026-11-26
 
-- **Background Tasks / Scheduler & First-Class i18n:**
+- **Background Tasks / Scheduler, First-Class i18n, OAuth2 & WASM:**
   - Added lifecycle-bound `Bot::every`, `Bot::every_immediate`, and `Bot::background` (and on `BotModule`) with `ShutdownToken`, `SchedulerHandle`, `MissedTickBehavior::Skip`, panic/error isolation, and graceful shutdown.
   - Added `Locale` enum in `cordex-model`, `locale()` / `guild_locale()` / `effective_locale(default)` on all interaction contexts, bulk `.name_localizations` / `.description_localizations` & `.name_localized` / `.description_localized` shortcuts on `Command` / `CommandOption`, and `book/src/i18n.md`.
+  - Added opt-in `oauth2` feature on `cordex-http` / `cordex` (`OAuth2Client`, `OAuth2Config`, `TokenResponse`, `PartialGuild::can_manage`, PKCE `S256` authorize URLs, token exchange/refresh/revoke, Bearer endpoints) and `wasm32-unknown-unknown` CI check for `cordex-model` & `cordex-interactions`.
 - **Offline Testing-Harness & Gateway-Replay (new crate `cordex-test` + `cordex-gateway/record`):**
   - Added `cordex-test` with `TestBot` (wraps any `Bot` without code changes), in-memory `MockHttp` recorder & error injection, cache pre-seed helpers (`seed_guild`, `seed_channel`, `seed_user`, `seed_member`), interaction/event builders (`slash`, `click_button`, `submit_modal`, `trigger_autocomplete`, `send_message`), rich assertions (`assert_replied`, `assert_ephemeral`, `assert_deferred`, `assert_modal`, `assert_autocomplete_choices`, `assert_sent_message`), and full `tokio::time::pause()` / `advance()` compatibility.
   - Added opt-in `record` feature on `cordex-gateway` (`TrafficRecorder`, `RecordedFrame`, consistent 1:1 `Anonymizer`) and `TestBot::replay_jsonl` / `replay_jsonl_str`.
