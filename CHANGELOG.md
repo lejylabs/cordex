@@ -6,6 +6,8 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+## 0.2.1 - 2026-11-26
+
 - **New opt-in derive-macro crate `cordex-macros` (`macros` feature):**
   - Added `#[derive(CommandArgs)]` and `#[derive(CommandChoice)]` plus `CommandArgs` / `CommandChoice` traits, `Command::with_args::<A>()`, and `CommandOption::choices(...)` (strictly opt-in, off by default).
 - **Opt-in database & cache type integrations (`cordex-model` & `cordex`, all off by default):**
@@ -17,9 +19,9 @@ All notable changes are listed here. The project follows
   - Added `VerifiedInteraction` Ed25519 extractor (`401 Unauthorized` on invalid/missing signature), `interactions_router` (automatic `PING` → `PONG`), and `health_router` (`/healthz` & `/readyz` backed by `HealthSnapshot`).
 - **Linux / Transport & Memory Performance Tuning:**
   - Enabled TCP keepalive (30 s idle, 10 s interval, 3 retries), HTTP/2 keepalive probes, `BytesMut` direct JSON serialization, and `#[cfg(unix)]` `ClientBuilder::unix_socket` (UDS transport) in `cordex-http`.
-  - Added `StringInterner` (`Arc<str>` deduplication + `prune_unused`) in `cordex-cache`.
+  - Added `StringInterner` (`Arc<str>` deduplication + `prune_unused`) and `CacheConfig::compact()` minimal-RAM preset in `cordex-cache`.
   - Added opt-in `simd-json` feature on `cordex-model` & `cordex` (`cordex_model::simd_json::from_slice`).
-  - Documented Linux allocator / `zstd-stream` / thread-per-core tuning in `book/src/production.md`.
+  - Documented Linux allocator / `zstd-stream` / thread-per-core / release-profile tuning in `book/src/production.md`.
 
 ## 0.2.0 - 2026-11-26
 

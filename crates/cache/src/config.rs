@@ -127,6 +127,24 @@ impl CacheConfig {
         Self::new().resources(ResourceType::GUILDS | ResourceType::CHANNELS)
     }
 
+    /// Preset for minimal RAM usage: lazy policies for guilds, channels, roles,
+    /// users, and members, bounded caps (`max_messages_per_channel(25)`,
+    /// `max_users(10_000)`, `member_ttl(30 min)`), and write-through enabled.
+    pub fn compact() -> Self {
+        Self::new()
+            .lazy(
+                ResourceType::GUILDS
+                    | ResourceType::CHANNELS
+                    | ResourceType::ROLES
+                    | ResourceType::USERS
+                    | ResourceType::MEMBERS,
+            )
+            .max_messages_per_channel(25)
+            .max_users(Some(10_000))
+            .member_ttl(Some(std::time::Duration::from_mins(30)))
+            .write_through(true)
+    }
+
     /// Switch resources on eagerly (adds to what is already on, upgrades
     /// lazy resources to eager).
     #[must_use]

@@ -80,3 +80,13 @@ let bot = Bot::from_env()?
 - **Transport Compression (`zstd-stream`):** Enable `features = ["zstd-stream"]` on Linux servers for lower gateway bandwidth and CPU usage compared to `zlib-stream`.
 - **Allocator (`mimalloc` / `jemalloc`):** Using `mimalloc` or `tikv-jemallocator` as `#[global_allocator]` typically cuts RSS by **20–40 %** on long-running Linux bots by reducing heap fragmentation.
 - **Thread-per-Core Sharding:** For large bots (10+ shards), run one `tokio::runtime::Builder::new_current_thread()` per CPU core and assign each shard subset via `Bot::shard_range(start..end, total)` to avoid cross-thread work-stealing overhead.
+
+### Release Profile (`Cargo.toml`)
+
+```toml
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+```
