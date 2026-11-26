@@ -1,7 +1,7 @@
 //! Pure permission calculator (topics/permissions.mdx).
 
 use crate::channel::{OverwriteType, PermissionOverwrite};
-use crate::guild::Role;
+use crate::guild::{Member, Role};
 use crate::id::Id;
 use crate::id::marker::{GenericMarker, RoleMarker, UserMarker};
 use crate::permissions::Permissions;
@@ -14,6 +14,21 @@ const SEND_DEPENDENT: Permissions = Permissions::from_bits_truncate(
         | Permissions::EMBED_LINKS.bits()
         | Permissions::ATTACH_FILES.bits(),
 );
+
+/// Highest role position held by `member` in `roles` (falls back to `0` if
+/// no matching role is found).
+///
+/// Ties are broken by Discord's rule: higher `position` wins; equal positions
+/// are ordered by lower role snowflake ID.
+pub fn highest_role_position(member: &Member, roles: &[Role]) -> (i32, u64) {
+    member
+        .roles
+        .iter()
+        .filter_map(|rid| roles.iter().find(|r| r.id == *rid))
+        .map(|r| (r.position, u64::MAX - r.id.get()))
+        .max()
+        .unwrap_or((0, 0))
+}
 
 /// Guild-level permissions: `@everyone` plus the member's roles. The owner
 /// and anyone with [`Permissions::ADMINISTRATOR`] receive every bit.

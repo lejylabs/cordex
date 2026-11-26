@@ -178,13 +178,14 @@ pub mod prelude {
     pub use cordex_model::{
         ApplicationId, AttachmentId, Channel, ChannelId, CommandId, EmojiId, Guild, GuildId, Id,
         InteractionId, Member, Message, MessageId, Permissions, Role, RoleId, Timestamp,
-        TimestampStyle, Token, User, UserId, WebhookId, parse_webhook_url,
+        TimestampStyle, Token, User, UserId, WebhookId, escape_markdown, escape_mentions,
+        parse_webhook_url, split_message, split_message_2000, split_message_4096,
     };
 
     #[cfg(feature = "bot")]
     pub use crate::bot::{
         AutocompleteContext, Bot, BotModule, CommandContext, ComponentContext, Context,
-        CooldownScope, Cooldowns, EventContext, MessageContext, ModalContext, ReadyContext,
+        CooldownScope, Cooldowns, EventContext, MessageContext, ModalContext, Next, ReadyContext,
     };
     #[cfg(feature = "cache")]
     pub use cordex_cache::{CacheConfig, CacheParts, CachePolicy, InMemoryCache, ResourceType};
@@ -194,7 +195,8 @@ pub mod prelude {
     pub use cordex_http::{Client, InteractionClient, Typing};
     #[cfg(feature = "interactions")]
     pub use cordex_interactions::{
-        Choice, Command, CommandOption, CommandOptions, InteractionHandle, Modal, Reply,
+        Choice, Command, CommandOption, CommandOptions, CustomIdSigner, InteractionHandle,
+        LayoutBuilder, Modal, Reply, SignedCustomId, SyncReport,
     };
     #[cfg(feature = "voice")]
     pub use cordex_voice::{

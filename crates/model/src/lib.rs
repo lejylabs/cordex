@@ -10,6 +10,7 @@ pub mod component;
 pub mod emoji;
 pub mod entitlement;
 pub mod error;
+pub mod format;
 pub mod gateway;
 pub mod guild;
 pub mod id;
@@ -40,6 +41,9 @@ mod serde_util;
 pub use channel::{Channel, ChannelType};
 pub use emoji::Emoji;
 pub use error::ParseError;
+pub use format::{
+    escape_markdown, escape_mentions, split_message, split_message_2000, split_message_4096,
+};
 pub use guild::{Ban, Guild, Member, Role, UnavailableGuild};
 pub use id::{
     ApplicationId, AttachmentId, ChannelId, CommandId, EmojiId, GuildId, Id, InteractionId,

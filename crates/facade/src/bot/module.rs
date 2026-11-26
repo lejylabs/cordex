@@ -54,6 +54,8 @@ pub struct BotModule {
     /// Guards scoped strictly to commands registered in this module (and any
     /// sub-modules mounted into it).
     pub(super) local_before_command: Vec<BeforeCommand>,
+    /// `around_command` middlewares scoped strictly to commands in this module.
+    pub(super) local_around_command: Vec<super::middleware::AroundCommand>,
 }
 
 impl std::fmt::Debug for BotModule {
@@ -390,13 +392,30 @@ impl BotModule {
         self
     }
 
+    /// Register an `around` middleware scoped strictly to commands in this module.
+    pub fn around_command<F, Fut>(mut self, f: F) -> Self
+    where
+        F: Fn(CommandContext, super::Next) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.local_around_command
+            .push(Arc::new(move |ctx, next| Box::pin(f(ctx, next))));
+        self
+    }
+
     /// Wrap this module's command handlers with its `local_before_command`
-    /// guards and return its parts for mounting.
+    /// guards and `local_around_command` middlewares, and return its parts for mounting.
     pub(super) fn finalize(mut self) -> (Intents, EventTypeFlags, Vec<Command>, Handlers) {
         if !self.local_before_command.is_empty() {
             let guards: Arc<[BeforeCommand]> = self.local_before_command.into();
             for handler in self.handlers.commands.values_mut() {
                 *handler = wrap_with_guards(Arc::clone(handler), Arc::clone(&guards));
+            }
+        }
+        if !self.local_around_command.is_empty() {
+            let mws = self.local_around_command;
+            for handler in self.handlers.commands.values_mut() {
+                *handler = super::middleware::wrap_around(Arc::clone(handler), &mws);
             }
         }
         (

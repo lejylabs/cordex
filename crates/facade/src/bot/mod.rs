@@ -52,6 +52,7 @@
 mod context;
 mod cooldown;
 mod health;
+mod middleware;
 mod module;
 mod sync;
 
@@ -59,6 +60,7 @@ pub use cooldown::{CooldownScope, Cooldowns};
 #[cfg(feature = "cache")]
 pub use health::CacheHealth;
 pub use health::{HealthSnapshot, ShardHealth};
+pub use middleware::Next;
 pub use module::BotModule;
 
 use std::any::{Any, TypeId};
@@ -236,6 +238,7 @@ struct Handlers {
     >,
     voice_state: Vec<Handler<(Context, Arc<cordex_model::voice::VoiceState>)>>,
     before_command: Vec<BeforeCommand>,
+    around_command: Vec<middleware::AroundCommand>,
     on_error: Option<ErrorHandler>,
 }
 
@@ -265,6 +268,7 @@ impl Handlers {
         self.reaction_add.extend(other.reaction_add);
         self.voice_state.extend(other.voice_state);
         self.before_command.extend(other.before_command);
+        self.around_command.extend(other.around_command);
         if other.on_error.is_some() {
             self.on_error = other.on_error;
         }
@@ -1066,7 +1070,42 @@ impl Bot {
         Ok(())
     }
 
-    fn build_shared(self, http: Client, manager: ShardManager) -> (Arc<Shared>, Arc<[Command]>) {
+    /// Register an `around` middleware that wraps every command handler.
+    ///
+    /// Middlewares run in registration order (first registered is outermost).
+    /// Call `next.run(ctx).await` to continue to the next middleware or command.
+    pub fn around_command<F, Fut>(mut self, f: F) -> Self
+    where
+        F: Fn(CommandContext, Next) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.handlers
+            .around_command
+            .push(Arc::new(move |ctx, next| Box::pin(f(ctx, next))));
+        self
+    }
+
+    /// If `DISCORD_DEV_GUILD_ID` is set in the environment to a valid guild
+    /// snowflake, register commands in that guild instead of globally for
+    /// instant iteration during development.
+    pub fn sync_dev_guild_from_env(mut self) -> Self {
+        if let Some(guild_id) = cordex_interactions::sync::dev_guild_id_from_env() {
+            self.guild_commands = Some(guild_id);
+        }
+        self
+    }
+
+    fn build_shared(
+        mut self,
+        http: Client,
+        manager: ShardManager,
+    ) -> (Arc<Shared>, Arc<[Command]>) {
+        if !self.handlers.around_command.is_empty() {
+            let mws = std::mem::take(&mut self.handlers.around_command);
+            for handler in self.handlers.commands.values_mut() {
+                *handler = middleware::wrap_around(Arc::clone(handler), &mws);
+            }
+        }
         let manager = Arc::new(std::sync::Mutex::new(Arc::new(manager)));
         #[cfg(feature = "voice")]
         let voice = self.voice.then(|| {
