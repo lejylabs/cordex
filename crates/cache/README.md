@@ -16,8 +16,9 @@ only pay memory and CPU for what you switch on.
   in live events, skipping `GUILD_CREATE` / bulk dumps) or `Eager`
   (`CachePolicy`).
 - **11 parts** such as member roles, message content, channel overwrites.
-- **Limits**: messages per channel (ring buffer), members and presences per
-  guild.
+- **Limits & memory control**: messages per channel (ring buffer), members and
+  presences per guild, `max_users`, `member_ttl`, `write_through`,
+  `CacheConfig::compact()` preset, `StringInterner`, and `shrink_to_fit()`.
 - **`wanted_events()`** feeds the gateway event filter, so events the cache
   does not need are never parsed.
 - **`permissions(guild, user, channel)`**: computed permissions from cached

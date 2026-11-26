@@ -17,7 +17,10 @@ typed, with a rate limiter that keeps your bot's IP safe.
 - **Raw requests** for anything not typed yet (`Client::request`,
   `Route::raw`), with the same rate limiting.
 - **Pluggable**: `RateLimiter` trait for a shared limiter across processes,
-  `default_allowed_mentions`, mock transport for tests (`cordex_http::mock`).
+  3-tier `RequestPriority` (`Critical`, `Normal`, `Background`),
+  `default_allowed_mentions`, opt-in `oauth2` client, `#[cfg(unix)]`
+  `unix_socket` transport, TCP/HTTP2 keepalive, and mock transport for tests
+  (`cordex_http::mock`).
 
 Most bots use the facade crate [`cordex`][facade], which re-exports this crate.
 

@@ -14,11 +14,15 @@ and flag of the official bot API, plus helpers that need no network.
   a round trip.
 - **Small and fast**: large payloads are boxed, `Event` stays at most 48 bytes,
   `GUILD_CREATE` is read without buffering it twice.
-- **Helpers**: `MessageBuilder` with Markdown escaping, embed builder with
-  Discord's limits (`Embed::success`/`error`/`info`/`warn` + `colors`), CDN
-  URLs, mentions and timestamp markdown, mention parsing, permission
-  calculator, webhook, invite and message URL parsing.
-- **No async, no network**: usable in any project.
+- **Helpers**: `MessageBuilder` with Markdown escaping, codeblock-aware
+  `split_message`, `escape_markdown`, `escape_mentions`, `Locale`, embed
+  builder with Discord's limits (`Embed::success`/`error`/`info`/`warn` +
+  `colors`), CDN URLs, mentions and timestamp markdown, mention parsing,
+  permission calculator, webhook, invite and message URL parsing.
+- **Opt-in features**: `postgres-types`, `rusqlite`, `redis`, `mysql`
+  (`mysql_common`) type conversions for `Id<T>`, `Permissions`, `Timestamp`,
+  and `ImageHash`; plus `simd-json` for SIMD-accelerated JSON parsing.
+- **No async, no network**: usable in any project (including `wasm32`).
 
 Most bots use the facade crate [`cordex`][facade], which re-exports this crate.
 

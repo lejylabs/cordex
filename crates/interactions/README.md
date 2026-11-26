@@ -54,6 +54,7 @@ async fn on_interaction(
 
 | Feature | Default | Content |
 |---|---|---|
+| `macros` | no | Optional `#[derive(CommandArgs)]` and `#[derive(CommandChoice)]` |
 | `verify` | no | `PublicKey` and `verify_signature` (Ed25519) |
 | `server` | no | `InteractionEndpoint`: standalone hyper endpoint (implies `verify`) |
 
