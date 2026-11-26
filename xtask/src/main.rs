@@ -41,7 +41,14 @@ const INTERNAL_DEPS: &[(&str, &[&str])] = &[
     ),
     (
         "test",
-        &["facade", "model", "http", "gateway", "cache", "interactions"],
+        &[
+            "facade",
+            "model",
+            "http",
+            "gateway",
+            "cache",
+            "interactions",
+        ],
     ),
 ];
 
