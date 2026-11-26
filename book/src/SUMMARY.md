@@ -22,6 +22,8 @@
 
 # Guides & Reference
 
+- [Offline Testing & Replay (`cordex-test`)](testing.md)
+- [Production Resilience & Observability](production.md)
 - [Migrating from Serenity & Twilight](migration.md)
 - [Deployment & Performance](deployment.md)
 - [FAQ & Troubleshooting](faq.md)
