@@ -3,7 +3,7 @@
 Caching in `cordex` is **completely opt-in**. Enable the `cache` feature on `cordex`:
 
 ```toml
-cordex = { version = "0.1.9", features = ["cache"] }
+cordex = { version = "0.2.0", features = ["cache"] }
 ```
 
 By default (`CacheConfig::default()`), nothing is stored. Every resource (`ResourceType`), every optional field group (`CacheParts`), and every limit is switched on explicitly and can be changed at runtime via `InMemoryCache::set_config` (switching a resource off drops its data immediately).

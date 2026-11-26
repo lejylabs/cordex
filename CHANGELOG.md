@@ -6,6 +6,25 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+## 0.2.0 - 2026-11-26
+
+- **Offline Testing-Harness & Gateway-Replay (new crate `cordex-test` + `cordex-gateway/record`):**
+  - Added `cordex-test` with `TestBot` (wraps any `Bot` without code changes), in-memory `MockHttp` recorder & error injection, cache pre-seed helpers (`seed_guild`, `seed_channel`, `seed_user`, `seed_member`), interaction/event builders (`slash`, `click_button`, `submit_modal`, `trigger_autocomplete`, `send_message`), rich assertions (`assert_replied`, `assert_ephemeral`, `assert_deferred`, `assert_modal`, `assert_autocomplete_choices`, `assert_sent_message`), and full `tokio::time::pause()` / `advance()` compatibility.
+  - Added opt-in `record` feature on `cordex-gateway` (`TrafficRecorder`, `RecordedFrame`, consistent 1:1 `Anonymizer`) and `TestBot::replay_jsonl` / `replay_jsonl_str`.
+- **Discord Everyday Toolkit, Middleware & Components V2:**
+  - Added `Bot::around_command`, `BotModule::around_command`, and `Next::run(ctx)` for composable command middleware.
+  - Added `SyncReport`, `diff_commands`, `dev_guild_id_from_env`, and `Bot::sync_dev_guild_from_env()` (`DISCORD_DEV_GUILD_ID`).
+  - Added stateless HMAC-SHA256 signed `custom_id` payloads (`CustomIdSigner`, `SignedCustomId`, `CustomIdError`) within Discord's 100-char limit (pure Rust, zero external deps).
+  - Added fluent Components V2 `LayoutBuilder` (`text`, `separator`, `section`, `media_gallery`, `file`, `container`, `thumbnail`) with local limit validation and automatic `IS_COMPONENTS_V2`.
+  - Added codeblock-aware `split_message` / `split_message_2000` / `split_message_4096`, `escape_markdown`, `escape_mentions`, and `permission_calc::highest_role_position`.
+- **Production Resilience, Cache Eviction & Observability:**
+  - Added `SessionStore` trait and atomic `FileSessionStore` in `cordex-gateway` for zero-downtime `RESUME` persistence across restarts.
+  - Added 3-tier priority-aware global rate limiting (`RequestPriority::{Critical, Normal, Background}` with fair-scheduling aging) in `cordex-http` (`RequestBuilder::priority`).
+  - Added bounded cache eviction & write-through in `cordex-cache` (`max_messages_per_channel`, `max_users`, `member_ttl`, `write_through`, `insert_guild`, `insert_channel`, `insert_user`, `insert_guild_member`) and REST-fallback write-through in `Context`.
+  - Added `Context::health_snapshot() -> HealthSnapshot` (`ShardHealth`, `CacheHealth`, `is_ready()`, `to_json()`).
+- **Performance, Memory-Footprint & Bug-Hardening:**
+  - Hardened `InteractionHandle` auto-defer with an explicit state machine (`ResponseState`) to prevent double-ack races (`40060`), added non-`1000` resumable WebSocket close codes (`4000`), `Standby` cancellation `Drop` guards, cooldown map eviction, HTTP rate-limit bucket cleanup, internal `FxHash` for snowflake cache maps, decompress buffer high-water-mark shrinking, and `size_of` regression tests.
+
 ## 0.1.9 - 2026-11-25
 
 - **New zero-dependency CLI crate `cordex-migrate`:**
