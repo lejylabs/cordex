@@ -51,10 +51,18 @@ impl FromValue for Permissions {
     type Intermediate = Self;
 
     fn from_value(v: Value) -> Self {
-        Self::from_value_opt(v).unwrap_or_else(|_| Self::empty())
+        Self::try_from(v).unwrap_or_else(|_| Self::empty())
     }
 
     fn from_value_opt(v: Value) -> Result<Self, FromValueError> {
+        Self::try_from(v)
+    }
+}
+
+impl TryFrom<Value> for Permissions {
+    type Error = FromValueError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
         let bits = u64::from_value_opt(v)?;
         Ok(Self::from_bits_retain(bits))
     }
@@ -70,10 +78,18 @@ impl FromValue for Timestamp {
     type Intermediate = Self;
 
     fn from_value(v: Value) -> Self {
-        Self::from_value_opt(v).unwrap_or_else(|_| Self::from_micros(0))
+        Self::try_from(v).unwrap_or_else(|_| Self::from_micros(0))
     }
 
     fn from_value_opt(v: Value) -> Result<Self, FromValueError> {
+        Self::try_from(v)
+    }
+}
+
+impl TryFrom<Value> for Timestamp {
+    type Error = FromValueError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
         let micros = i64::from_value_opt(v)?;
         Ok(Self::from_micros(micros))
     }
@@ -89,10 +105,18 @@ impl FromValue for ImageHash {
     type Intermediate = Self;
 
     fn from_value(v: Value) -> Self {
-        Self::from_value_opt(v).unwrap_or_else(|_| Self::new(""))
+        Self::try_from(v).unwrap_or_else(|_| Self::new(""))
     }
 
     fn from_value_opt(v: Value) -> Result<Self, FromValueError> {
+        Self::try_from(v)
+    }
+}
+
+impl TryFrom<Value> for ImageHash {
+    type Error = FromValueError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
         let s = String::from_value_opt(v)?;
         Ok(Self::new(&s))
     }

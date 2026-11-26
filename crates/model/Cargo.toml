@@ -24,7 +24,7 @@ rusqlite = ["dep:rusqlite"]
 # Direct Redis `ToRedisArgs`/`FromRedisValue` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
 redis = ["dep:redis"]
 # Direct MySQL/MariaDB (`mysql_common`, works with `mysql` & `mysql_async`) value conversions.
-mysql = ["dep:mysql_common"]
+mysql = ["dep:mysql_common", "dep:flate2"]
 
 [dependencies]
 
@@ -34,6 +34,7 @@ bitflags.workspace = true
 thiserror.workspace = true
 time.workspace = true
 bytes = { workspace = true, optional = true }
+flate2 = { workspace = true, optional = true }
 postgres-types = { workspace = true, optional = true }
 rusqlite = { workspace = true, optional = true }
 redis = { workspace = true, optional = true }
