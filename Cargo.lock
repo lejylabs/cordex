@@ -301,6 +301,7 @@ version = "0.2.0"
 dependencies = [
  "bytes",
  "cordex-http",
+ "cordex-macros",
  "cordex-model",
  "ed25519-dalek",
  "http",
@@ -338,6 +339,15 @@ dependencies = [
  "tokio",
  "tokio-websockets",
  "tracing",
+]
+
+[[package]]
+name = "cordex-macros"
+version = "0.2.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

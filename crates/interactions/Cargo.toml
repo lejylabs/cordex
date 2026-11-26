@@ -23,6 +23,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+# Optional derive macros (`macros` feature).
+cordex-macros = { workspace = true, optional = true }
 # Signature verification and HTTP endpoint (features `verify` / `server`).
 ed25519-dalek = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
@@ -33,6 +35,8 @@ hyper-util = { workspace = true, optional = true }
 
 [features]
 default = []
+# Optional derive macros (`#[derive(CommandArgs)]`, `#[derive(CommandChoice)]`).
+macros = ["dep:cordex-macros"]
 # `verify_signature()` and `PublicKey` (Ed25519), usable in any web framework.
 verify = ["dep:ed25519-dalek"]
 # Standalone hyper endpoint for HTTP interactions (PLAN.md §11.3).

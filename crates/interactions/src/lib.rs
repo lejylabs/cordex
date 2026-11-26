@@ -2,6 +2,7 @@
 
 pub mod command;
 pub mod custom_id;
+pub mod derive;
 pub mod error;
 pub mod handle;
 pub mod modal;
@@ -15,7 +16,10 @@ pub mod v2;
 pub mod verify;
 
 pub use command::{Choice, Command, CommandOption};
+#[cfg(feature = "macros")]
+pub use cordex_macros::{CommandArgs, CommandChoice};
 pub use custom_id::{CustomIdError, CustomIdSigner, SignedCustomId};
+pub use derive::{CommandArgs, CommandChoice};
 pub use error::InteractionError;
 pub use handle::{InteractionHandle, ResponseState};
 pub use modal::Modal;

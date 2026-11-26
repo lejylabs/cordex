@@ -23,7 +23,7 @@ const INTERNAL_DEPS: &[(&str, &[&str])] = &[
     ("http", &["model"]),
     ("gateway", &["model", "http"]),
     ("cache", &["model"]),
-    ("interactions", &["model", "http"]),
+    ("interactions", &["model", "http", "macros"]),
     ("voice", &["model", "gateway"]),
     ("lavalink", &["model", "voice"]),
     ("migrate", &[]),
@@ -50,6 +50,7 @@ const INTERNAL_DEPS: &[(&str, &[&str])] = &[
             "interactions",
         ],
     ),
+    ("macros", &[]),
 ];
 
 /// `cordex-model` stays free of async and network code.

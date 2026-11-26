@@ -27,6 +27,7 @@ cordex-http = { version = "0.2.0", path = "crates/http", default-features = fals
 cordex-gateway = { version = "0.2.0", path = "crates/gateway" }
 cordex-cache = { version = "0.2.0", path = "crates/cache" }
 cordex-interactions = { version = "0.2.0", path = "crates/interactions" }
+cordex-macros = { version = "0.2.0", path = "crates/macros" }
 cordex-voice = { version = "0.2.0", path = "crates/voice", default-features = false }
 cordex-lavalink = { version = "0.2.0", path = "crates/lavalink" }
 
@@ -70,6 +71,11 @@ ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast
 
 # Optional metrics export (`metrics` feature on http, gateway and facade)
 metrics = { version = "0.24.6", default-features = false }
+
+# Optional derive macros (`cordex-macros`, opt-in `macros` feature)
+proc-macro2 = { version = "1.0.107", default-features = false, features = ["proc-macro"] }
+quote = { version = "1.0.47", default-features = false, features = ["proc-macro"] }
+syn = { version = "2.0.119", default-features = false, features = ["derive", "parsing", "printing", "proc-macro"] }
 
 # Examples, tests, benchmarks only (Phase 7); never in library [dependencies]
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "fmt", "env-filter", "ansi"] }
