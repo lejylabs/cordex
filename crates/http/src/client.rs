@@ -292,6 +292,18 @@ impl ClientBuilder {
         self
     }
 
+    /// Route all HTTP requests over a local Unix Domain Socket instead of TCP
+    /// (for local REST proxies or sidecars on Linux/Unix).
+    #[cfg(unix)]
+    #[must_use]
+    pub fn unix_socket(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+        self.transport = Some(Arc::new(crate::transport::UnixSocketTransport::new(
+            path.into(),
+            self.max_body,
+        )));
+        self
+    }
+
     /// Use `Bearer` instead of `Bot`.
     #[must_use]
     pub fn bearer(mut self) -> Self {

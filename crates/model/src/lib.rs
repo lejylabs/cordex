@@ -34,6 +34,8 @@ mod redis_types;
 #[cfg(feature = "rusqlite")]
 mod rusqlite_types;
 pub mod scheduled_event;
+#[cfg(feature = "simd-json")]
+pub mod simd_json;
 pub mod sku;
 pub mod soundboard;
 pub mod stage;

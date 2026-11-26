@@ -25,6 +25,8 @@ rusqlite = ["dep:rusqlite"]
 redis = ["dep:redis"]
 # Direct MySQL/MariaDB (`mysql_common`, works with `mysql` & `mysql_async`) value conversions.
 mysql = ["dep:mysql_common", "dep:flate2"]
+# Opt-in SIMD-accelerated JSON deserialization (`simd-json`).
+simd-json = ["dep:simd-json"]
 
 [dependencies]
 
@@ -39,6 +41,7 @@ postgres-types = { workspace = true, optional = true }
 rusqlite = { workspace = true, optional = true }
 redis = { workspace = true, optional = true }
 mysql_common = { workspace = true, optional = true }
+simd-json = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true

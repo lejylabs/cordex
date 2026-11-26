@@ -73,3 +73,10 @@ let bot = Bot::from_env()?
         Ok(())
     });
 ```
+
+## Linux Performance & Minimal RAM Tuning
+
+- **TCP & HTTP/2 Keepalive + `TCP_NODELAY`:** Enabled automatically on both `cordex-http` (30 s TCP & HTTP/2 keepalive, 10 s interval, 3 retries) and `cordex-gateway` (`TCP_NODELAY`) to eliminate Nagle latency and detect half-open Docker/NAT sockets quickly.
+- **Transport Compression (`zstd-stream`):** Enable `features = ["zstd-stream"]` on Linux servers for lower gateway bandwidth and CPU usage compared to `zlib-stream`.
+- **Allocator (`mimalloc` / `jemalloc`):** Using `mimalloc` or `tikv-jemallocator` as `#[global_allocator]` typically cuts RSS by **20–40 %** on long-running Linux bots by reducing heap fragmentation.
+- **Thread-per-Core Sharding:** For large bots (10+ shards), run one `tokio::runtime::Builder::new_current_thread()` per CPU core and assign each shard subset via `Bot::shard_range(start..end, total)` to avoid cross-thread work-stealing overhead.

@@ -65,6 +65,8 @@ rusqlite = ["cordex-model/rusqlite"]
 redis = ["cordex-model/redis"]
 # Direct MySQL/MariaDB (`mysql_common`) value conversions.
 mysql = ["cordex-model/mysql"]
+# Opt-in SIMD-accelerated JSON deserialization (`simd-json`).
+simd-json = ["cordex-model/simd-json"]
 # Use zstd-stream gateway transport compression instead of zlib-stream (requires a C compiler).
 zstd-stream = ["cordex-gateway?/zstd-stream"]
 

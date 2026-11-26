@@ -61,9 +61,11 @@ impl RequestBuilder {
 
     /// JSON body (`Content-Type: application/json`).
     pub fn json<T: Serialize>(mut self, value: &T) -> Result<Self, HttpError> {
-        let bytes = serde_json::to_vec(value)
+        use bytes::{BufMut, BytesMut};
+        let mut writer = BytesMut::with_capacity(256).writer();
+        serde_json::to_writer(&mut writer, value)
             .map_err(|e| HttpError::validation(format!("json body: {e}").into_boxed_str()))?;
-        self.body = Some(Bytes::from(bytes));
+        self.body = Some(writer.into_inner().freeze());
         self.content_type = Some(HeaderValue::from_static("application/json"));
         Ok(self)
     }

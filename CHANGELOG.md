@@ -15,6 +15,11 @@ All notable changes are listed here. The project follows
   - `mysql` (MySQL / MariaDB via `mysql_common`, works with both `mysql` and `mysql_async`): `FromValue` / `Into<Value>` for `Id<T>`, `Permissions`, `Timestamp`, and `ImageHash`.
 - **New Axum integration crate `cordex-axum`:**
   - Added `VerifiedInteraction` Ed25519 extractor (`401 Unauthorized` on invalid/missing signature), `interactions_router` (automatic `PING` → `PONG`), and `health_router` (`/healthz` & `/readyz` backed by `HealthSnapshot`).
+- **Linux / Transport & Memory Performance Tuning:**
+  - Enabled TCP keepalive (30 s idle, 10 s interval, 3 retries), HTTP/2 keepalive probes, `BytesMut` direct JSON serialization, and `#[cfg(unix)]` `ClientBuilder::unix_socket` (UDS transport) in `cordex-http`.
+  - Added `StringInterner` (`Arc<str>` deduplication + `prune_unused`) in `cordex-cache`.
+  - Added opt-in `simd-json` feature on `cordex-model` & `cordex` (`cordex_model::simd_json::from_slice`).
+  - Documented Linux allocator / `zstd-stream` / thread-per-core tuning in `book/src/production.md`.
 
 ## 0.2.0 - 2026-11-26
 

@@ -43,6 +43,9 @@ impl HyperTransport {
     ) -> Result<Self, HttpError> {
         let mut http = HttpConnector::new();
         http.set_nodelay(true);
+        http.set_keepalive(Some(Duration::from_secs(30)));
+        http.set_keepalive_interval(Some(Duration::from_secs(10)));
+        http.set_keepalive_retries(Some(3));
         http.set_connect_timeout(Some(connect_timeout));
         http.enforce_http(false);
 
@@ -69,7 +72,10 @@ impl HyperTransport {
             .pool_timer(TokioTimer::new());
         #[cfg(feature = "http2")]
         if !http1_only {
-            builder.http2_adaptive_window(true);
+            builder
+                .http2_adaptive_window(true)
+                .http2_keep_alive_interval(Duration::from_secs(30))
+                .http2_keep_alive_while_idle(true);
         }
         let client = builder.build(https);
 
@@ -138,5 +144,57 @@ where
         request: Request<Bytes>,
     ) -> Pin<Box<dyn Future<Output = Result<RawResponse, HttpError>> + Send + '_>> {
         Box::pin((self.f)(request))
+    }
+}
+
+/// HTTP/1.1 transport over a local Unix Domain Socket (`#[cfg(unix)]`).
+///
+/// Useful for talking to a local REST proxy or sidecar on the same Linux/Unix
+/// host without TCP loopback overhead.
+#[cfg(unix)]
+pub(crate) struct UnixSocketTransport {
+    path: std::path::PathBuf,
+    max_body: usize,
+}
+
+#[cfg(unix)]
+impl UnixSocketTransport {
+    pub(crate) fn new(path: std::path::PathBuf, max_body: usize) -> Self {
+        Self { path, max_body }
+    }
+}
+
+#[cfg(unix)]
+impl Transport for UnixSocketTransport {
+    fn send(
+        &self,
+        request: Request<Bytes>,
+    ) -> Pin<Box<dyn Future<Output = Result<RawResponse, HttpError>> + Send + '_>> {
+        let path = self.path.clone();
+        let max_body = self.max_body;
+        Box::pin(async move {
+            let stream = tokio::net::UnixStream::connect(&path)
+                .await
+                .map_err(HttpError::transport)?;
+            let io = hyper_util::rt::TokioIo::new(stream);
+            let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
+                .await
+                .map_err(HttpError::transport)?;
+            tokio::spawn(async move {
+                let _ = conn.await;
+            });
+            let response = sender
+                .send_request(request.map(Full::new))
+                .await
+                .map_err(HttpError::transport)?;
+            let status = response.status();
+            let headers = response.headers().clone();
+            let body = collect_limited(response.into_body(), max_body).await?;
+            Ok(RawResponse {
+                status,
+                headers,
+                body,
+            })
+        })
     }
 }
