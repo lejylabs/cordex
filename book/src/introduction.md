@@ -37,6 +37,13 @@ cargo generate lejylabs/cordex-template
 | `lavalink` | no | Opt-in pure-Rust Lavalink v4 client (`cordex-lavalink`, enables `voice`) |
 | `interactions-verify` | no | Ed25519 `verify_signature()` for any web framework |
 | `interactions-server` | no | Standalone Hyper HTTP interaction endpoint |
+| `oauth2` | no | Discord `OAuth2` client in `cordex::http::oauth2` (PKCE, token exchange/refresh/revoke, Bearer endpoints) |
+| `macros` | no | Optional derive macros (`#[derive(CommandArgs)]`, `#[derive(CommandChoice)]`) |
+| `postgres-types` | no | Direct PostgreSQL `ToSql` / `FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
+| `rusqlite` | no | Direct SQLite `ToSql` / `FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
+| `redis` | no | Direct Redis `ToRedisArgs` / `FromRedisValue` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
+| `mysql` | no | Direct MySQL/MariaDB (`mysql_common`) value conversions for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
+| `simd-json` | no | Opt-in SIMD-accelerated JSON deserialization (`cordex_model::simd_json::from_slice`) |
 | `metrics` | no | Export HTTP and gateway counters through the `metrics` crate |
 | `zstd-stream` | no | Use `zstd-stream` gateway compression instead of pure-Rust `zlib-stream` (requires a C compiler) |
 
