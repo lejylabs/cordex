@@ -18,6 +18,8 @@ workspace = true
 [features]
 # Export shard counters through the `metrics` crate.
 metrics = ["dep:metrics"]
+# Record gateway dispatch payloads to JSONL files with optional anonymization.
+record = []
 # Use zstd-stream transport compression instead of zlib-stream (requires a C compiler).
 zstd-stream = ["dep:zstd"]
 

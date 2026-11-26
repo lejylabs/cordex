@@ -1,0 +1,30 @@
+[package]
+name = "cordex-test"
+description = "Offline testing harness and gateway-replay runner for cordex bots."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+documentation = "https://docs.rs/cordex-test"
+
+[lints]
+workspace = true
+
+[dependencies]
+cordex = { path = "../facade", features = ["cache"] }
+cordex-model.workspace = true
+cordex-http = { workspace = true, default-features = false }
+cordex-gateway = { workspace = true, features = ["record"] }
+cordex-cache.workspace = true
+cordex-interactions.workspace = true
+bytes.workspace = true
+http.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "time", "sync", "macros", "test-util"] }

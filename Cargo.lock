@@ -358,6 +358,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "cordex-test"
+version = "0.1.9"
+dependencies = [
+ "bytes",
+ "cordex",
+ "cordex-cache",
+ "cordex-gateway",
+ "cordex-http",
+ "cordex-interactions",
+ "cordex-model",
+ "http",
+ "parking_lot 0.13.0",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "cordex-voice"
 version = "0.1.9"
 dependencies = [

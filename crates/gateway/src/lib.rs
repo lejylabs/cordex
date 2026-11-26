@@ -6,6 +6,8 @@ pub mod event_flags;
 pub mod identify;
 pub mod manager;
 pub mod mock;
+#[cfg(feature = "record")]
+pub mod recorder;
 pub mod session_store;
 pub mod shard;
 pub mod spawn;

@@ -1126,6 +1126,12 @@ impl InMemoryCache {
         removed_guild
     }
 
+    /// Insert or update a single [`Member`] in a guild (write-through / pre-seeding).
+    pub fn insert_guild_member(&self, guild_id: GuildId, member: &Member) {
+        let cfg = self.config.read().clone();
+        self.insert_member(guild_id, member, &cfg);
+    }
+
     fn insert_member(&self, gid: GuildId, m: &Member, c: &CacheConfig) {
         self.insert_member_batch(gid, std::slice::from_ref(m), c, c.has(ResourceType::USERS));
     }

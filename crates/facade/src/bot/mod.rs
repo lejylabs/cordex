@@ -1097,6 +1097,58 @@ impl Bot {
         });
         (shared, self.commands.into())
     }
+
+    /// Build an offline handle for driving this bot without connecting to
+    /// Discord. Used by `cordex-test` to inject events and inspect state.
+    pub fn into_offline(self, http: Client, manager: ShardManager) -> OfflineBot {
+        let (shared, commands) = self.build_shared(http, manager);
+        OfflineBot { shared, commands }
+    }
+}
+
+/// Offline bot driver produced by [`Bot::into_offline`].
+///
+/// Dispatches gateway events directly through the bot's cache, standby, and
+/// registered handlers without opening any network connections.
+pub struct OfflineBot {
+    shared: Arc<Shared>,
+    commands: Arc<[Command]>,
+}
+
+impl OfflineBot {
+    /// Dispatch one gateway event as if it arrived on `shard_id`.
+    pub fn dispatch(&self, shard_id: ShardId, event: Event) {
+        dispatch(&self.shared, shard_id, event);
+    }
+
+    /// Build a [`Context`] bound to shard 0.
+    pub fn context(&self) -> Context {
+        Context {
+            shared: Arc::clone(&self.shared),
+            shard: ShardId::one(),
+        }
+    }
+
+    /// Underlying HTTP client.
+    pub fn http(&self) -> &Client {
+        &self.shared.http
+    }
+
+    /// Registered application commands.
+    pub fn commands(&self) -> &[Command] {
+        &self.commands
+    }
+
+    /// In-memory cache, if enabled on the [`Bot`].
+    #[cfg(feature = "cache")]
+    pub fn cache(&self) -> Option<&Arc<cordex_cache::InMemoryCache>> {
+        self.shared.cache.as_ref()
+    }
+
+    /// Underlying [`Standby`] event waiter registry.
+    pub fn standby(&self) -> &Standby {
+        &self.shared.standby
+    }
 }
 
 async fn shutdown_signal() {
