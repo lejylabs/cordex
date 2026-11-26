@@ -19,6 +19,12 @@ workspace = true
 default = []
 # Direct PostgreSQL `ToSql`/`FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
 postgres-types = ["dep:postgres-types", "dep:bytes"]
+# Direct SQLite (`rusqlite`) `ToSql`/`FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
+rusqlite = ["dep:rusqlite"]
+# Direct Redis `ToRedisArgs`/`FromRedisValue` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
+redis = ["dep:redis"]
+# Direct MySQL/MariaDB (`mysql_common`, works with `mysql` & `mysql_async`) value conversions.
+mysql = ["dep:mysql_common"]
 
 [dependencies]
 
@@ -29,6 +35,9 @@ thiserror.workspace = true
 time.workspace = true
 bytes = { workspace = true, optional = true }
 postgres-types = { workspace = true, optional = true }
+rusqlite = { workspace = true, optional = true }
+redis = { workspace = true, optional = true }
+mysql_common = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true

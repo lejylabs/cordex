@@ -22,11 +22,17 @@ pub mod lobby;
 pub mod locale;
 pub mod mention;
 pub mod message;
+#[cfg(feature = "mysql")]
+mod mysql_types;
 pub mod permission_calc;
 pub mod permissions;
 pub mod poll;
 #[cfg(feature = "postgres-types")]
 mod postgres_types;
+#[cfg(feature = "redis")]
+mod redis_types;
+#[cfg(feature = "rusqlite")]
+mod rusqlite_types;
 pub mod scheduled_event;
 pub mod sku;
 pub mod soundboard;

@@ -59,6 +59,12 @@ oauth2 = ["cordex-http?/oauth2"]
 macros = ["cordex-interactions?/macros"]
 # Direct PostgreSQL `ToSql`/`FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
 postgres-types = ["cordex-model/postgres-types"]
+# Direct SQLite (`rusqlite`) `ToSql`/`FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
+rusqlite = ["cordex-model/rusqlite"]
+# Direct Redis `ToRedisArgs`/`FromRedisValue` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
+redis = ["cordex-model/redis"]
+# Direct MySQL/MariaDB (`mysql_common`) value conversions.
+mysql = ["cordex-model/mysql"]
 # Use zstd-stream gateway transport compression instead of zlib-stream (requires a C compiler).
 zstd-stream = ["cordex-gateway?/zstd-stream"]
 
