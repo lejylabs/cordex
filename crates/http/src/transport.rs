@@ -157,9 +157,8 @@ where
 pub(crate) struct UnixSocketTransport {
     path: std::path::PathBuf,
     max_body: usize,
-    pool: std::sync::Arc<
-        std::sync::Mutex<Vec<hyper::client::conn::http1::SendRequest<Full<Bytes>>>>,
-    >,
+    pool:
+        std::sync::Arc<std::sync::Mutex<Vec<hyper::client::conn::http1::SendRequest<Full<Bytes>>>>>,
 }
 
 #[cfg(unix)]
@@ -191,25 +190,22 @@ impl Transport for UnixSocketTransport {
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .pop();
-                match candidate {
-                    Some(mut s) => {
-                        if s.ready().await.is_ok() {
-                            break s;
-                        }
-                    }
-                    None => {
-                        let stream = tokio::net::UnixStream::connect(&path)
-                            .await
-                            .map_err(HttpError::transport)?;
-                        let io = hyper_util::rt::TokioIo::new(stream);
-                        let (s, conn) = hyper::client::conn::http1::handshake(io)
-                            .await
-                            .map_err(HttpError::transport)?;
-                        tokio::spawn(async move {
-                            let _ = conn.await;
-                        });
+                if let Some(mut s) = candidate {
+                    if s.ready().await.is_ok() {
                         break s;
                     }
+                } else {
+                    let stream = tokio::net::UnixStream::connect(&path)
+                        .await
+                        .map_err(HttpError::transport)?;
+                    let io = hyper_util::rt::TokioIo::new(stream);
+                    let (s, conn) = hyper::client::conn::http1::handshake(io)
+                        .await
+                        .map_err(HttpError::transport)?;
+                    tokio::spawn(async move {
+                        let _ = conn.await;
+                    });
+                    break s;
                 }
             };
             let response = sender

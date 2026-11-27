@@ -1520,12 +1520,7 @@ async fn reshard_loop(
         if !needs_reshard(running, target, info.session_start_limit.remaining) {
             continue;
         }
-        tracing::info!(
-            running,
-            recommended = info.shards,
-            target,
-            "resharding"
-        );
+        tracing::info!(running, recommended = info.shards, target, "resharding");
         match prepare_reshard(&shared.http, &cfg).await {
             Ok(next) => {
                 if switch.send(next).await.is_err() {
