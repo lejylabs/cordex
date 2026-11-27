@@ -5,6 +5,7 @@ Release notes for `cordex`, organized by version. The project follows [Semantic 
 | Version | Date | Highlights |
 | --- | --- | --- |
 | [Unreleased](changelog/unreleased.md) | — | — |
+| [0.2.3](changelog/0.2.3.md) | 2026-11-27 | Extended DB types (`Locale`, bitflags, enums, Postgres `JSONB`/`JSON`), interaction guards (`require_guild`/`nsfw`/`role`/`entitlement`/`owner`), `ButtonClicks` `.max()`/`.filter()`/`.end_reason()`, `RedisSessionStore` |
 | [0.2.2](changelog/0.2.2.md) | 2026-11-26 | Fix `cordex-http` runtime panic on HTTP/2 connections by setting `.timer(TokioTimer::new())` on the `hyper` client builder |
 | [0.2.1](changelog/0.2.1.md) | 2026-11-26 | `cordex-macros`, `cordex-axum`, opt-in `postgres-types`/`rusqlite`/`redis`/`mysql`/`simd-json`, `StringInterner`, `CacheConfig::compact()`, TCP/HTTP2 keepalive & UDS transport |
 | [0.2.0](changelog/0.2.0.md) | 2026-11-26 | `cordex-test` offline harness & `.jsonl` gateway replay, `around_command` middleware, signed `CustomId`, Components V2 `LayoutBuilder`, `split_message`, `SessionStore`, priority rate limiter, cache eviction & write-through, `health_snapshot()`, perf & bug hardening |

@@ -157,7 +157,8 @@ impl RedisSessionStore {
 impl SessionStore for RedisSessionStore {
     fn load(&self, shard_id: u32) -> Option<ResumeInfo> {
         let mut conn = self.client.get_connection().ok()?;
-        let bytes: Option<Vec<u8>> = redis::Commands::get(&mut conn, self.key_for(shard_id)).ok()?;
+        let bytes: Option<Vec<u8>> =
+            redis::Commands::get(&mut conn, self.key_for(shard_id)).ok()?;
         let bytes = bytes?;
         let val: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
         let session_id = val.get("session_id")?.as_str()?.into();

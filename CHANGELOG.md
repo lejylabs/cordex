@@ -6,6 +6,8 @@ All notable changes are listed here. The project follows
 
 ## Unreleased
 
+## 0.2.3 - 2026-11-27
+
 - **Extended opt-in database type integrations (`cordex-model`):**
   - Added `Locale`, all `u64` bitflags (`Intents`, `UserFlags`, `MessageFlags`, `ChannelFlags`, `MemberFlags`, `RoleFlags`, `SystemChannelFlags`), and key `u8` enums (`ChannelType`, `InteractionType`, `PremiumTier`, `AutoModerationActionType`) across `postgres-types`, `rusqlite`, `redis`, and `mysql`.
   - Added native PostgreSQL `JSONB` / `JSON` `ToSql` / `FromSql` support for `Embed`, `Component`, and `AllowedMentions` (`postgres-types` feature).

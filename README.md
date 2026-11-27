@@ -13,7 +13,7 @@ Read the full [cordex Guide][guide] (quickstart, commands, caching, migration fr
 
 ```toml
 [dependencies]
-cordex = "0.2.2"
+cordex = "0.2.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

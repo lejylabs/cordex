@@ -11,9 +11,9 @@ Both features are **off by default**, so bots that do not use voice stay lean.
 
 ```toml
 [dependencies]
-cordex = { version = "0.2.2", features = ["lavalink"] }
+cordex = { version = "0.2.3", features = ["lavalink"] }
 # Or only signaling (for custom backends):
-# cordex = { version = "0.2.2", features = ["voice"] }
+# cordex = { version = "0.2.3", features = ["voice"] }
 ```
 
 ## Using `Bot::voice()`
