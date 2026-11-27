@@ -34,6 +34,8 @@ pub use identify::{
     LocalIdentifyQueue,
 };
 pub use manager::{ManagerEvents, ShardManager, ShardManagerBuilder};
+#[cfg(feature = "redis")]
+pub use session_store::RedisSessionStore;
 pub use session_store::{FileSessionStore, SessionStore};
 pub use shard::{GatewayBotSource, Shard, ShardBuilder};
 pub use spawn::{CurrentRuntime, RuntimeHandles, ShardTask, Spawner};

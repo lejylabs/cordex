@@ -92,6 +92,114 @@ impl SessionStore for FileSessionStore {
     }
 }
 
+/// Redis-backed [`SessionStore`] for zero-downtime gateway `RESUME` across
+/// container or multi-node restarts (`redis` feature).
+#[cfg(feature = "redis")]
+#[derive(Clone)]
+pub struct RedisSessionStore {
+    client: redis::Client,
+    prefix: Box<str>,
+    ttl_secs: Option<u64>,
+}
+
+#[cfg(feature = "redis")]
+impl std::fmt::Debug for RedisSessionStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RedisSessionStore")
+            .field("prefix", &self.prefix)
+            .field("ttl_secs", &self.ttl_secs)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "redis")]
+impl RedisSessionStore {
+    /// Create a Redis-backed session store from a Redis connection URL
+    /// (e.g. `"redis://127.0.0.1/"`).
+    pub fn open(url: &str) -> Result<Self, redis::RedisError> {
+        let client = redis::Client::open(url)?;
+        Ok(Self::from_client(client))
+    }
+
+    /// Create a Redis-backed session store from an existing [`redis::Client`].
+    #[must_use]
+    pub fn from_client(client: redis::Client) -> Self {
+        Self {
+            client,
+            prefix: "cordex:session".into(),
+            ttl_secs: Some(86_400),
+        }
+    }
+
+    /// Customize the Redis key prefix (default: `"cordex:session"`).
+    ///
+    /// Keys are stored as `<prefix>:<shard_id>`.
+    #[must_use]
+    pub fn with_prefix(mut self, prefix: impl Into<Box<str>>) -> Self {
+        self.prefix = prefix.into();
+        self
+    }
+
+    /// Set a TTL on saved session keys (default: 24 hours). Pass `None` to
+    /// persist without expiration.
+    #[must_use]
+    pub fn with_ttl(mut self, ttl: Option<std::time::Duration>) -> Self {
+        self.ttl_secs = ttl.map(|d| d.as_secs().max(1));
+        self
+    }
+
+    fn key_for(&self, shard_id: u32) -> String {
+        format!("{}:{shard_id}", self.prefix)
+    }
+}
+
+#[cfg(feature = "redis")]
+impl SessionStore for RedisSessionStore {
+    fn load(&self, shard_id: u32) -> Option<ResumeInfo> {
+        let mut conn = self.client.get_connection().ok()?;
+        let bytes: Option<Vec<u8>> = redis::Commands::get(&mut conn, self.key_for(shard_id)).ok()?;
+        let bytes = bytes?;
+        let val: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+        let session_id = val.get("session_id")?.as_str()?.into();
+        let seq = val.get("seq")?.as_u64()?;
+        let resume_gateway_url = val.get("resume_gateway_url")?.as_str()?.into();
+        Some(ResumeInfo {
+            session_id,
+            seq,
+            resume_gateway_url,
+        })
+    }
+
+    fn save(&self, shard_id: u32, info: &ResumeInfo) -> io::Result<()> {
+        let mut conn = self
+            .client
+            .get_connection()
+            .map_err(|err| io::Error::other(err.to_string()))?;
+        let val = serde_json::json!({
+            "session_id": info.session_id.as_ref(),
+            "seq": info.seq,
+            "resume_gateway_url": info.resume_gateway_url.as_ref(),
+        });
+        let bytes = serde_json::to_vec(&val)
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+        let key = self.key_for(shard_id);
+        let res: redis::RedisResult<()> = match self.ttl_secs {
+            Some(secs) => redis::Commands::set_ex(&mut conn, key, bytes, secs),
+            None => redis::Commands::set(&mut conn, key, bytes),
+        };
+        res.map_err(|err| io::Error::other(err.to_string()))
+    }
+
+    fn clear(&self, shard_id: u32) -> io::Result<()> {
+        let mut conn = self
+            .client
+            .get_connection()
+            .map_err(|err| io::Error::other(err.to_string()))?;
+        let res: redis::RedisResult<()> = redis::Commands::del(&mut conn, self.key_for(shard_id));
+        res.map_err(|err| io::Error::other(err.to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

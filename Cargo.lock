@@ -381,6 +381,7 @@ dependencies = [
  "http",
  "metrics",
  "parking_lot 0.13.0",
+ "redis",
  "rustls",
  "serde_json",
  "thiserror",

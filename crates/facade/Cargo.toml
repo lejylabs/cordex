@@ -61,8 +61,8 @@ macros = ["cordex-interactions?/macros"]
 postgres-types = ["cordex-model/postgres-types"]
 # Direct SQLite (`rusqlite`) `ToSql`/`FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
 rusqlite = ["cordex-model/rusqlite"]
-# Direct Redis `ToRedisArgs`/`FromRedisValue` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash`.
-redis = ["cordex-model/redis"]
+# Direct Redis conversions in `cordex-model` and `RedisSessionStore` in `cordex-gateway`.
+redis = ["cordex-model/redis", "cordex-gateway?/redis"]
 # Direct MySQL/MariaDB (`mysql_common`) value conversions.
 mysql = ["cordex-model/mysql"]
 # Opt-in SIMD-accelerated JSON deserialization (`simd-json`).
