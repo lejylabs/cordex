@@ -59,8 +59,103 @@ pub fn cluster_shard_range(
     Some(start..start + len)
 }
 
+/// Discord's maximum guilds per shard (baseline for [`AutoShardingConfig::guilds_per_shard`]).
+pub const DISCORD_MAX_GUILDS_PER_SHARD: u32 = 2_500;
+
+/// Tuning knobs for automatic sharding ([`ShardManagerBuilder::auto_sharding`]).
+///
+/// Lets you override how Discord's recommended shard count from
+/// `GET /gateway/bot` is translated into the actual shard count:
+/// - [`guilds_per_shard`](Self::guilds_per_shard): target fewer guilds per
+///   shard than Discord's 2,500 cap (e.g. `1_000` scales `recommended` up by
+///   `ceil(recommended * 2500 / 1000)`).
+/// - [`min_shards`](Self::min_shards) / [`max_shards`](Self::max_shards): clamp
+///   the resulting shard count.
+/// - [`round_up_to_multiple`](Self::round_up_to_multiple): align the shard
+///   count to a multiple (e.g. `max_concurrency` or your cluster count).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct AutoShardingConfig {
+    guilds_per_shard: Option<u32>,
+    min_shards: Option<u32>,
+    max_shards: Option<u32>,
+    multiple: Option<u32>,
+}
+
+impl AutoShardingConfig {
+    /// Default configuration (uses Discord's recommendation verbatim).
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            guilds_per_shard: None,
+            min_shards: None,
+            max_shards: None,
+            multiple: None,
+        }
+    }
+
+    /// Target maximum guilds per shard (`1..=2500`).
+    ///
+    /// Scales Discord's recommended shard count proportionally against
+    /// [`DISCORD_MAX_GUILDS_PER_SHARD`] (`2500`).
+    #[must_use]
+    pub const fn guilds_per_shard(mut self, target: u32) -> Self {
+        let clamped = if target == 0 {
+            1
+        } else if target > DISCORD_MAX_GUILDS_PER_SHARD {
+            DISCORD_MAX_GUILDS_PER_SHARD
+        } else {
+            target
+        };
+        self.guilds_per_shard = Some(clamped);
+        self
+    }
+
+    /// Lower bound on the resolved shard count (clamped to `>= 1`).
+    #[must_use]
+    pub const fn min_shards(mut self, min: u32) -> Self {
+        self.min_shards = Some(if min == 0 { 1 } else { min });
+        self
+    }
+
+    /// Upper bound on the resolved shard count (clamped to `>= 1`).
+    #[must_use]
+    pub const fn max_shards(mut self, max: u32) -> Self {
+        self.max_shards = Some(if max == 0 { 1 } else { max });
+        self
+    }
+
+    /// Round the resolved shard count up to a multiple of `n` (e.g. `4` or `16`).
+    #[must_use]
+    pub const fn round_up_to_multiple(mut self, n: u32) -> Self {
+        self.multiple = if n <= 1 { None } else { Some(n) };
+        self
+    }
+
+    /// Compute the effective shard count from Discord's `recommended` count.
+    #[must_use]
+    pub fn resolve(&self, recommended: u32) -> u32 {
+        let mut count = recommended.max(1);
+        if let Some(target) = self.guilds_per_shard {
+            let scaled = u64::from(count)
+                .saturating_mul(u64::from(DISCORD_MAX_GUILDS_PER_SHARD))
+                .div_ceil(u64::from(target));
+            count = u32::try_from(scaled).unwrap_or(u32::MAX).max(1);
+        }
+        if let Some(min) = self.min_shards {
+            count = count.max(min);
+        }
+        if let Some(m) = self.multiple {
+            count = count.div_ceil(m).saturating_mul(m);
+        }
+        if let Some(max) = self.max_shards {
+            count = count.min(max);
+        }
+        count.max(1)
+    }
+}
+
 enum ShardSpec {
-    Automatic,
+    Automatic(AutoShardingConfig),
     Range { range: Range<u32>, total: u32 },
     List { ids: Vec<u32>, total: u32 },
 }
@@ -137,7 +232,7 @@ impl ShardManagerBuilder<WsConnector> {
         Self {
             token: Token::new(token.as_ref()),
             intents,
-            spec: ShardSpec::Automatic,
+            spec: ShardSpec::Automatic(AutoShardingConfig::new()),
             connector: WsConnector::new(),
             http: None,
             bot: None,
@@ -161,7 +256,15 @@ impl<C: Connector> ShardManagerBuilder<C> {
     /// Use the recommended shard count from `GET /gateway/bot`.
     #[must_use]
     pub fn automatic(mut self) -> Self {
-        self.spec = ShardSpec::Automatic;
+        self.spec = ShardSpec::Automatic(AutoShardingConfig::new());
+        self
+    }
+
+    /// Use automatic sharding with custom preferences (target guilds per shard,
+    /// min/max bounds, or multiple alignment).
+    #[must_use]
+    pub fn auto_sharding(mut self, config: AutoShardingConfig) -> Self {
+        self.spec = ShardSpec::Automatic(config);
         self
     }
 
@@ -334,13 +437,14 @@ impl<C: Connector> ShardManagerBuilder<C> {
     pub async fn build(self) -> Result<ShardManager<C>, GatewayError> {
         let bot = self.resolve_bot().await?;
         let (ids, total) = match &self.spec {
-            ShardSpec::Automatic => {
+            ShardSpec::Automatic(cfg) => {
                 if bot.shards == 0 {
                     return Err(GatewayError::validation(
                         "GET /gateway/bot recommended 0 shards",
                     ));
                 }
-                ((0..bot.shards).collect::<Vec<_>>(), bot.shards)
+                let count = cfg.resolve(bot.shards);
+                ((0..count).collect::<Vec<_>>(), count)
             }
             ShardSpec::Range { range, total } => {
                 if *total == 0 || range.end > *total || range.start >= range.end {
@@ -715,5 +819,27 @@ mod tests {
         assert_eq!(cluster_shard_range(0, 4, 2), Some(0..1));
         assert_eq!(cluster_shard_range(1, 4, 2), Some(1..2));
         assert_eq!(cluster_shard_range(2, 4, 2), None);
+    }
+
+    #[test]
+    fn auto_sharding_config_resolves_preferences() {
+        // Default keeps Discord's recommendation
+        assert_eq!(AutoShardingConfig::new().resolve(4), 4);
+        // 1000 guilds/shard scales 2 recommended shards -> ceil(2 * 2500 / 1000) = 5
+        assert_eq!(
+            AutoShardingConfig::new().guilds_per_shard(1_000).resolve(2),
+            5
+        );
+        // Round up to multiple of 4 -> 8
+        assert_eq!(
+            AutoShardingConfig::new()
+                .guilds_per_shard(1_000)
+                .round_up_to_multiple(4)
+                .resolve(2),
+            8
+        );
+        // Min and max clamps
+        assert_eq!(AutoShardingConfig::new().min_shards(4).resolve(1), 4);
+        assert_eq!(AutoShardingConfig::new().max_shards(6).resolve(10), 6);
     }
 }

@@ -33,7 +33,9 @@ pub use identify::{
     IDENTIFY_INTERVAL, IDENTIFY_MARGIN, IDENTIFY_SPACING, IdentifyQueue, ImmediateIdentifyQueue,
     LocalIdentifyQueue,
 };
-pub use manager::{ManagerEvents, ShardManager, ShardManagerBuilder, cluster_shard_range};
+pub use manager::{
+    AutoShardingConfig, ManagerEvents, ShardManager, ShardManagerBuilder, cluster_shard_range,
+};
 #[cfg(feature = "redis")]
 pub use session_store::RedisSessionStore;
 pub use session_store::{FileSessionStore, SessionStore};

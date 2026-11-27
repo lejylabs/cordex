@@ -339,6 +339,7 @@ impl Shared {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum BotShards {
+    Auto(cordex_gateway::AutoShardingConfig),
     Range(std::ops::Range<u32>, u32),
     List(Vec<u32>, u32),
 }
@@ -500,6 +501,20 @@ impl Bot {
     pub fn reshard_interval(mut self, interval: Option<Duration>) -> Self {
         self.reshard_interval = interval;
         self
+    }
+
+    /// Configure automatic sharding preferences (target guilds per shard,
+    /// min/max shard bounds, or multiple alignment).
+    pub fn auto_sharding(mut self, config: cordex_gateway::AutoShardingConfig) -> Self {
+        self.shards = Some(BotShards::Auto(config));
+        self
+    }
+
+    /// Shortcut for [`auto_sharding`](Self::auto_sharding) targeting at most
+    /// `target` guilds per shard (`1..=2500`, e.g. `1_000` instead of Discord's
+    /// 2,500 cap).
+    pub fn guilds_per_shard(self, target: u32) -> Self {
+        self.auto_sharding(cordex_gateway::AutoShardingConfig::new().guilds_per_shard(target))
     }
 
     /// Fixed shard count instead of Discord's recommendation (turns off
@@ -1098,9 +1113,8 @@ impl Bot {
 
         // Resharding: a task prepares a new manager and hands it over here.
         let (switch_tx, mut switch_rx) = tokio::sync::mpsc::channel::<Reshard>(1);
-        if fixed_shards.is_none()
-            && let Some(interval) = reshard_interval
-        {
+        let is_auto_sharding = matches!(fixed_shards, None | Some(BotShards::Auto(_)));
+        if is_auto_sharding && let Some(interval) = reshard_interval {
             tokio::spawn(reshard_loop(
                 Arc::clone(&shared),
                 token,
@@ -1435,6 +1449,7 @@ async fn build_manager(
         builder = builder.spawn_with(spawner);
     }
     let builder = match fixed_shards {
+        Some(BotShards::Auto(cfg)) => builder.auto_sharding(cfg),
         Some(BotShards::Range(range, total)) => builder.shards(range, total),
         Some(BotShards::List(ids, total)) => builder.shard_ids(ids, total),
         None => builder.automatic(),
