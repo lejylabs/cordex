@@ -324,7 +324,7 @@ checksum = "be95d4a884358a21a199689323c29e9256b4a1b315e22f183d155422041d3a9a"
 
 [[package]]
 name = "cordex"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "cordex-cache",
  "cordex-gateway",
@@ -341,7 +341,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-axum"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "axum",
  "bytes",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-cache"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "bitflags",
  "cordex-model",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-gateway"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "bitflags",
  "bytes",
@@ -394,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-http"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "bytes",
  "cordex-model",
@@ -417,7 +417,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-interactions"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "bytes",
  "cordex-http",
@@ -438,7 +438,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-lavalink"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "bytes",
  "cordex-model",
@@ -463,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-macros"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -472,11 +472,11 @@ dependencies = [
 
 [[package]]
 name = "cordex-migrate"
-version = "0.2.4"
+version = "0.2.5"
 
 [[package]]
 name = "cordex-model"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "bitflags",
  "bytes",
@@ -496,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-test"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "bytes",
  "cordex",
@@ -515,7 +515,7 @@ dependencies = [
 
 [[package]]
 name = "cordex-voice"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "cordex-gateway",
  "cordex-model",
@@ -2694,7 +2694,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.2.4"
+version = "0.2.5"
 
 [[package]]
 name = "xxhash-rust"
