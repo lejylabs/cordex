@@ -8,9 +8,7 @@ use cordex_model::channel::{
     ForumTag, OverwriteType, PermissionOverwrite, SortOrderType, VideoQualityMode,
 };
 use cordex_model::id::Id;
-use cordex_model::id::marker::{
-    ChannelMarker, EmojiMarker, GenericMarker, GuildMarker, TagMarker,
-};
+use cordex_model::id::marker::{ChannelMarker, EmojiMarker, GenericMarker, GuildMarker, TagMarker};
 use cordex_model::permissions::Permissions;
 use serde::Serialize;
 
@@ -962,8 +960,14 @@ mod tests {
         assert_eq!(json["default_reaction_emoji"], serde_json::Value::Null);
         assert_eq!(json["default_sort_order"], serde_json::json!(1));
         assert_eq!(json["default_forum_layout"], serde_json::json!(2));
-        assert_eq!(json["default_thread_rate_limit_per_user"], serde_json::json!(15));
-        assert_eq!(json["default_auto_archive_duration"], serde_json::json!(4320));
+        assert_eq!(
+            json["default_thread_rate_limit_per_user"],
+            serde_json::json!(15)
+        );
+        assert_eq!(
+            json["default_auto_archive_duration"],
+            serde_json::json!(4320)
+        );
         assert_eq!(json["available_tags"][0]["name"], "bug");
         assert!(json["available_tags"][0].get("id").is_none());
         assert_eq!(json["available_tags"][1]["id"], "42");
