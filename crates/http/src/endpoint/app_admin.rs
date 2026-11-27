@@ -254,6 +254,54 @@ impl Client {
         .trigger_metadata(metadata)
     }
 
+    /// Create or update an auto moderation rule idempotently.
+    ///
+    /// For singleton trigger types (`Spam`, `KeywordPreset`, `MentionSpam`),
+    /// matches an existing rule of the same `trigger_type`. For multi-rule
+    /// types (`Keyword`, `MemberProfile`), matches by `trigger_type` and `name`.
+    /// Validates `trigger_metadata` and `actions` locally before sending.
+    pub async fn upsert_auto_moderation_rule(
+        &self,
+        guild_id: Id<GuildMarker>,
+        name: &str,
+        event_type: AutoModerationEventType,
+        trigger_type: AutoModerationTriggerType,
+        trigger_metadata: &TriggerMetadata,
+        actions: &[AutoModerationAction],
+        enabled: bool,
+    ) -> Result<AutoModerationRule, HttpError> {
+        trigger_metadata.validate().map_err(HttpError::validation)?;
+        for action in actions {
+            action.validate().map_err(HttpError::validation)?;
+        }
+
+        let existing = self.get_auto_moderation_rules(guild_id).await?;
+        let singleton = matches!(
+            trigger_type,
+            AutoModerationTriggerType::Spam
+                | AutoModerationTriggerType::KeywordPreset
+                | AutoModerationTriggerType::MentionSpam
+        );
+        let matched = existing.into_iter().find(|r| {
+            r.trigger_type == trigger_type && (singleton || r.name.as_ref() == name)
+        });
+
+        if let Some(rule) = matched {
+            self.update_auto_moderation_rule(guild_id, rule.id)
+                .name(name)
+                .event_type(event_type)
+                .trigger_metadata(trigger_metadata)
+                .actions(actions)
+                .enabled(enabled)
+                .await
+        } else {
+            self.create_auto_moderation_rule(guild_id, name, event_type, trigger_type, actions)
+                .trigger_metadata(trigger_metadata)
+                .enabled(enabled)
+                .await
+        }
+    }
+
     /// `PATCH /guilds/{guild_id}/auto-moderation/rules/{rule_id}`.
     pub fn update_auto_moderation_rule(
         &self,

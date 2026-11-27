@@ -239,6 +239,14 @@ struct Handlers {
         )>,
     >,
     voice_state: Vec<Handler<(Context, Arc<cordex_model::voice::VoiceState>)>>,
+    auto_moderation_action_execution:
+        Vec<Handler<(Context, Arc<cordex_model::auto_moderation::AutoModerationActionExecution>)>>,
+    auto_moderation_rule_create:
+        Vec<Handler<(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>)>>,
+    auto_moderation_rule_update:
+        Vec<Handler<(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>)>>,
+    auto_moderation_rule_delete:
+        Vec<Handler<(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>)>>,
     before_command: Vec<BeforeCommand>,
     around_command: Vec<middleware::AroundCommand>,
     scheduled: Vec<scheduler::ScheduledTask>,
@@ -270,6 +278,14 @@ impl Handlers {
         self.member_leave.extend(other.member_leave);
         self.reaction_add.extend(other.reaction_add);
         self.voice_state.extend(other.voice_state);
+        self.auto_moderation_action_execution
+            .extend(other.auto_moderation_action_execution);
+        self.auto_moderation_rule_create
+            .extend(other.auto_moderation_rule_create);
+        self.auto_moderation_rule_update
+            .extend(other.auto_moderation_rule_update);
+        self.auto_moderation_rule_delete
+            .extend(other.auto_moderation_rule_delete);
         self.before_command.extend(other.before_command);
         self.around_command.extend(other.around_command);
         self.scheduled.extend(other.scheduled);
@@ -1002,6 +1018,74 @@ impl Bot {
         self
     }
 
+    /// Handler for `AUTO_MODERATION_ACTION_EXECUTION`. Adds
+    /// `Intents::AUTO_MODERATION_EXECUTION`.
+    pub fn on_auto_moderation_action_execution<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::auto_moderation::AutoModerationActionExecution>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::AUTO_MODERATION_EXECUTION;
+        self.handlers
+            .auto_moderation_action_execution
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `AUTO_MODERATION_RULE_CREATE`. Adds
+    /// `Intents::AUTO_MODERATION_CONFIGURATION`.
+    pub fn on_auto_moderation_rule_create<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::AUTO_MODERATION_CONFIGURATION;
+        self.handlers
+            .auto_moderation_rule_create
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `AUTO_MODERATION_RULE_UPDATE`. Adds
+    /// `Intents::AUTO_MODERATION_CONFIGURATION`.
+    pub fn on_auto_moderation_rule_update<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::AUTO_MODERATION_CONFIGURATION;
+        self.handlers
+            .auto_moderation_rule_update
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `AUTO_MODERATION_RULE_DELETE`. Adds
+    /// `Intents::AUTO_MODERATION_CONFIGURATION`.
+    pub fn on_auto_moderation_rule_delete<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::AUTO_MODERATION_CONFIGURATION;
+        self.handlers
+            .auto_moderation_rule_delete
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
     /// Events worth parsing: only what a handler or the cache reads. The
     /// gateway skips the rest after reading the event name (READY always
     /// arrives).
@@ -1041,6 +1125,18 @@ impl Bot {
         }
         if !h.voice_state.is_empty() {
             names.push("VOICE_STATE_UPDATE");
+        }
+        if !h.auto_moderation_action_execution.is_empty() {
+            names.push("AUTO_MODERATION_ACTION_EXECUTION");
+        }
+        if !h.auto_moderation_rule_create.is_empty() {
+            names.push("AUTO_MODERATION_RULE_CREATE");
+        }
+        if !h.auto_moderation_rule_update.is_empty() {
+            names.push("AUTO_MODERATION_RULE_UPDATE");
+        }
+        if !h.auto_moderation_rule_delete.is_empty() {
+            names.push("AUTO_MODERATION_RULE_DELETE");
         }
         #[cfg(feature = "cache")]
         if let Some(config) = &self.cache {
@@ -1645,6 +1741,7 @@ async fn register_commands(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
     let ctx = Context {
         shared: Arc::clone(shared),
@@ -1721,6 +1818,38 @@ fn dispatch(shared: &Arc<Shared>, shard_id: ShardId, event: Event) {
                 Arc::new((**v).clone())
             });
         }
+        Event::AutoModerationActionExecution(e) => {
+            route_typed(
+                &ctx,
+                &handlers.auto_moderation_action_execution,
+                "auto_moderation_action_execution",
+                || Arc::new((**e).clone()),
+            );
+        }
+        Event::AutoModerationRuleCreate(r) => {
+            route_typed(
+                &ctx,
+                &handlers.auto_moderation_rule_create,
+                "auto_moderation_rule_create",
+                || Arc::new((**r).clone()),
+            );
+        }
+        Event::AutoModerationRuleUpdate(r) => {
+            route_typed(
+                &ctx,
+                &handlers.auto_moderation_rule_update,
+                "auto_moderation_rule_update",
+                || Arc::new((**r).clone()),
+            );
+        }
+        Event::AutoModerationRuleDelete(r) => {
+            route_typed(
+                &ctx,
+                &handlers.auto_moderation_rule_delete,
+                "auto_moderation_rule_delete",
+                || Arc::new((**r).clone()),
+            );
+        }
         _ => {}
     }
 }
@@ -1754,6 +1883,38 @@ fn route_owned(ctx: Context, event: Event) {
         }
         Event::VoiceStateUpdate(v) => {
             route_typed(&ctx, &handlers.voice_state, "voice_state", || Arc::from(v));
+        }
+        Event::AutoModerationActionExecution(e) => {
+            route_typed(
+                &ctx,
+                &handlers.auto_moderation_action_execution,
+                "auto_moderation_action_execution",
+                || Arc::from(e),
+            );
+        }
+        Event::AutoModerationRuleCreate(r) => {
+            route_typed(
+                &ctx,
+                &handlers.auto_moderation_rule_create,
+                "auto_moderation_rule_create",
+                || Arc::from(r),
+            );
+        }
+        Event::AutoModerationRuleUpdate(r) => {
+            route_typed(
+                &ctx,
+                &handlers.auto_moderation_rule_update,
+                "auto_moderation_rule_update",
+                || Arc::from(r),
+            );
+        }
+        Event::AutoModerationRuleDelete(r) => {
+            route_typed(
+                &ctx,
+                &handlers.auto_moderation_rule_delete,
+                "auto_moderation_rule_delete",
+                || Arc::from(r),
+            );
         }
         _ => {}
     }

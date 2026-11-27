@@ -215,6 +215,55 @@ impl TriggerMetadata {
         self.mention_raid_protection_enabled = Some(enabled);
         self
     }
+
+    /// Check Discord's documented limits before sending the metadata to the API.
+    pub fn validate(&self) -> Result<(), Box<str>> {
+        if self.keyword_filter.len() > 1000 {
+            return Err(format!(
+                "keyword_filter has {} entries; max is 1000",
+                self.keyword_filter.len()
+            )
+            .into());
+        }
+        for kw in &self.keyword_filter {
+            let len = kw.chars().count();
+            if len > 60 {
+                return Err(format!("keyword '{kw}' is {len} characters; max is 60").into());
+            }
+        }
+        if self.regex_patterns.len() > 10 {
+            return Err(format!(
+                "regex_patterns has {} entries; max is 10",
+                self.regex_patterns.len()
+            )
+            .into());
+        }
+        for pat in &self.regex_patterns {
+            let len = pat.chars().count();
+            if len > 260 {
+                return Err(format!("regex pattern is {len} characters; max is 260").into());
+            }
+        }
+        if self.allow_list.len() > 1000 {
+            return Err(format!(
+                "allow_list has {} entries; max is 1000",
+                self.allow_list.len()
+            )
+            .into());
+        }
+        for entry in &self.allow_list {
+            let len = entry.chars().count();
+            if len > 60 {
+                return Err(format!("allow_list entry '{entry}' is {len} characters; max is 60").into());
+            }
+        }
+        if let Some(limit) = self.mention_total_limit
+            && limit > 50
+        {
+            return Err(format!("mention_total_limit is {limit}; max is 50").into());
+        }
+        Ok(())
+    }
 }
 
 /// An action taken when a rule matches.
@@ -282,6 +331,26 @@ impl AutoModerationAction {
             kind: AutoModerationActionType::BlockMemberInteraction,
             metadata: None,
         }
+    }
+
+    /// Check Discord's documented limits before sending the action to the API.
+    pub fn validate(&self) -> Result<(), Box<str>> {
+        if let Some(meta) = &self.metadata {
+            if let Some(msg) = &meta.custom_message {
+                let len = msg.chars().count();
+                if len > 150 {
+                    return Err(format!("custom_message is {len} characters; max is 150").into());
+                }
+            }
+            if let Some(secs) = meta.duration_seconds
+                && secs > 2_419_200
+            {
+                return Err(
+                    format!("timeout duration is {secs} seconds; max is 2419200 (4 weeks)").into(),
+                );
+            }
+        }
+        Ok(())
     }
 }
 
@@ -398,5 +467,15 @@ mod tests {
                 "mention_raid_protection_enabled": true
             })
         );
+    }
+
+    #[test]
+    fn validation_catches_limit_violations() {
+        assert!(TriggerMetadata::keywords(["ok"]).validate().is_ok());
+        assert!(TriggerMetadata::keywords(["x".repeat(61)]).validate().is_err());
+        assert!(TriggerMetadata::mention_spam(51).validate().is_err());
+        assert!(AutoModerationAction::timeout(2_419_200).validate().is_ok());
+        assert!(AutoModerationAction::timeout(2_419_201).validate().is_err());
+        assert!(AutoModerationAction::block_message_with("x".repeat(151)).validate().is_err());
     }
 }

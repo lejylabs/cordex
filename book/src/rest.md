@@ -46,7 +46,7 @@ let commands = ic.global_commands().await?;
 
 ## Auto Moderation
 
-Build AutoMod rules ergonomically with `TriggerMetadata`, `AutoModerationAction`, and the typed `Client` helpers (`create_keyword_rule`, `create_spam_rule`, `create_keyword_preset_rule`, `create_mention_spam_rule`, `create_member_profile_rule`):
+Build AutoMod rules ergonomically with `TriggerMetadata`, `AutoModerationAction`, and the typed `Client` helpers (`create_keyword_rule`, `create_spam_rule`, `create_keyword_preset_rule`, `create_mention_spam_rule`, `create_member_profile_rule`, and idempotent `upsert_auto_moderation_rule`):
 
 ```rust,no_run
 use cordex::model::auto_moderation::{AutoModerationAction, TriggerMetadata};

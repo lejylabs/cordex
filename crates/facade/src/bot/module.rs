@@ -382,6 +382,74 @@ impl BotModule {
         self
     }
 
+    /// Handler for `AUTO_MODERATION_ACTION_EXECUTION`. Adds
+    /// `Intents::AUTO_MODERATION_EXECUTION`.
+    pub fn on_auto_moderation_action_execution<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::auto_moderation::AutoModerationActionExecution>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::AUTO_MODERATION_EXECUTION;
+        self.handlers
+            .auto_moderation_action_execution
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `AUTO_MODERATION_RULE_CREATE`. Adds
+    /// `Intents::AUTO_MODERATION_CONFIGURATION`.
+    pub fn on_auto_moderation_rule_create<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::AUTO_MODERATION_CONFIGURATION;
+        self.handlers
+            .auto_moderation_rule_create
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `AUTO_MODERATION_RULE_UPDATE`. Adds
+    /// `Intents::AUTO_MODERATION_CONFIGURATION`.
+    pub fn on_auto_moderation_rule_update<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::AUTO_MODERATION_CONFIGURATION;
+        self.handlers
+            .auto_moderation_rule_update
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
+    /// Handler for `AUTO_MODERATION_RULE_DELETE`. Adds
+    /// `Intents::AUTO_MODERATION_CONFIGURATION`.
+    pub fn on_auto_moderation_rule_delete<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>) -> Fut
+            + Send
+            + Sync
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.intents |= Intents::AUTO_MODERATION_CONFIGURATION;
+        self.handlers
+            .auto_moderation_rule_delete
+            .push(Arc::new(move |(ctx, ev)| Box::pin(handler(ctx, ev))));
+        self
+    }
+
     /// Nest another [`BotModule`] inside this module.
     pub fn mount(mut self, child: Self) -> Self {
         let (intents, extra_events, commands, handlers) = child.finalize();
