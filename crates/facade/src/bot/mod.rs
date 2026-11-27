@@ -88,8 +88,8 @@ use cordex_model::interaction::{Interaction, InteractionData, InteractionType};
 use cordex_model::message::AllowedMentions;
 
 pub use context::{
-    AutocompleteContext, ButtonClicks, CommandContext, ComponentContext, Context, EventContext,
-    MessageContext, ModalContext, ReadyContext,
+    AutocompleteContext, ButtonClicks, CollectorEndReason, CommandContext, ComponentContext,
+    Context, EventContext, MessageContext, ModalContext, ReadyContext,
 };
 
 use crate::{Error, Result};

@@ -365,6 +365,10 @@ impl Context {
                 .wait_for_stream(component_on(message_id)),
             deadline: Some(tokio::time::Instant::now() + timeout),
             idle: None,
+            max: None,
+            collected: 0,
+            filter: None,
+            end_reason: None,
             stopped: false,
         }
     }
@@ -494,18 +498,44 @@ fn component_on(message_id: Id<MessageMarker>) -> impl Fn(&Event) -> bool + Send
     }
 }
 
+/// Why a collector stream (such as [`ButtonClicks`]) ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum CollectorEndReason {
+    /// The overall timeout expired.
+    Timeout,
+    /// No matching interaction arrived within the sliding idle timeout.
+    Idle,
+    /// The configured maximum number of collected interactions was reached.
+    Limit,
+    /// [`ButtonClicks::stop`] was called explicitly.
+    Stopped,
+    /// The underlying gateway event channel closed.
+    Closed,
+}
+
+type ComponentFilter = Box<dyn Fn(&ComponentContext) -> bool + Send>;
+
 /// Clicks on one message, from [`Context::button_clicks`].
 pub struct ButtonClicks {
     ctx: Context,
     events: tokio::sync::mpsc::Receiver<Event>,
     deadline: Option<tokio::time::Instant>,
     idle: Option<Duration>,
+    max: Option<usize>,
+    collected: usize,
+    filter: Option<ComponentFilter>,
+    end_reason: Option<CollectorEndReason>,
     stopped: bool,
 }
 
 impl fmt::Debug for ButtonClicks {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ButtonClicks").finish_non_exhaustive()
+        f.debug_struct("ButtonClicks")
+            .field("collected", &self.collected)
+            .field("max", &self.max)
+            .field("end_reason", &self.end_reason)
+            .finish_non_exhaustive()
     }
 }
 
@@ -518,32 +548,99 @@ impl ButtonClicks {
         self
     }
 
+    /// Stop automatically after collecting `limit` matching clicks.
+    #[must_use]
+    pub fn max(mut self, limit: usize) -> Self {
+        self.max = Some(limit);
+        self
+    }
+
+    /// Only yield clicks for which `predicate` returns `true`.
+    ///
+    /// Rejected clicks do not count toward [`max`](Self::max).
+    #[must_use]
+    pub fn filter<F>(mut self, predicate: F) -> Self
+    where
+        F: Fn(&ComponentContext) -> bool + Send + 'static,
+    {
+        self.filter = Some(Box::new(predicate));
+        self
+    }
+
+    /// Number of matching clicks yielded so far.
+    pub fn collected(&self) -> usize {
+        self.collected
+    }
+
+    /// Why this collector ended, or `None` while it is still active.
+    pub fn end_reason(&self) -> Option<CollectorEndReason> {
+        self.end_reason
+    }
+
     /// Stop listening immediately; further calls to [`next`](Self::next)
     /// return `None`.
     pub fn stop(&mut self) {
         self.stopped = true;
+        if self.end_reason.is_none() {
+            self.end_reason = Some(CollectorEndReason::Stopped);
+        }
         self.events.close();
     }
 
-    /// The next click, or `None` once the timeout has passed or
-    /// [`stop`](Self::stop) was called.
+    /// The next click, or `None` once the timeout/idle/limit has been reached
+    /// or [`stop`](Self::stop) was called.
     pub async fn next(&mut self) -> Option<ComponentContext> {
         if self.stopped {
             return None;
         }
+        if self.max.is_some_and(|limit| self.collected >= limit) {
+            self.stopped = true;
+            self.end_reason = Some(CollectorEndReason::Limit);
+            self.events.close();
+            return None;
+        }
         loop {
             let idle_deadline = self.idle.map(|d| tokio::time::Instant::now() + d);
-            let until = match (self.deadline, idle_deadline) {
-                (Some(a), Some(b)) => Some(a.min(b)),
-                (a, b) => a.or(b),
+            let (until, is_idle) = match (self.deadline, idle_deadline) {
+                (Some(a), Some(b)) if b < a => (Some(b), true),
+                (Some(a), _) => (Some(a), false),
+                (None, Some(b)) => (Some(b), true),
+                (None, None) => (None, false),
             };
             let event = match until {
-                Some(at) => tokio::time::timeout_at(at, self.events.recv())
-                    .await
-                    .ok()??,
-                None => self.events.recv().await?,
+                Some(at) => match tokio::time::timeout_at(at, self.events.recv()).await {
+                    Ok(Some(ev)) => ev,
+                    Ok(None) => {
+                        self.stopped = true;
+                        self.end_reason = Some(CollectorEndReason::Closed);
+                        return None;
+                    }
+                    Err(_) => {
+                        self.stopped = true;
+                        self.end_reason = Some(if is_idle {
+                            CollectorEndReason::Idle
+                        } else {
+                            CollectorEndReason::Timeout
+                        });
+                        self.events.close();
+                        return None;
+                    }
+                },
+                None => {
+                    if let Some(ev) = self.events.recv().await {
+                        ev
+                    } else {
+                        self.stopped = true;
+                        self.end_reason = Some(CollectorEndReason::Closed);
+                        return None;
+                    }
+                }
             };
             if let Some(click) = self.ctx.component_context(event) {
+                if self.filter.as_ref().is_some_and(|f| !f(&click)) {
+                    continue;
+                }
+                self.collected += 1;
                 return Some(click);
             }
         }
@@ -1062,6 +1159,10 @@ impl CommandContext {
                 .wait_for_stream(component_on(message.id)),
             deadline: None,
             idle: Some(timeout),
+            max: None,
+            collected: 0,
+            filter: None,
+            end_reason: None,
             stopped: false,
         };
         while let Some(click) = clicks.next().await {
