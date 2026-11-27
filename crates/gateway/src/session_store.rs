@@ -94,10 +94,14 @@ impl SessionStore for FileSessionStore {
 
 /// Redis-backed [`SessionStore`] for zero-downtime gateway `RESUME` across
 /// container or multi-node restarts (`redis` feature).
+///
+/// Reuses a single Redis connection across calls and transparently reconnects
+/// if the connection drops.
 #[cfg(feature = "redis")]
 #[derive(Clone)]
 pub struct RedisSessionStore {
     client: redis::Client,
+    conn: std::sync::Arc<parking_lot::Mutex<Option<redis::Connection>>>,
     prefix: Box<str>,
     ttl_secs: Option<u64>,
 }
@@ -126,6 +130,7 @@ impl RedisSessionStore {
     pub fn from_client(client: redis::Client) -> Self {
         Self {
             client,
+            conn: std::sync::Arc::new(parking_lot::Mutex::new(None)),
             prefix: "cordex:session".into(),
             ttl_secs: Some(86_400),
         }
@@ -151,14 +156,36 @@ impl RedisSessionStore {
     fn key_for(&self, shard_id: u32) -> String {
         format!("{}:{shard_id}", self.prefix)
     }
+
+    fn with_conn<T>(
+        &self,
+        mut op: impl FnMut(&mut redis::Connection) -> redis::RedisResult<T>,
+    ) -> redis::RedisResult<T> {
+        let mut guard = self.conn.lock();
+        if let Some(conn) = guard.as_mut() {
+            match op(conn) {
+                Ok(val) => return Ok(val),
+                Err(_) => {
+                    *guard = None;
+                }
+            }
+        }
+        let mut fresh = self.client.get_connection()?;
+        let res = op(&mut fresh);
+        if res.is_ok() {
+            *guard = Some(fresh);
+        }
+        res
+    }
 }
 
 #[cfg(feature = "redis")]
 impl SessionStore for RedisSessionStore {
     fn load(&self, shard_id: u32) -> Option<ResumeInfo> {
-        let mut conn = self.client.get_connection().ok()?;
-        let bytes: Option<Vec<u8>> =
-            redis::Commands::get(&mut conn, self.key_for(shard_id)).ok()?;
+        let key = self.key_for(shard_id);
+        let bytes: Option<Vec<u8>> = self
+            .with_conn(|conn| redis::Commands::get(conn, &key))
+            .ok()?;
         let bytes = bytes?;
         let val: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
         let session_id = val.get("session_id")?.as_str()?.into();
@@ -172,10 +199,6 @@ impl SessionStore for RedisSessionStore {
     }
 
     fn save(&self, shard_id: u32, info: &ResumeInfo) -> io::Result<()> {
-        let mut conn = self
-            .client
-            .get_connection()
-            .map_err(|err| io::Error::other(err.to_string()))?;
         let val = serde_json::json!({
             "session_id": info.session_id.as_ref(),
             "seq": info.seq,
@@ -184,19 +207,17 @@ impl SessionStore for RedisSessionStore {
         let bytes = serde_json::to_vec(&val)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
         let key = self.key_for(shard_id);
-        let res: redis::RedisResult<()> = match self.ttl_secs {
-            Some(secs) => redis::Commands::set_ex(&mut conn, key, bytes, secs),
-            None => redis::Commands::set(&mut conn, key, bytes),
-        };
+        let ttl = self.ttl_secs;
+        let res: redis::RedisResult<()> = self.with_conn(|conn| match ttl {
+            Some(secs) => redis::Commands::set_ex(conn, &key, &bytes, secs),
+            None => redis::Commands::set(conn, &key, &bytes),
+        });
         res.map_err(|err| io::Error::other(err.to_string()))
     }
 
     fn clear(&self, shard_id: u32) -> io::Result<()> {
-        let mut conn = self
-            .client
-            .get_connection()
-            .map_err(|err| io::Error::other(err.to_string()))?;
-        let res: redis::RedisResult<()> = redis::Commands::del(&mut conn, self.key_for(shard_id));
+        let key = self.key_for(shard_id);
+        let res: redis::RedisResult<()> = self.with_conn(|conn| redis::Commands::del(conn, &key));
         res.map_err(|err| io::Error::other(err.to_string()))
     }
 }

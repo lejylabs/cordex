@@ -151,17 +151,28 @@ where
 /// HTTP/1.1 transport over a local Unix Domain Socket (`#[cfg(unix)]`).
 ///
 /// Useful for talking to a local REST proxy or sidecar on the same Linux/Unix
-/// host without TCP loopback overhead.
+/// host without TCP loopback overhead. Reuses idle keep-alive connections in a
+/// bounded pool.
 #[cfg(unix)]
 pub(crate) struct UnixSocketTransport {
     path: std::path::PathBuf,
     max_body: usize,
+    pool: std::sync::Arc<
+        std::sync::Mutex<Vec<hyper::client::conn::http1::SendRequest<Full<Bytes>>>>,
+    >,
 }
+
+#[cfg(unix)]
+const MAX_IDLE_UDS_CONNS: usize = 16;
 
 #[cfg(unix)]
 impl UnixSocketTransport {
     pub(crate) fn new(path: std::path::PathBuf, max_body: usize) -> Self {
-        Self { path, max_body }
+        Self {
+            path,
+            max_body,
+            pool: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+        }
     }
 }
 
@@ -173,17 +184,31 @@ impl Transport for UnixSocketTransport {
     ) -> Pin<Box<dyn Future<Output = Result<RawResponse, HttpError>> + Send + '_>> {
         let path = self.path.clone();
         let max_body = self.max_body;
+        let pool = std::sync::Arc::clone(&self.pool);
         Box::pin(async move {
-            let stream = tokio::net::UnixStream::connect(&path)
-                .await
-                .map_err(HttpError::transport)?;
-            let io = hyper_util::rt::TokioIo::new(stream);
-            let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
-                .await
-                .map_err(HttpError::transport)?;
-            tokio::spawn(async move {
-                let _ = conn.await;
-            });
+            let mut sender = loop {
+                let candidate = pool
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .pop();
+                match candidate {
+                    Some(mut s) if s.ready().await.is_ok() => break s,
+                    Some(_) => continue,
+                    None => {
+                        let stream = tokio::net::UnixStream::connect(&path)
+                            .await
+                            .map_err(HttpError::transport)?;
+                        let io = hyper_util::rt::TokioIo::new(stream);
+                        let (s, conn) = hyper::client::conn::http1::handshake(io)
+                            .await
+                            .map_err(HttpError::transport)?;
+                        tokio::spawn(async move {
+                            let _ = conn.await;
+                        });
+                        break s;
+                    }
+                }
+            };
             let response = sender
                 .send_request(request.map(Full::new))
                 .await
@@ -191,6 +216,14 @@ impl Transport for UnixSocketTransport {
             let status = response.status();
             let headers = response.headers().clone();
             let body = collect_limited(response.into_body(), max_body).await?;
+            if !sender.is_closed() {
+                let mut guard = pool
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if guard.len() < MAX_IDLE_UDS_CONNS {
+                    guard.push(sender);
+                }
+            }
             Ok(RawResponse {
                 status,
                 headers,

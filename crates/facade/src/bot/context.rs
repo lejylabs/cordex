@@ -599,8 +599,8 @@ impl ButtonClicks {
             self.events.close();
             return None;
         }
+        let idle_deadline = self.idle.map(|d| tokio::time::Instant::now() + d);
         loop {
-            let idle_deadline = self.idle.map(|d| tokio::time::Instant::now() + d);
             let (until, is_idle) = match (self.deadline, idle_deadline) {
                 (Some(a), Some(b)) if b < a => (Some(b), true),
                 (Some(a), _) => (Some(a), false),

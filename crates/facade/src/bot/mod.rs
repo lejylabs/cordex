@@ -1088,6 +1088,15 @@ impl Bot {
         let event_types = self.event_types();
         let fixed_shards = self.shards.clone();
         let presence = self.presence.clone();
+        let presence_fn = self.presence_fn.clone();
+        let identify_queue = self.identify_queue.clone();
+        let session_store = self.session_store.clone();
+        let spawner = self.spawner.clone();
+        let close_mode = if session_store.is_some() {
+            CloseMode::Resumable
+        } else {
+            CloseMode::Terminate
+        };
         let mut manager = build_manager(
             &self.token,
             self.intents,
@@ -1095,10 +1104,10 @@ impl Bot {
             event_types,
             fixed_shards.clone(),
             presence.clone(),
-            self.presence_fn.clone(),
-            self.identify_queue.clone(),
-            self.session_store.clone(),
-            self.spawner.clone(),
+            presence_fn.clone(),
+            identify_queue.clone(),
+            session_store.clone(),
+            spawner.clone(),
         )
         .await?;
         let mut events = manager.events();
@@ -1113,14 +1122,25 @@ impl Bot {
 
         // Resharding: a task prepares a new manager and hands it over here.
         let (switch_tx, mut switch_rx) = tokio::sync::mpsc::channel::<Reshard>(1);
-        let is_auto_sharding = matches!(fixed_shards, None | Some(BotShards::Auto(_)));
-        if is_auto_sharding && let Some(interval) = reshard_interval {
+        let auto_sharding = match fixed_shards {
+            None => Some(cordex_gateway::AutoShardingConfig::new()),
+            Some(BotShards::Auto(cfg)) => Some(cfg),
+            Some(BotShards::Range(_, _) | BotShards::List(_, _)) => None,
+        };
+        if let (Some(auto_cfg), Some(interval)) = (auto_sharding, reshard_interval) {
             tokio::spawn(reshard_loop(
                 Arc::clone(&shared),
-                token,
-                intents,
-                event_types,
-                presence,
+                ReshardConfig {
+                    token,
+                    intents,
+                    event_types,
+                    auto_sharding: auto_cfg,
+                    presence,
+                    presence_fn,
+                    identify_queue,
+                    session_store,
+                    spawner,
+                },
                 interval,
                 switch_tx,
             ));
@@ -1135,7 +1155,7 @@ impl Bot {
                     if let Some(handle) = schedulers.take() {
                         handle.shutdown(Duration::from_secs(5)).await;
                     }
-                    shared.manager().shutdown(CloseMode::Terminate).await;
+                    shared.manager().shutdown(close_mode).await;
                     return Ok(());
                 }
                 item = events.recv() => item,
@@ -1463,16 +1483,26 @@ struct Reshard {
     events: cordex_gateway::ManagerEvents,
 }
 
+/// Configuration carried into automatic reshards.
+struct ReshardConfig {
+    token: String,
+    intents: Intents,
+    event_types: EventTypeFlags,
+    auto_sharding: cordex_gateway::AutoShardingConfig,
+    presence: Option<cordex_model::gateway::presence::UpdatePresence>,
+    presence_fn: Option<ShardPresenceFn>,
+    identify_queue: Option<Arc<dyn cordex_gateway::IdentifyQueue>>,
+    session_store: Option<Arc<dyn cordex_gateway::SessionStore>>,
+    spawner: Option<Arc<dyn cordex_gateway::Spawner>>,
+}
+
 /// Every `interval`: if Discord recommends more shards than running and
 /// enough identifies are left, start a new manager, wait for all its
 /// shards to be `READY` (dropping their events, the old shards still
 /// deliver), then hand it to the run loop.
 async fn reshard_loop(
     shared: Arc<Shared>,
-    token: String,
-    intents: Intents,
-    event_types: EventTypeFlags,
-    presence: Option<cordex_model::gateway::presence::UpdatePresence>,
+    cfg: ReshardConfig,
     interval: Duration,
     switch: tokio::sync::mpsc::Sender<Reshard>,
 ) {
@@ -1486,11 +1516,17 @@ async fn reshard_loop(
                 continue;
             }
         };
-        if !needs_reshard(running, info.shards, info.session_start_limit.remaining) {
+        let target = cfg.auto_sharding.resolve(info.shards);
+        if !needs_reshard(running, target, info.session_start_limit.remaining) {
             continue;
         }
-        tracing::info!(running, recommended = info.shards, "resharding");
-        match prepare_reshard(&shared.http, &token, intents, event_types, presence.clone()).await {
+        tracing::info!(
+            running,
+            recommended = info.shards,
+            target,
+            "resharding"
+        );
+        match prepare_reshard(&shared.http, &cfg).await {
             Ok(next) => {
                 if switch.send(next).await.is_err() {
                     return; // the bot stopped
@@ -1517,24 +1553,18 @@ fn needs_reshard(running: u32, recommended: u32, identifies_left: u32) -> bool {
     true
 }
 
-async fn prepare_reshard(
-    http: &Client,
-    token: &str,
-    intents: Intents,
-    event_types: EventTypeFlags,
-    presence: Option<cordex_model::gateway::presence::UpdatePresence>,
-) -> Result<Reshard> {
+async fn prepare_reshard(http: &Client, cfg: &ReshardConfig) -> Result<Reshard> {
     let mut manager = build_manager(
-        token,
-        intents,
+        &cfg.token,
+        cfg.intents,
         http,
-        event_types,
-        None,
-        presence,
-        None,
-        None,
-        None,
-        None,
+        cfg.event_types,
+        Some(BotShards::Auto(cfg.auto_sharding)),
+        cfg.presence.clone(),
+        cfg.presence_fn.clone(),
+        cfg.identify_queue.clone(),
+        cfg.session_store.clone(),
+        cfg.spawner.clone(),
     )
     .await?;
     let mut events = manager.events();

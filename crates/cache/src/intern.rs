@@ -21,6 +21,10 @@ impl StringInterner {
     }
 
     /// Return a shared [`Arc<str>`] for `s`, allocating only on first sight.
+    ///
+    /// When the pool is about to grow past 1,024 entries, unreferenced strings
+    /// (`Arc::strong_count == 1`) are pruned automatically so long-running bots
+    /// do not leak memory.
     pub fn intern(&self, s: &str) -> Arc<str> {
         if let Some(existing) = self.pool.read().get(s) {
             return Arc::clone(existing);
@@ -28,6 +32,9 @@ impl StringInterner {
         let mut pool = self.pool.write();
         if let Some(existing) = pool.get(s) {
             return Arc::clone(existing);
+        }
+        if pool.len() >= 1024 && pool.len() == pool.capacity() {
+            pool.retain(|entry| Arc::strong_count(entry) > 1);
         }
         let arc: Arc<str> = Arc::from(s);
         pool.insert(Arc::clone(&arc));

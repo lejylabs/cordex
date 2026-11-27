@@ -487,7 +487,11 @@ impl<C: Connector> ShardManagerBuilder<C> {
             )
         });
 
-        let cap = self.event_capacity.saturating_mul(ids.len().max(1));
+        let cap = self
+            .event_capacity
+            .saturating_mul(ids.len().clamp(1, 16))
+            .min(65_536)
+            .max(self.event_capacity);
         let (tx, rx) = mpsc::channel(cap.max(1));
         let inner = Arc::new(Inner {
             factory: ShardFactory {
@@ -621,18 +625,19 @@ impl<C: Connector> ShardManager<C> {
         }
 
         let running = u32::try_from(self.inner.ids.len()).unwrap_or(u32::MAX);
-        if self.inner.recommended > running {
+        if self.inner.recommended > self.inner.total {
             tracing::warn!(
+                total = self.inner.total,
                 running,
                 recommended = self.inner.recommended,
-                "GET /gateway/bot recommends more shards than this process is running"
+                "GET /gateway/bot recommends more shards than the configured total shard count"
             );
             let _ = self
                 .inner
                 .factory
                 .events
                 .try_send(ManagerEvent::RecommendedShardCount {
-                    running,
+                    running: self.inner.total,
                     recommended: self.inner.recommended,
                 });
         }
