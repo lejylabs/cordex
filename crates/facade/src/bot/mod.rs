@@ -239,14 +239,30 @@ struct Handlers {
         )>,
     >,
     voice_state: Vec<Handler<(Context, Arc<cordex_model::voice::VoiceState>)>>,
-    auto_moderation_action_execution:
-        Vec<Handler<(Context, Arc<cordex_model::auto_moderation::AutoModerationActionExecution>)>>,
-    auto_moderation_rule_create:
-        Vec<Handler<(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>)>>,
-    auto_moderation_rule_update:
-        Vec<Handler<(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>)>>,
-    auto_moderation_rule_delete:
-        Vec<Handler<(Context, Arc<cordex_model::auto_moderation::AutoModerationRule>)>>,
+    auto_moderation_action_execution: Vec<
+        Handler<(
+            Context,
+            Arc<cordex_model::auto_moderation::AutoModerationActionExecution>,
+        )>,
+    >,
+    auto_moderation_rule_create: Vec<
+        Handler<(
+            Context,
+            Arc<cordex_model::auto_moderation::AutoModerationRule>,
+        )>,
+    >,
+    auto_moderation_rule_update: Vec<
+        Handler<(
+            Context,
+            Arc<cordex_model::auto_moderation::AutoModerationRule>,
+        )>,
+    >,
+    auto_moderation_rule_delete: Vec<
+        Handler<(
+            Context,
+            Arc<cordex_model::auto_moderation::AutoModerationRule>,
+        )>,
+    >,
     before_command: Vec<BeforeCommand>,
     around_command: Vec<middleware::AroundCommand>,
     scheduled: Vec<scheduler::ScheduledTask>,

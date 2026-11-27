@@ -254,7 +254,9 @@ impl TriggerMetadata {
         for entry in &self.allow_list {
             let len = entry.chars().count();
             if len > 60 {
-                return Err(format!("allow_list entry '{entry}' is {len} characters; max is 60").into());
+                return Err(
+                    format!("allow_list entry '{entry}' is {len} characters; max is 60").into(),
+                );
             }
         }
         if let Some(limit) = self.mention_total_limit
@@ -345,9 +347,10 @@ impl AutoModerationAction {
             if let Some(secs) = meta.duration_seconds
                 && secs > 2_419_200
             {
-                return Err(
-                    format!("timeout duration is {secs} seconds; max is 2419200 (4 weeks)").into(),
-                );
+                return Err(format!(
+                    "timeout duration is {secs} seconds; max is 2419200 (4 weeks)"
+                )
+                .into());
             }
         }
         Ok(())
@@ -472,10 +475,18 @@ mod tests {
     #[test]
     fn validation_catches_limit_violations() {
         assert!(TriggerMetadata::keywords(["ok"]).validate().is_ok());
-        assert!(TriggerMetadata::keywords(["x".repeat(61)]).validate().is_err());
+        assert!(
+            TriggerMetadata::keywords(["x".repeat(61)])
+                .validate()
+                .is_err()
+        );
         assert!(TriggerMetadata::mention_spam(51).validate().is_err());
         assert!(AutoModerationAction::timeout(2_419_200).validate().is_ok());
         assert!(AutoModerationAction::timeout(2_419_201).validate().is_err());
-        assert!(AutoModerationAction::block_message_with("x".repeat(151)).validate().is_err());
+        assert!(
+            AutoModerationAction::block_message_with("x".repeat(151))
+                .validate()
+                .is_err()
+        );
     }
 }

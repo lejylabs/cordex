@@ -282,9 +282,9 @@ impl Client {
                 | AutoModerationTriggerType::KeywordPreset
                 | AutoModerationTriggerType::MentionSpam
         );
-        let matched = existing.into_iter().find(|r| {
-            r.trigger_type == trigger_type && (singleton || r.name.as_ref() == name)
-        });
+        let matched = existing
+            .into_iter()
+            .find(|r| r.trigger_type == trigger_type && (singleton || r.name.as_ref() == name));
 
         if let Some(rule) = matched {
             self.update_auto_moderation_rule(guild_id, rule.id)
