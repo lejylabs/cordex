@@ -164,6 +164,96 @@ impl Client {
         .actions(actions)
     }
 
+    /// Create a `KEYWORD` auto moderation rule on `MessageSend`.
+    pub fn create_keyword_rule(
+        &self,
+        guild_id: Id<GuildMarker>,
+        name: &str,
+        metadata: &TriggerMetadata,
+        actions: &[AutoModerationAction],
+    ) -> AutoModerationRuleRequest {
+        self.create_auto_moderation_rule(
+            guild_id,
+            name,
+            AutoModerationEventType::MessageSend,
+            AutoModerationTriggerType::Keyword,
+            actions,
+        )
+        .trigger_metadata(metadata)
+    }
+
+    /// Create a `SPAM` auto moderation rule on `MessageSend`.
+    pub fn create_spam_rule(
+        &self,
+        guild_id: Id<GuildMarker>,
+        name: &str,
+        actions: &[AutoModerationAction],
+    ) -> AutoModerationRuleRequest {
+        self.create_auto_moderation_rule(
+            guild_id,
+            name,
+            AutoModerationEventType::MessageSend,
+            AutoModerationTriggerType::Spam,
+            actions,
+        )
+    }
+
+    /// Create a `KEYWORD_PRESET` auto moderation rule on `MessageSend`.
+    pub fn create_keyword_preset_rule(
+        &self,
+        guild_id: Id<GuildMarker>,
+        name: &str,
+        presets: impl IntoIterator<Item = cordex_model::auto_moderation::KeywordPresetType>,
+        actions: &[AutoModerationAction],
+    ) -> AutoModerationRuleRequest {
+        let metadata = TriggerMetadata::presets(presets);
+        self.create_auto_moderation_rule(
+            guild_id,
+            name,
+            AutoModerationEventType::MessageSend,
+            AutoModerationTriggerType::KeywordPreset,
+            actions,
+        )
+        .trigger_metadata(&metadata)
+    }
+
+    /// Create a `MENTION_SPAM` auto moderation rule on `MessageSend`.
+    pub fn create_mention_spam_rule(
+        &self,
+        guild_id: Id<GuildMarker>,
+        name: &str,
+        mention_total_limit: u32,
+        actions: &[AutoModerationAction],
+    ) -> AutoModerationRuleRequest {
+        let metadata = TriggerMetadata::mention_spam(mention_total_limit);
+        self.create_auto_moderation_rule(
+            guild_id,
+            name,
+            AutoModerationEventType::MessageSend,
+            AutoModerationTriggerType::MentionSpam,
+            actions,
+        )
+        .trigger_metadata(&metadata)
+    }
+
+    /// Create a `MEMBER_PROFILE` auto moderation rule on `MemberUpdate`.
+    pub fn create_member_profile_rule(
+        &self,
+        guild_id: Id<GuildMarker>,
+        name: &str,
+        metadata: &TriggerMetadata,
+        actions: &[AutoModerationAction],
+    ) -> AutoModerationRuleRequest {
+        self.create_auto_moderation_rule(
+            guild_id,
+            name,
+            AutoModerationEventType::MemberUpdate,
+            AutoModerationTriggerType::MemberProfile,
+            actions,
+        )
+        .trigger_metadata(metadata)
+    }
+
     /// `PATCH /guilds/{guild_id}/auto-moderation/rules/{rule_id}`.
     pub fn update_auto_moderation_rule(
         &self,

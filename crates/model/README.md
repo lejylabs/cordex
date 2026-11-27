@@ -17,8 +17,9 @@ and flag of the official bot API, plus helpers that need no network.
 - **Helpers**: `MessageBuilder` with Markdown escaping, codeblock-aware
   `split_message`, `escape_markdown`, `escape_mentions`, `Locale`, embed
   builder with Discord's limits (`Embed::success`/`error`/`info`/`warn` +
-  `colors`), CDN URLs, mentions and timestamp markdown, mention parsing,
-  permission calculator, webhook, invite and message URL parsing.
+  `colors`), `AutoModerationAction` and `TriggerMetadata` builders, CDN URLs,
+  mentions and timestamp markdown, mention parsing, permission calculator,
+  webhook, invite and message URL parsing.
 - **Opt-in features**: `postgres-types`, `rusqlite`, `redis`, `mysql`
   (`mysql_common`) type conversions for `Id<T>`, `Permissions`, `Timestamp`,
   and `ImageHash`; plus `simd-json` for SIMD-accelerated JSON parsing.

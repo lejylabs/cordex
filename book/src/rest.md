@@ -44,6 +44,30 @@ let commands = ic.global_commands().await?;
 
 `InteractionClient` covers global and guild commands (including bulk `set_*_commands`), command permissions, interaction responses and follow-ups, application emojis, entitlements, SKUs, and role connection metadata.
 
+## Auto Moderation
+
+Build AutoMod rules ergonomically with `TriggerMetadata`, `AutoModerationAction`, and the typed `Client` helpers (`create_keyword_rule`, `create_spam_rule`, `create_keyword_preset_rule`, `create_mention_spam_rule`, `create_member_profile_rule`):
+
+```rust,no_run
+use cordex::model::auto_moderation::{AutoModerationAction, TriggerMetadata};
+
+let actions = [
+    AutoModerationAction::block_message_with("Blocked by AutoMod."),
+    AutoModerationAction::send_alert(log_channel_id),
+    AutoModerationAction::timeout(60),
+];
+
+client
+    .create_keyword_rule(
+        guild_id,
+        "Bad Words",
+        &TriggerMetadata::keywords(["spam", "scam"]).with_allow_list(["scamper"]),
+        &actions,
+    )
+    .enabled(true)
+    .await?;
+```
+
 ## Rate Limiting & Metrics
 
 - Per-route buckets and global rate limits are handled automatically with retry-after backoff.

@@ -98,21 +98,123 @@ pub struct AutoModerationRule {
 #[non_exhaustive]
 pub struct TriggerMetadata {
     /// Keyword substrings (`KEYWORD`, `MEMBER_PROFILE`; max 1000, 60 chars each).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keyword_filter: Vec<Box<str>>,
     /// Rust-flavored regex patterns (`KEYWORD`, `MEMBER_PROFILE`; max 10).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub regex_patterns: Vec<Box<str>>,
     /// Preset word lists (`KEYWORD_PRESET`).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub presets: Vec<KeywordPresetType>,
     /// Keywords that never trigger the rule.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allow_list: Vec<Box<str>>,
     /// Max unique role + user mentions per message (`MENTION_SPAM`; max 50).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mention_total_limit: Option<u32>,
     /// Whether mention-raid detection is on (`MENTION_SPAM`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mention_raid_protection_enabled: Option<bool>,
+}
+
+impl TriggerMetadata {
+    /// Empty trigger metadata.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Keyword filter metadata (`KEYWORD` or `MEMBER_PROFILE`).
+    #[must_use]
+    pub fn keywords<I, S>(keywords: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<Box<str>>,
+    {
+        Self::new().with_keywords(keywords)
+    }
+
+    /// Regex pattern metadata (`KEYWORD` or `MEMBER_PROFILE`).
+    #[must_use]
+    pub fn regex_patterns<I, S>(patterns: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<Box<str>>,
+    {
+        Self::new().with_regex_patterns(patterns)
+    }
+
+    /// Preset word list metadata (`KEYWORD_PRESET`).
+    #[must_use]
+    pub fn presets<I>(presets: I) -> Self
+    where
+        I: IntoIterator<Item = KeywordPresetType>,
+    {
+        Self::new().with_presets(presets)
+    }
+
+    /// Mention spam metadata (`MENTION_SPAM`; max 50).
+    #[must_use]
+    pub fn mention_spam(limit: u32) -> Self {
+        Self::new().with_mention_total_limit(limit)
+    }
+
+    /// Set keyword substrings (`KEYWORD`, `MEMBER_PROFILE`; max 1000).
+    #[must_use]
+    pub fn with_keywords<I, S>(mut self, keywords: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<Box<str>>,
+    {
+        self.keyword_filter = keywords.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Set Rust-flavored regex patterns (`KEYWORD`, `MEMBER_PROFILE`; max 10).
+    #[must_use]
+    pub fn with_regex_patterns<I, S>(mut self, patterns: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<Box<str>>,
+    {
+        self.regex_patterns = patterns.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Set preset word lists (`KEYWORD_PRESET`).
+    #[must_use]
+    pub fn with_presets<I>(mut self, presets: I) -> Self
+    where
+        I: IntoIterator<Item = KeywordPresetType>,
+    {
+        self.presets = presets.into_iter().collect();
+        self
+    }
+
+    /// Set allow-listed substrings that never trigger the rule.
+    #[must_use]
+    pub fn with_allow_list<I, S>(mut self, allow_list: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<Box<str>>,
+    {
+        self.allow_list = allow_list.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Set max unique role + user mentions per message (`MENTION_SPAM`; max 50).
+    #[must_use]
+    pub fn with_mention_total_limit(mut self, limit: u32) -> Self {
+        self.mention_total_limit = Some(limit);
+        self
+    }
+
+    /// Enable or disable mention-raid protection (`MENTION_SPAM`).
+    #[must_use]
+    pub fn with_mention_raid_protection(mut self, enabled: bool) -> Self {
+        self.mention_raid_protection_enabled = Some(enabled);
+        self
+    }
 }
 
 /// An action taken when a rule matches.
@@ -123,7 +225,64 @@ pub struct AutoModerationAction {
     #[serde(rename = "type")]
     pub kind: AutoModerationActionType,
     /// Type-specific data (omitted for some types).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<ActionMetadata>,
+}
+
+impl AutoModerationAction {
+    /// Block the message with Discord's default explanation.
+    #[must_use]
+    pub fn block_message() -> Self {
+        Self {
+            kind: AutoModerationActionType::BlockMessage,
+            metadata: None,
+        }
+    }
+
+    /// Block the message with a custom explanation (max 150 characters).
+    #[must_use]
+    pub fn block_message_with(custom_message: impl Into<Box<str>>) -> Self {
+        Self {
+            kind: AutoModerationActionType::BlockMessage,
+            metadata: Some(ActionMetadata {
+                custom_message: Some(custom_message.into()),
+                ..ActionMetadata::default()
+            }),
+        }
+    }
+
+    /// Send an alert message to `channel_id`.
+    #[must_use]
+    pub fn send_alert(channel_id: Id<ChannelMarker>) -> Self {
+        Self {
+            kind: AutoModerationActionType::SendAlertMessage,
+            metadata: Some(ActionMetadata {
+                channel_id: Some(channel_id),
+                ..ActionMetadata::default()
+            }),
+        }
+    }
+
+    /// Timeout the member for `duration_seconds` (max 2,419,200 = 4 weeks).
+    #[must_use]
+    pub fn timeout(duration_seconds: u32) -> Self {
+        Self {
+            kind: AutoModerationActionType::Timeout,
+            metadata: Some(ActionMetadata {
+                duration_seconds: Some(duration_seconds),
+                ..ActionMetadata::default()
+            }),
+        }
+    }
+
+    /// Block the member from interacting until their profile passes `MEMBER_PROFILE` rules.
+    #[must_use]
+    pub fn block_member_interaction() -> Self {
+        Self {
+            kind: AutoModerationActionType::BlockMemberInteraction,
+            metadata: None,
+        }
+    }
 }
 
 /// Extra data for an action type.
@@ -131,10 +290,13 @@ pub struct AutoModerationAction {
 #[non_exhaustive]
 pub struct ActionMetadata {
     /// Alert channel (`SEND_ALERT_MESSAGE`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel_id: Option<Id<ChannelMarker>>,
     /// Timeout length in seconds (`TIMEOUT`; max 2419200 = 4 weeks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration_seconds: Option<u32>,
     /// Explanation shown when a message is blocked (`BLOCK_MESSAGE`; max 150).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_message: Option<Box<str>>,
 }
 
@@ -181,5 +343,60 @@ mod tests {
         let out = serde_json::to_string(&rule).unwrap();
         let again: AutoModerationRule = serde_json::from_str(&out).unwrap();
         assert_eq!(rule, again);
+    }
+
+    #[test]
+    fn action_builders_omit_unused_fields() {
+        let block = serde_json::to_value(AutoModerationAction::block_message()).unwrap();
+        assert_eq!(block, serde_json::json!({ "type": 1 }));
+
+        let custom =
+            serde_json::to_value(AutoModerationAction::block_message_with("No spam")).unwrap();
+        assert_eq!(
+            custom,
+            serde_json::json!({ "type": 1, "metadata": { "custom_message": "No spam" } })
+        );
+
+        let alert =
+            serde_json::to_value(AutoModerationAction::send_alert(Id::new(42).unwrap())).unwrap();
+        assert_eq!(
+            alert,
+            serde_json::json!({ "type": 2, "metadata": { "channel_id": "42" } })
+        );
+
+        let timeout = serde_json::to_value(AutoModerationAction::timeout(60)).unwrap();
+        assert_eq!(
+            timeout,
+            serde_json::json!({ "type": 3, "metadata": { "duration_seconds": 60 } })
+        );
+
+        let interaction =
+            serde_json::to_value(AutoModerationAction::block_member_interaction()).unwrap();
+        assert_eq!(interaction, serde_json::json!({ "type": 4 }));
+    }
+
+    #[test]
+    fn trigger_metadata_builders_omit_unused_fields() {
+        let kw = TriggerMetadata::keywords(["bad", "worse"]).with_allow_list(["badge"]);
+        assert_eq!(
+            serde_json::to_value(kw).unwrap(),
+            serde_json::json!({ "keyword_filter": ["bad", "worse"], "allow_list": ["badge"] })
+        );
+
+        let presets =
+            TriggerMetadata::presets([KeywordPresetType::Profanity, KeywordPresetType::Slurs]);
+        assert_eq!(
+            serde_json::to_value(presets).unwrap(),
+            serde_json::json!({ "presets": [1, 3] })
+        );
+
+        let mention = TriggerMetadata::mention_spam(5).with_mention_raid_protection(true);
+        assert_eq!(
+            serde_json::to_value(mention).unwrap(),
+            serde_json::json!({
+                "mention_total_limit": 5,
+                "mention_raid_protection_enabled": true
+            })
+        );
     }
 }
