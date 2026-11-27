@@ -20,7 +20,7 @@ Add `cordex` and `tokio` to `Cargo.toml` (requires Rust 1.95+):
 
 ```toml
 [dependencies]
-cordex = "0.2.3"
+cordex = "0.2.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

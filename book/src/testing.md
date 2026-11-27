@@ -8,7 +8,7 @@ Add `cordex-test` under `[dev-dependencies]`:
 
 ```toml
 [dev-dependencies]
-cordex-test = "0.2.3"
+cordex-test = "0.2.4"
 ```
 
 ## Testing Commands, Components & Modals

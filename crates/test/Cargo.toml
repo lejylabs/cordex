@@ -15,7 +15,7 @@ documentation = "https://docs.rs/cordex-test"
 workspace = true
 
 [dependencies]
-cordex = { version = "0.2.3", path = "../facade", features = ["cache"] }
+cordex = { version = "0.2.4", path = "../facade", features = ["cache"] }
 cordex-model.workspace = true
 cordex-http = { workspace = true, default-features = false }
 cordex-gateway = { workspace = true, features = ["record"] }
