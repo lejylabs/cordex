@@ -5,6 +5,7 @@ Release notes for `cordex`, organized by version. The project follows [Semantic 
 | Version | Date | Highlights |
 | --- | --- | --- |
 | [Unreleased](changelog/unreleased.md) | — | — |
+| [0.2.6](changelog/0.2.6.md) | 2026-11-27 | Complete Forum, Media, Voice & Channel API support (`ForumTagInput`, `applied_tags`, `available_tags`, `flags`, `default_*` forum/media options, `rtc_region`, `video_quality_mode`, `icon`, and full starter-message/multipart helpers on `CreateForumThread`) |
 | [0.2.5](changelog/0.2.5.md) | 2026-11-27 | Ergonomic Auto Moderation builders & local limit validation (`AutoModerationAction`, `TriggerMetadata`), clean `skip_serializing_if` payloads, `Client` AutoMod convenience & idempotent `upsert_auto_moderation_rule` helpers, typed `Bot`/`Module` AutoMod event handlers, and `prelude` re-exports |
 | [0.2.4](changelog/0.2.4.md) | 2026-11-27 | Fix `Bot::session_store` shutdown mode, `reshard_loop` config retention, cluster shard warning, and `ButtonClicks` idle timeout; add connection reuse/pooling for `RedisSessionStore` & `UnixSocketTransport`, `StringInterner` auto-pruning, and fan-in channel cap |
 | [0.2.3](changelog/0.2.3.md) | 2026-11-27 | Extended DB types (`Locale`, bitflags, enums, Postgres `JSONB`/`JSON`), interaction guards, `ButtonClicks` `.max()`/`.filter()`/`.end_reason()`, `RedisSessionStore`, flexible auto & manual sharding (`AutoShardingConfig`, `shard_ids`, `shard_cluster`, `session_store`, `presence_for_shard`) |

@@ -4,10 +4,13 @@ use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
 use cordex_model::channel::{
-    AutoArchiveDuration, Channel, ChannelType, OverwriteType, PermissionOverwrite,
+    AutoArchiveDuration, Channel, ChannelFlags, ChannelType, DefaultReaction, ForumLayoutType,
+    ForumTag, OverwriteType, PermissionOverwrite, SortOrderType, VideoQualityMode,
 };
 use cordex_model::id::Id;
-use cordex_model::id::marker::{ChannelMarker, GenericMarker, GuildMarker};
+use cordex_model::id::marker::{
+    ChannelMarker, EmojiMarker, GenericMarker, GuildMarker, TagMarker,
+};
 use cordex_model::permissions::Permissions;
 use serde::Serialize;
 
@@ -131,8 +134,84 @@ impl IntoFuture for DeleteChannel {
     }
 }
 
+/// Forum or media channel tag payload for creating or updating `available_tags`.
+///
+/// Omit `id` to create a new tag; set `id` (or convert from an existing
+/// [`ForumTag`]) to preserve or update an existing tag.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ForumTagInput {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<Id<TagMarker>>,
+    name: String,
+    moderated: bool,
+    emoji_id: Option<Id<EmojiMarker>>,
+    emoji_name: Option<String>,
+}
+
+impl ForumTagInput {
+    /// Create a new tag with the given name (0–20 characters).
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            id: None,
+            name: name.into(),
+            moderated: false,
+            emoji_id: None,
+            emoji_name: None,
+        }
+    }
+
+    /// Existing tag ID (set when updating an existing tag).
+    #[must_use]
+    pub fn id(mut self, id: Id<TagMarker>) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    /// Whether only moderators (`MANAGE_THREADS`) can apply or remove this tag.
+    #[must_use]
+    pub fn moderated(mut self, moderated: bool) -> Self {
+        self.moderated = moderated;
+        self
+    }
+
+    /// Custom guild emoji ID for this tag (clears any Unicode emoji name).
+    #[must_use]
+    pub fn emoji_id(mut self, id: Id<EmojiMarker>) -> Self {
+        self.emoji_id = Some(id);
+        self.emoji_name = None;
+        self
+    }
+
+    /// Unicode emoji for this tag (clears any custom emoji ID).
+    #[must_use]
+    pub fn emoji_name(mut self, name: impl Into<String>) -> Self {
+        self.emoji_id = None;
+        self.emoji_name = Some(name.into());
+        self
+    }
+}
+
+impl From<&ForumTag> for ForumTagInput {
+    fn from(tag: &ForumTag) -> Self {
+        Self {
+            id: Some(tag.id),
+            name: tag.name.to_string(),
+            moderated: tag.moderated,
+            emoji_id: tag.emoji_id,
+            emoji_name: tag.emoji_name.as_deref().map(str::to_owned),
+        }
+    }
+}
+
+impl From<ForumTag> for ForumTagInput {
+    fn from(tag: ForumTag) -> Self {
+        Self::from(&tag)
+    }
+}
+
 #[derive(Serialize, Default)]
-#[allow(clippy::option_option)] // Discord: omit vs JSON null (detach parent).
+#[allow(clippy::option_option)] // Discord: omit vs JSON null (detach parent / clear defaults).
 struct UpdateChannelBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
@@ -162,6 +241,28 @@ struct UpdateChannelBody {
     invitable: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     permission_overwrites: Option<Vec<PermissionOverwrite>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    flags: Option<ChannelFlags>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    applied_tags: Option<Vec<Id<TagMarker>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    available_tags: Option<Vec<ForumTagInput>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_reaction_emoji: Option<Option<DefaultReaction>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_thread_rate_limit_per_user: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_sort_order: Option<Option<SortOrderType>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_forum_layout: Option<ForumLayoutType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_auto_archive_duration: Option<AutoArchiveDuration>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rtc_region: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    video_quality_mode: Option<VideoQualityMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    icon: Option<String>,
 }
 
 /// `PATCH /channels/{channel_id}`.
@@ -269,6 +370,85 @@ impl UpdateChannel {
     #[must_use]
     pub fn invitable(mut self, invitable: bool) -> Self {
         self.body.invitable = Some(invitable);
+        self
+    }
+
+    /// Channel flags (e.g. `PINNED` on a forum/media thread, `REQUIRE_TAG` on a
+    /// forum channel, `HIDE_MEDIA_DOWNLOAD_OPTIONS` on a media channel).
+    #[must_use]
+    pub fn flags(mut self, flags: ChannelFlags) -> Self {
+        self.body.flags = Some(flags);
+        self
+    }
+
+    /// Sets the IDs of tags applied to a forum/media thread (max. 5 tags;
+    /// an empty list clears all tags).
+    #[must_use]
+    pub fn applied_tags(mut self, tags: impl Into<Vec<Id<TagMarker>>>) -> Self {
+        self.body.applied_tags = Some(tags.into());
+        self
+    }
+
+    /// Sets the available tags on a forum/media channel (max. 20 tags).
+    #[must_use]
+    pub fn available_tags(mut self, tags: impl Into<Vec<ForumTagInput>>) -> Self {
+        self.body.available_tags = Some(tags.into());
+        self
+    }
+
+    /// Default reaction emoji for a forum/media channel (or `None` to clear).
+    #[must_use]
+    pub fn default_reaction_emoji(mut self, emoji: Option<DefaultReaction>) -> Self {
+        self.body.default_reaction_emoji = Some(emoji);
+        self
+    }
+
+    /// Initial slowmode in seconds for new threads in a text/forum/media channel (0–21600).
+    #[must_use]
+    pub fn default_thread_rate_limit_per_user(mut self, seconds: u32) -> Self {
+        self.body.default_thread_rate_limit_per_user = Some(seconds);
+        self
+    }
+
+    /// Default post sort order for a forum/media channel (or `None` to clear).
+    #[must_use]
+    pub fn default_sort_order(mut self, order: Option<SortOrderType>) -> Self {
+        self.body.default_sort_order = Some(order);
+        self
+    }
+
+    /// Default layout view for a forum channel.
+    #[must_use]
+    pub fn default_forum_layout(mut self, layout: ForumLayoutType) -> Self {
+        self.body.default_forum_layout = Some(layout);
+        self
+    }
+
+    /// Default auto-archive duration for new threads in this channel.
+    #[must_use]
+    pub fn default_auto_archive_duration(mut self, duration: AutoArchiveDuration) -> Self {
+        self.body.default_auto_archive_duration = Some(duration);
+        self
+    }
+
+    /// Voice/stage region ID (or `None` for automatic).
+    #[must_use]
+    pub fn rtc_region(mut self, region: Option<impl Into<String>>) -> Self {
+        self.body.rtc_region = Some(region.map(Into::into));
+        self
+    }
+
+    /// Camera video quality mode for a voice/stage channel.
+    #[must_use]
+    pub fn video_quality_mode(mut self, mode: VideoQualityMode) -> Self {
+        self.body.video_quality_mode = Some(mode);
+        self
+    }
+
+    /// Base64-encoded image data URI for a group DM icon.
+    #[must_use]
+    pub fn icon(mut self, icon_data_uri: impl Into<String>) -> Self {
+        self.body.icon = Some(icon_data_uri.into());
         self
     }
 
@@ -437,6 +617,24 @@ struct CreateChannelBody {
     nsfw: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     permission_overwrites: Option<Vec<PermissionOverwrite>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_auto_archive_duration: Option<AutoArchiveDuration>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_reaction_emoji: Option<DefaultReaction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    available_tags: Option<Vec<ForumTagInput>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_sort_order: Option<SortOrderType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_forum_layout: Option<ForumLayoutType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_thread_rate_limit_per_user: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    flags: Option<ChannelFlags>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rtc_region: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    video_quality_mode: Option<VideoQualityMode>,
 }
 
 /// `POST /guilds/{guild_id}/channels`.
@@ -508,6 +706,69 @@ impl CreateGuildChannel {
     #[must_use]
     pub fn nsfw(mut self, nsfw: bool) -> Self {
         self.body.nsfw = Some(nsfw);
+        self
+    }
+
+    /// Default auto-archive duration for new threads in this channel.
+    #[must_use]
+    pub fn default_auto_archive_duration(mut self, duration: AutoArchiveDuration) -> Self {
+        self.body.default_auto_archive_duration = Some(duration);
+        self
+    }
+
+    /// Default reaction emoji for a forum/media channel.
+    #[must_use]
+    pub fn default_reaction_emoji(mut self, emoji: DefaultReaction) -> Self {
+        self.body.default_reaction_emoji = Some(emoji);
+        self
+    }
+
+    /// Initial available tags for a forum/media channel (max. 20 tags).
+    #[must_use]
+    pub fn available_tags(mut self, tags: impl Into<Vec<ForumTagInput>>) -> Self {
+        self.body.available_tags = Some(tags.into());
+        self
+    }
+
+    /// Default post sort order for a forum/media channel.
+    #[must_use]
+    pub fn default_sort_order(mut self, order: SortOrderType) -> Self {
+        self.body.default_sort_order = Some(order);
+        self
+    }
+
+    /// Default layout view for a forum channel.
+    #[must_use]
+    pub fn default_forum_layout(mut self, layout: ForumLayoutType) -> Self {
+        self.body.default_forum_layout = Some(layout);
+        self
+    }
+
+    /// Initial slowmode in seconds for new threads in this channel (0–21600).
+    #[must_use]
+    pub fn default_thread_rate_limit_per_user(mut self, seconds: u32) -> Self {
+        self.body.default_thread_rate_limit_per_user = Some(seconds);
+        self
+    }
+
+    /// Channel flags (e.g. `REQUIRE_TAG`, `HIDE_MEDIA_DOWNLOAD_OPTIONS`).
+    #[must_use]
+    pub fn flags(mut self, flags: ChannelFlags) -> Self {
+        self.body.flags = Some(flags);
+        self
+    }
+
+    /// Voice/stage region ID (omit for automatic).
+    #[must_use]
+    pub fn rtc_region(mut self, region: impl Into<String>) -> Self {
+        self.body.rtc_region = Some(region.into());
+        self
+    }
+
+    /// Camera video quality mode for a voice/stage channel.
+    #[must_use]
+    pub fn video_quality_mode(mut self, mode: VideoQualityMode) -> Self {
+        self.body.video_quality_mode = Some(mode);
         self
     }
 
@@ -673,5 +934,59 @@ mod tests {
         };
         let update_json = serde_json::to_value(&update).unwrap();
         assert_eq!(update_json["permission_overwrites"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn forum_channel_and_thread_fields_serialize() {
+        let tag_id: Id<TagMarker> = Id::new(42).unwrap();
+        let update = UpdateChannelBody {
+            applied_tags: Some(vec![tag_id]),
+            flags: Some(ChannelFlags::PINNED),
+            default_reaction_emoji: Some(None),
+            default_sort_order: Some(Some(SortOrderType::CreationDate)),
+            default_forum_layout: Some(ForumLayoutType::GalleryView),
+            default_thread_rate_limit_per_user: Some(15),
+            default_auto_archive_duration: Some(AutoArchiveDuration::ThreeDays),
+            available_tags: Some(vec![
+                ForumTagInput::new("bug").moderated(true).emoji_name("🐛"),
+                ForumTagInput::new("help").id(tag_id),
+            ]),
+            rtc_region: Some(None),
+            video_quality_mode: Some(VideoQualityMode::Full),
+            icon: Some("data:image/png;base64,AAAA".into()),
+            ..UpdateChannelBody::default()
+        };
+        let json = serde_json::to_value(&update).unwrap();
+        assert_eq!(json["applied_tags"], serde_json::json!(["42"]));
+        assert_eq!(json["flags"], serde_json::json!(2));
+        assert_eq!(json["default_reaction_emoji"], serde_json::Value::Null);
+        assert_eq!(json["default_sort_order"], serde_json::json!(1));
+        assert_eq!(json["default_forum_layout"], serde_json::json!(2));
+        assert_eq!(json["default_thread_rate_limit_per_user"], serde_json::json!(15));
+        assert_eq!(json["default_auto_archive_duration"], serde_json::json!(4320));
+        assert_eq!(json["available_tags"][0]["name"], "bug");
+        assert!(json["available_tags"][0].get("id").is_none());
+        assert_eq!(json["available_tags"][1]["id"], "42");
+        assert_eq!(json["rtc_region"], serde_json::Value::Null);
+        assert_eq!(json["video_quality_mode"], serde_json::json!(2));
+        assert_eq!(json["icon"], "data:image/png;base64,AAAA");
+
+        let create = CreateChannelBody {
+            name: "support".into(),
+            kind: Some(ChannelType::GuildForum),
+            default_reaction_emoji: Some(DefaultReaction::unicode("👍")),
+            default_sort_order: Some(SortOrderType::LatestActivity),
+            default_forum_layout: Some(ForumLayoutType::ListView),
+            default_thread_rate_limit_per_user: Some(5),
+            default_auto_archive_duration: Some(AutoArchiveDuration::Day),
+            flags: Some(ChannelFlags::REQUIRE_TAG),
+            available_tags: Some(vec![ForumTagInput::new("question")]),
+            ..CreateChannelBody::default()
+        };
+        let create_json = serde_json::to_value(&create).unwrap();
+        assert_eq!(create_json["type"], serde_json::json!(15));
+        assert_eq!(create_json["flags"], serde_json::json!(16));
+        assert_eq!(create_json["default_reaction_emoji"]["emoji_name"], "👍");
+        assert_eq!(create_json["available_tags"][0]["name"], "question");
     }
 }

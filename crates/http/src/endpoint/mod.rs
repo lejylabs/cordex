@@ -188,6 +188,7 @@ pub use assets::{
     UpdateGuildSticker,
 };
 pub use audit_log::GetAuditLog;
+pub use channel::ForumTagInput;
 pub use command::{CommandBody, CommandPayload};
 pub use entitlement::GetEntitlements;
 pub use guild_admin::{

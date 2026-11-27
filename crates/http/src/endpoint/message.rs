@@ -33,25 +33,25 @@ pub(crate) struct MessageBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) embeds: Option<Vec<Embed>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    allowed_mentions: Option<AllowedMentions>,
+    pub(crate) allowed_mentions: Option<AllowedMentions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     message_reference: Option<MessageReference>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) components: Option<Vec<Component>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    sticker_ids: Vec<Id<StickerMarker>>,
+    pub(crate) sticker_ids: Vec<Id<StickerMarker>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    attachments: Option<Vec<PartialAttachment>>,
+    pub(crate) attachments: Option<Vec<PartialAttachment>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    flags: Option<MessageFlags>,
+    pub(crate) flags: Option<MessageFlags>,
 }
 
 #[derive(Serialize)]
-struct PartialAttachment {
-    id: u64,
-    filename: String,
+pub(crate) struct PartialAttachment {
+    pub(crate) id: u64,
+    pub(crate) filename: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
+    pub(crate) description: Option<String>,
 }
 
 /// `POST /channels/{channel_id}/messages`.

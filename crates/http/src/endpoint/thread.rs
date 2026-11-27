@@ -4,13 +4,21 @@ use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 
 use cordex_model::channel::{AutoArchiveDuration, Channel, ChannelType, ThreadMember};
+use cordex_model::component::Component;
 use cordex_model::id::Id;
-use cordex_model::id::marker::{ChannelMarker, GuildMarker, MessageMarker, TagMarker, UserMarker};
+use cordex_model::id::marker::{
+    ChannelMarker, GuildMarker, MessageMarker, StickerMarker, TagMarker, UserMarker,
+};
+use cordex_model::message::{AllowedMentions, Embed, MessageFlags};
 use serde::{Deserialize, Serialize};
 
 use crate::client::Client;
 use crate::error::HttpError;
+use crate::multipart::{File, Multipart};
 use crate::route::Route;
+use crate::validate::{
+    FILE_COUNT_LIMIT, FILE_SIZE_LIMIT, STICKER_COUNT_LIMIT, content_len, embed_limits,
+};
 
 impl Client {
     /// Start a thread in a text or announcement channel (not from a message):
@@ -67,6 +75,7 @@ impl Client {
             rate_limit_per_user: None,
             applied_tags: Vec::new(),
             message: super::message::MessageBody::default(),
+            files: Vec::new(),
             reason: None,
         }
     }
@@ -257,6 +266,7 @@ pub struct CreateForumThread {
     rate_limit_per_user: Option<u32>,
     applied_tags: Vec<Id<TagMarker>>,
     message: super::message::MessageBody,
+    files: Vec<File>,
     reason: Option<String>,
 }
 
@@ -275,18 +285,98 @@ impl CreateForumThread {
         self
     }
 
-    /// Applied forum tags.
+    /// Applied forum tags (max. 5 tags).
     #[must_use]
-    pub fn applied_tags(mut self, tags: Vec<Id<TagMarker>>) -> Self {
-        self.applied_tags = tags;
+    pub fn applied_tags(mut self, tags: impl Into<Vec<Id<TagMarker>>>) -> Self {
+        self.applied_tags = tags.into();
         self
     }
 
-    /// Starter message content.
+    /// Append a single forum tag ID.
+    #[must_use]
+    pub fn tag(mut self, tag: Id<TagMarker>) -> Self {
+        self.applied_tags.push(tag);
+        self
+    }
+
+    /// Starter message content (max. 2000 characters).
     pub fn content(mut self, content: impl Into<String>) -> Result<Self, HttpError> {
         let content = content.into();
-        crate::validate::content_len(&content)?;
+        content_len(&content)?;
         self.message.content = Some(content);
+        Ok(self)
+    }
+
+    /// Add one embed to the starter message (max. 10, 6000 characters total).
+    pub fn embed(mut self, embed: Embed) -> Result<Self, HttpError> {
+        let embeds = self.message.embeds.get_or_insert_with(Vec::new);
+        embeds.push(embed);
+        embed_limits(embeds)?;
+        Ok(self)
+    }
+
+    /// Replace the starter message's embed list.
+    pub fn embeds(mut self, embeds: Vec<Embed>) -> Result<Self, HttpError> {
+        embed_limits(&embeds)?;
+        self.message.embeds = Some(embeds);
+        Ok(self)
+    }
+
+    /// Allowed mentions for the starter message.
+    #[must_use]
+    pub fn allowed_mentions(mut self, mentions: AllowedMentions) -> Self {
+        self.message.allowed_mentions = Some(mentions);
+        self
+    }
+
+    /// Components for the starter message.
+    #[must_use]
+    pub fn components(mut self, components: Vec<Component>) -> Self {
+        self.message.components = Some(components);
+        self
+    }
+
+    /// Stickers for the starter message (max. 3).
+    pub fn sticker_ids(
+        mut self,
+        ids: impl IntoIterator<Item = Id<StickerMarker>>,
+    ) -> Result<Self, HttpError> {
+        let ids: Vec<_> = ids.into_iter().collect();
+        if ids.len() > STICKER_COUNT_LIMIT {
+            return Err(HttpError::validation(
+                format!("a message can have at most {STICKER_COUNT_LIMIT} stickers")
+                    .into_boxed_str(),
+            ));
+        }
+        self.message.sticker_ids = ids;
+        Ok(self)
+    }
+
+    /// Message flags for the starter message (`SUPPRESS_EMBEDS`, `IS_COMPONENTS_V2`, …).
+    #[must_use]
+    pub fn flags(mut self, flags: MessageFlags) -> Self {
+        self.message.flags = Some(flags);
+        self
+    }
+
+    /// Attach a file to the starter message (`files[n]` + `attachments` entry).
+    pub fn attach(mut self, file: File) -> Result<Self, HttpError> {
+        if file.data.len() > FILE_SIZE_LIMIT {
+            return Err(HttpError::validation(
+                format!(
+                    "file `{}` is {} bytes; max {FILE_SIZE_LIMIT}",
+                    file.filename,
+                    file.data.len()
+                )
+                .into_boxed_str(),
+            ));
+        }
+        if self.files.len() >= FILE_COUNT_LIMIT {
+            return Err(HttpError::validation(
+                format!("a message can have at most {FILE_COUNT_LIMIT} files").into_boxed_str(),
+            ));
+        }
+        self.files.push(file);
         Ok(self)
     }
 
@@ -297,31 +387,61 @@ impl CreateForumThread {
     }
 
     /// Send the request.
-    pub async fn send(self) -> Result<Channel, HttpError> {
+    pub async fn send(mut self) -> Result<Channel, HttpError> {
         thread_name_len(&self.name)?;
         if self.message.content.as_ref().is_none_or(String::is_empty)
             && self.message.embeds.as_ref().is_none_or(Vec::is_empty)
             && self.message.components.as_ref().is_none_or(Vec::is_empty)
+            && self.message.sticker_ids.is_empty()
+            && self.files.is_empty()
         {
             return Err(HttpError::validation(
-                "forum thread needs content, an embed or components",
+                "forum thread needs content, an embed, components, a sticker or a file",
             ));
         }
-        self.client
+        if let Some(components) = &self.message.components {
+            super::mark_components_v2(&mut self.message.flags, components);
+        }
+        if !self.files.is_empty() {
+            self.message.attachments = Some(
+                self.files
+                    .iter()
+                    .enumerate()
+                    .map(|(i, f)| super::message::PartialAttachment {
+                        id: i as u64,
+                        filename: f.filename.clone(),
+                        description: f.description.clone(),
+                    })
+                    .collect(),
+            );
+        }
+        let payload = ForumThreadBody {
+            name: &self.name,
+            auto_archive_duration: self.auto_archive_duration,
+            rate_limit_per_user: self.rate_limit_per_user,
+            applied_tags: self.applied_tags,
+            message: &self.message,
+        };
+        let req = self
+            .client
             .post(Route::raw(
                 "/channels/{channel_id}/threads",
                 self.channel_id,
             ))
-            .maybe_reason(self.reason.as_deref())?
-            .json(&ForumThreadBody {
-                name: &self.name,
-                auto_archive_duration: self.auto_archive_duration,
-                rate_limit_per_user: self.rate_limit_per_user,
-                applied_tags: self.applied_tags,
-                message: &self.message,
-            })?
-            .send_json()
-            .await
+            .maybe_reason(self.reason.as_deref())?;
+        if self.files.is_empty() {
+            req.json(&payload)?.send_json().await
+        } else {
+            let payload_json = bytes::Bytes::from(
+                serde_json::to_vec(&payload)
+                    .map_err(|e| HttpError::validation(e.to_string().into_boxed_str()))?,
+            );
+            let mp = Multipart {
+                payload_json,
+                files: self.files,
+            };
+            req.multipart(&mp)?.send_json().await
+        }
     }
 }
 

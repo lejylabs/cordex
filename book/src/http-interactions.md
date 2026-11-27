@@ -7,7 +7,7 @@ Instead of (or alongside) a gateway connection, Discord can POST interactions to
 Enable `interactions-server` on `cordex`:
 
 ```toml
-cordex = { version = "0.2.5", default-features = false, features = ["interactions-server"] }
+cordex = { version = "0.2.6", default-features = false, features = ["interactions-server"] }
 ```
 
 `InteractionEndpoint` enforces:

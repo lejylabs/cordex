@@ -112,6 +112,21 @@ impl Channel {
     pub const fn is_thread(&self) -> bool {
         self.kind.is_thread()
     }
+
+    /// Whether the channel is a forum channel (`ChannelType::GuildForum`).
+    pub const fn is_forum(&self) -> bool {
+        self.kind.is_forum()
+    }
+
+    /// Whether the channel is a media channel (`ChannelType::GuildMedia`).
+    pub const fn is_media(&self) -> bool {
+        self.kind.is_media()
+    }
+
+    /// Whether the channel is a forum or media channel (threads only).
+    pub const fn is_forum_or_media(&self) -> bool {
+        self.kind.is_forum_or_media()
+    }
 }
 
 int_enum! {
@@ -153,6 +168,21 @@ impl ChannelType {
             self,
             Self::AnnouncementThread | Self::PublicThread | Self::PrivateThread
         )
+    }
+
+    /// Whether this is a forum channel (`GuildForum`).
+    pub const fn is_forum(self) -> bool {
+        matches!(self, Self::GuildForum)
+    }
+
+    /// Whether this is a media channel (`GuildMedia`).
+    pub const fn is_media(self) -> bool {
+        matches!(self, Self::GuildMedia)
+    }
+
+    /// Whether this is a forum or media channel (threads only).
+    pub const fn is_forum_or_media(self) -> bool {
+        matches!(self, Self::GuildForum | Self::GuildMedia)
     }
 }
 
@@ -339,6 +369,24 @@ pub struct DefaultReaction {
     pub emoji_id: Option<Id<EmojiMarker>>,
     /// Unicode emoji.
     pub emoji_name: Option<Box<str>>,
+}
+
+impl DefaultReaction {
+    /// Create a default reaction from a custom guild emoji ID.
+    pub const fn emoji_id(id: Id<EmojiMarker>) -> Self {
+        Self {
+            emoji_id: Some(id),
+            emoji_name: None,
+        }
+    }
+
+    /// Create a default reaction from a Unicode emoji (e.g. `"👍"`).
+    pub fn unicode(name: impl Into<Box<str>>) -> Self {
+        Self {
+            emoji_id: None,
+            emoji_name: Some(name.into()),
+        }
+    }
 }
 
 /// Result of following an announcement channel.
