@@ -2,17 +2,29 @@
 //!
 //! Works seamlessly with both synchronous `mysql` and asynchronous `mysql_async`.
 //! - [`Id<T>`] ↔ `UInt(u64)` / `Int(i64)` / `Bytes` (`0` rejected on decode)
-//! - [`Permissions`] ↔ `UInt(u64)` / `Int(i64)`
+//! - Bitflags ([`Permissions`], [`Intents`], [`UserFlags`], [`MessageFlags`], [`ChannelFlags`],
+//!   [`MemberFlags`], [`RoleFlags`], [`SystemChannelFlags`]) ↔ `UInt(u64)` / `Int(i64)`
 //! - [`Timestamp`] ↔ `Int(i64)` (Unix microseconds)
 //! - [`ImageHash`] ↔ `Bytes` (UTF-8 string)
+//! - [`Locale`] ↔ `Bytes` (UTF-8 string)
+//! - Enums ([`ChannelType`], [`InteractionType`], [`PremiumTier`], [`AutoModerationActionType`])
+//!   ↔ `UInt` / `Int` (`0..=255`)
 
 use mysql_common::value::Value;
 use mysql_common::value::convert::{FromValue, FromValueError};
 
+use crate::auto_moderation::AutoModerationActionType;
+use crate::channel::{ChannelFlags, ChannelType};
+use crate::gateway::Intents;
+use crate::guild::{MemberFlags, PremiumTier, RoleFlags, SystemChannelFlags};
 use crate::id::Id;
 use crate::image_hash::ImageHash;
+use crate::interaction::InteractionType;
+use crate::locale::Locale;
+use crate::message::MessageFlags;
 use crate::permissions::Permissions;
 use crate::timestamp::Timestamp;
+use crate::user::UserFlags;
 
 impl<T> From<Id<T>> for Value {
     fn from(id: Id<T>) -> Self {
@@ -41,32 +53,89 @@ impl<T> TryFrom<Value> for Id<T> {
     }
 }
 
-impl From<Permissions> for Value {
-    fn from(perms: Permissions) -> Self {
-        Self::UInt(perms.bits())
-    }
+macro_rules! impl_mysql_bitflags {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl From<$ty> for Value {
+                fn from(flags: $ty) -> Self {
+                    Self::UInt(flags.bits())
+                }
+            }
+
+            impl FromValue for $ty {
+                type Intermediate = Self;
+
+                fn from_value(v: Value) -> Self {
+                    Self::try_from(v).unwrap_or_else(|_| Self::empty())
+                }
+
+                fn from_value_opt(v: Value) -> Result<Self, FromValueError> {
+                    Self::try_from(v)
+                }
+            }
+
+            impl TryFrom<Value> for $ty {
+                type Error = FromValueError;
+
+                fn try_from(v: Value) -> Result<Self, Self::Error> {
+                    let bits = u64::from_value_opt(v)?;
+                    Ok(Self::from_bits_retain(bits))
+                }
+            }
+        )+
+    };
 }
 
-impl FromValue for Permissions {
-    type Intermediate = Self;
+impl_mysql_bitflags!(
+    Permissions,
+    Intents,
+    UserFlags,
+    MessageFlags,
+    ChannelFlags,
+    MemberFlags,
+    RoleFlags,
+    SystemChannelFlags,
+);
 
-    fn from_value(v: Value) -> Self {
-        Self::try_from(v).unwrap_or_else(|_| Self::empty())
-    }
+macro_rules! impl_mysql_u8_enum {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl From<$ty> for Value {
+                fn from(val: $ty) -> Self {
+                    Self::UInt(u64::from(u8::from(val)))
+                }
+            }
 
-    fn from_value_opt(v: Value) -> Result<Self, FromValueError> {
-        Self::try_from(v)
-    }
+            impl FromValue for $ty {
+                type Intermediate = Self;
+
+                fn from_value(v: Value) -> Self {
+                    Self::try_from(v).unwrap_or_else(|_| Self::from(0))
+                }
+
+                fn from_value_opt(v: Value) -> Result<Self, FromValueError> {
+                    Self::try_from(v)
+                }
+            }
+
+            impl TryFrom<Value> for $ty {
+                type Error = FromValueError;
+
+                fn try_from(v: Value) -> Result<Self, Self::Error> {
+                    let raw = u8::from_value_opt(v)?;
+                    Ok(Self::from(raw))
+                }
+            }
+        )+
+    };
 }
 
-impl TryFrom<Value> for Permissions {
-    type Error = FromValueError;
-
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
-        let bits = u64::from_value_opt(v)?;
-        Ok(Self::from_bits_retain(bits))
-    }
-}
+impl_mysql_u8_enum!(
+    ChannelType,
+    InteractionType,
+    PremiumTier,
+    AutoModerationActionType,
+);
 
 impl From<Timestamp> for Value {
     fn from(ts: Timestamp) -> Self {
@@ -122,6 +191,33 @@ impl TryFrom<Value> for ImageHash {
     }
 }
 
+impl From<Locale> for Value {
+    fn from(locale: Locale) -> Self {
+        Self::Bytes(locale.as_str().as_bytes().to_vec())
+    }
+}
+
+impl FromValue for Locale {
+    type Intermediate = Self;
+
+    fn from_value(v: Value) -> Self {
+        Self::try_from(v).unwrap_or(Self::EnUs)
+    }
+
+    fn from_value_opt(v: Value) -> Result<Self, FromValueError> {
+        Self::try_from(v)
+    }
+}
+
+impl TryFrom<Value> for Locale {
+    type Error = FromValueError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        let s = String::from_value_opt(v)?;
+        Ok(Self::from_code(&s))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
@@ -148,5 +244,14 @@ mod tests {
         let hash = ImageHash::new("a_1234567890abcdef1234567890abcdef");
         let h_val: Value = hash.clone().into();
         assert_eq!(ImageHash::from_value_opt(h_val).ok(), Some(hash));
+
+        let loc_val: Value = Locale::De.into();
+        assert_eq!(Locale::from_value_opt(loc_val).ok(), Some(Locale::De));
+
+        let ct_val: Value = ChannelType::GuildText.into();
+        assert_eq!(
+            ChannelType::from_value_opt(ct_val).ok(),
+            Some(ChannelType::GuildText)
+        );
     }
 }

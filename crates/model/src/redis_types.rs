@@ -1,16 +1,28 @@
 //! Opt-in Redis `ToRedisArgs` / `FromRedisValue` implementations (`redis` feature).
 //!
 //! - [`Id<T>`] ↔ decimal snowflake string / integer (`0` rejected on decode)
-//! - [`Permissions`] ↔ `u64` bitfield
+//! - Bitflags ([`Permissions`], [`Intents`], [`UserFlags`], [`MessageFlags`], [`ChannelFlags`],
+//!   [`MemberFlags`], [`RoleFlags`], [`SystemChannelFlags`]) ↔ `u64` bitfield
 //! - [`Timestamp`] ↔ `i64` Unix microseconds
 //! - [`ImageHash`] ↔ UTF-8 string
+//! - [`Locale`] ↔ UTF-8 string
+//! - Enums ([`ChannelType`], [`InteractionType`], [`PremiumTier`], [`AutoModerationActionType`])
+//!   ↔ `u8`
 
 use redis::{FromRedisValue, ParsingError, RedisWrite, ToRedisArgs, Value};
 
+use crate::auto_moderation::AutoModerationActionType;
+use crate::channel::{ChannelFlags, ChannelType};
+use crate::gateway::Intents;
+use crate::guild::{MemberFlags, PremiumTier, RoleFlags, SystemChannelFlags};
 use crate::id::Id;
 use crate::image_hash::ImageHash;
+use crate::interaction::InteractionType;
+use crate::locale::Locale;
+use crate::message::MessageFlags;
 use crate::permissions::Permissions;
 use crate::timestamp::Timestamp;
+use crate::user::UserFlags;
 
 impl<T> ToRedisArgs for Id<T> {
     fn write_redis_args<W>(&self, out: &mut W)
@@ -28,21 +40,67 @@ impl<T> FromRedisValue for Id<T> {
     }
 }
 
-impl ToRedisArgs for Permissions {
-    fn write_redis_args<W>(&self, out: &mut W)
-    where
-        W: ?Sized + RedisWrite,
-    {
-        self.bits().write_redis_args(out);
-    }
+macro_rules! impl_redis_bitflags {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl ToRedisArgs for $ty {
+                fn write_redis_args<W>(&self, out: &mut W)
+                where
+                    W: ?Sized + RedisWrite,
+                {
+                    self.bits().write_redis_args(out);
+                }
+            }
+
+            impl FromRedisValue for $ty {
+                fn from_redis_value(v: Value) -> Result<Self, ParsingError> {
+                    let bits = u64::from_redis_value(v)?;
+                    Ok(Self::from_bits_retain(bits))
+                }
+            }
+        )+
+    };
 }
 
-impl FromRedisValue for Permissions {
-    fn from_redis_value(v: Value) -> Result<Self, ParsingError> {
-        let bits = u64::from_redis_value(v)?;
-        Ok(Self::from_bits_retain(bits))
-    }
+impl_redis_bitflags!(
+    Permissions,
+    Intents,
+    UserFlags,
+    MessageFlags,
+    ChannelFlags,
+    MemberFlags,
+    RoleFlags,
+    SystemChannelFlags,
+);
+
+macro_rules! impl_redis_u8_enum {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl ToRedisArgs for $ty {
+                fn write_redis_args<W>(&self, out: &mut W)
+                where
+                    W: ?Sized + RedisWrite,
+                {
+                    u8::from(*self).write_redis_args(out);
+                }
+            }
+
+            impl FromRedisValue for $ty {
+                fn from_redis_value(v: Value) -> Result<Self, ParsingError> {
+                    let raw = u8::from_redis_value(v)?;
+                    Ok(Self::from(raw))
+                }
+            }
+        )+
+    };
 }
+
+impl_redis_u8_enum!(
+    ChannelType,
+    InteractionType,
+    PremiumTier,
+    AutoModerationActionType,
+);
 
 impl ToRedisArgs for Timestamp {
     fn write_redis_args<W>(&self, out: &mut W)
@@ -76,6 +134,22 @@ impl FromRedisValue for ImageHash {
     }
 }
 
+impl ToRedisArgs for Locale {
+    fn write_redis_args<W>(&self, out: &mut W)
+    where
+        W: ?Sized + RedisWrite,
+    {
+        self.as_str().write_redis_args(out);
+    }
+}
+
+impl FromRedisValue for Locale {
+    fn from_redis_value(v: Value) -> Result<Self, ParsingError> {
+        let s = String::from_redis_value(v)?;
+        Ok(Self::from_code(&s))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
@@ -98,6 +172,18 @@ mod tests {
         assert_eq!(
             Permissions::from_redis_value(Value::BulkString(p_args[0].clone())).ok(),
             Some(perms)
+        );
+
+        let loc_args = Locale::EnUs.to_redis_args();
+        assert_eq!(
+            Locale::from_redis_value(Value::BulkString(loc_args[0].clone())).ok(),
+            Some(Locale::EnUs)
+        );
+
+        let ct_args = ChannelType::GuildVoice.to_redis_args();
+        assert_eq!(
+            ChannelType::from_redis_value(Value::BulkString(ct_args[0].clone())).ok(),
+            Some(ChannelType::GuildVoice)
         );
     }
 }
