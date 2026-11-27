@@ -192,8 +192,11 @@ impl Transport for UnixSocketTransport {
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .pop();
                 match candidate {
-                    Some(mut s) if s.ready().await.is_ok() => break s,
-                    Some(_) => continue,
+                    Some(mut s) => {
+                        if s.ready().await.is_ok() {
+                            break s;
+                        }
+                    }
                     None => {
                         let stream = tokio::net::UnixStream::connect(&path)
                             .await
