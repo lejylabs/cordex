@@ -353,3 +353,37 @@ fn resharding_defaults() {
     let bot = bot.reshard_interval(None);
     assert_eq!(bot.reshard_interval, None);
 }
+
+#[test]
+fn guard_errors_format_cleanly() {
+    use std::num::NonZeroU64;
+
+    let role_id = cordex_model::RoleId::from(NonZeroU64::MIN);
+    let sku_id = cordex_model::id::Id::<cordex_model::id::marker::SkuMarker>::from(NonZeroU64::MIN);
+
+    assert!(Error::GuildOnly.to_string().contains("server"));
+    assert!(Error::NsfwOnly.to_string().contains("NSFW"));
+    assert!(Error::MissingRole(role_id).to_string().contains("role"));
+    assert!(
+        Error::MissingEntitlement(sku_id)
+            .to_string()
+            .contains("entitlement")
+    );
+    assert!(Error::OwnerOnly.to_string().contains("owner"));
+}
+
+#[test]
+fn collector_end_reason_variants_are_distinct() {
+    let reasons = [
+        CollectorEndReason::Timeout,
+        CollectorEndReason::Idle,
+        CollectorEndReason::Limit,
+        CollectorEndReason::Stopped,
+        CollectorEndReason::Closed,
+    ];
+    for (i, a) in reasons.iter().enumerate() {
+        for (j, b) in reasons.iter().enumerate() {
+            assert_eq!(a == b, i == j);
+        }
+    }
+}
