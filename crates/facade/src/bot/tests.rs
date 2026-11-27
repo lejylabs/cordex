@@ -152,7 +152,7 @@ fn same_command_name_replaces_the_old_one() {
 #[test]
 fn defaults() {
     let bot = Bot::new("t").shards(0);
-    assert_eq!(bot.shards, Some((0..1, 1)));
+    assert_eq!(bot.shards, Some(BotShards::Range(0..1, 1)));
     assert!(bot.auto_defer);
     assert_eq!(bot.error_message.as_deref(), Some(DEFAULT_ERROR_MESSAGE));
     let bot = bot.error_message(None).auto_defer(false);

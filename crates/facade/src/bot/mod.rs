@@ -337,12 +337,24 @@ impl Shared {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BotShards {
+    Range(std::ops::Range<u32>, u32),
+    List(Vec<u32>, u32),
+}
+
+type ShardPresenceFn =
+    Arc<dyn Fn(u32, u32) -> cordex_model::gateway::presence::UpdatePresence + Send + Sync>;
+
 /// Builder and runner of a bot; see the [module docs](self).
 #[must_use = "a Bot does nothing until `.run().await`"]
 pub struct Bot {
     token: String,
     intents: Intents,
-    shards: Option<(std::ops::Range<u32>, u32)>,
+    shards: Option<BotShards>,
+    identify_queue: Option<Arc<dyn cordex_gateway::IdentifyQueue>>,
+    session_store: Option<Arc<dyn cordex_gateway::SessionStore>>,
+    spawner: Option<Arc<dyn cordex_gateway::Spawner>>,
     commands: Vec<Command>,
     guild_commands: Option<Id<GuildMarker>>,
     register_commands: bool,
@@ -353,6 +365,7 @@ pub struct Bot {
     auto_defer: bool,
     default_allowed_mentions: Option<AllowedMentions>,
     presence: Option<cordex_model::gateway::presence::UpdatePresence>,
+    presence_fn: Option<ShardPresenceFn>,
     extra_events: EventTypeFlags,
     reshard_interval: Option<Duration>,
     #[cfg(feature = "cache")]
@@ -378,6 +391,9 @@ impl Bot {
             token: token.into(),
             intents: Intents::empty(),
             shards: None,
+            identify_queue: None,
+            session_store: None,
+            spawner: None,
             commands: Vec::new(),
             guild_commands: None,
             register_commands: true,
@@ -388,6 +404,7 @@ impl Bot {
             auto_defer: true,
             default_allowed_mentions: None,
             presence: None,
+            presence_fn: None,
             extra_events: EventTypeFlags::empty(),
             reshard_interval: Some(DEFAULT_RESHARD_INTERVAL),
             #[cfg(feature = "cache")]
@@ -489,14 +506,61 @@ impl Bot {
     /// resharding).
     pub fn shards(mut self, count: u32) -> Self {
         let count = count.max(1);
-        self.shards = Some((0..count, count));
+        self.shards = Some(BotShards::Range(0..count, count));
         self
     }
 
     /// Run a specific `range` of `total` shards in this process (multi-process
     /// clustering; turns off resharding).
     pub fn shard_range(mut self, range: std::ops::Range<u32>, total: u32) -> Self {
-        self.shards = Some((range, total));
+        self.shards = Some(BotShards::Range(range, total));
+        self
+    }
+
+    /// Run an arbitrary list of shard IDs out of `total` shards (e.g. strided
+    /// sharding `[0, 2, 4, 6]`; turns off resharding).
+    pub fn shard_ids(mut self, ids: impl IntoIterator<Item = u32>, total: u32) -> Self {
+        self.shards = Some(BotShards::List(ids.into_iter().collect(), total));
+        self
+    }
+
+    /// Run the shard slice assigned to `cluster_id` out of `cluster_count`
+    /// processes for `total` shards (turns off resharding).
+    pub fn shard_cluster(mut self, cluster_id: u32, cluster_count: u32, total: u32) -> Self {
+        let range =
+            cordex_gateway::cluster_shard_range(cluster_id, cluster_count, total).unwrap_or(0..0);
+        self.shards = Some(BotShards::Range(range, total));
+        self
+    }
+
+    /// Use a custom [`cordex_gateway::IdentifyQueue`] (e.g. a distributed queue
+    /// shared across processes).
+    pub fn identify_queue(mut self, queue: Arc<dyn cordex_gateway::IdentifyQueue>) -> Self {
+        self.identify_queue = Some(queue);
+        self
+    }
+
+    /// Persist active shard sessions across restarts using a
+    /// [`cordex_gateway::SessionStore`] (such as `FileSessionStore` or
+    /// `RedisSessionStore`).
+    pub fn session_store(mut self, store: Arc<dyn cordex_gateway::SessionStore>) -> Self {
+        self.session_store = Some(store);
+        self
+    }
+
+    /// Control where shard tasks are spawned (e.g. `cordex::gateway::RuntimeHandles`
+    /// for thread-per-core sharding).
+    pub fn spawn_with(mut self, spawner: Arc<dyn cordex_gateway::Spawner>) -> Self {
+        self.spawner = Some(spawner);
+        self
+    }
+
+    /// Set a per-shard initial presence `(shard_id, total_shards) -> UpdatePresence`.
+    pub fn presence_for_shard<F>(mut self, f: F) -> Self
+    where
+        F: Fn(u32, u32) -> cordex_model::gateway::presence::UpdatePresence + Send + Sync + 'static,
+    {
+        self.presence_fn = Some(Arc::new(f));
         self
     }
 
@@ -989,6 +1053,7 @@ impl Bot {
 
     /// Like [`run`](Self::run), but shuts down all shards cleanly when
     /// `shutdown` completes.
+    #[allow(clippy::too_many_lines)]
     pub async fn run_until(self, shutdown: impl Future<Output = ()> + Send) -> Result<()> {
         for command in &self.commands {
             command.validate()?;
@@ -1015,6 +1080,10 @@ impl Bot {
             event_types,
             fixed_shards.clone(),
             presence.clone(),
+            self.presence_fn.clone(),
+            self.identify_queue.clone(),
+            self.session_store.clone(),
+            self.spawner.clone(),
         )
         .await?;
         let mut events = manager.events();
@@ -1340,8 +1409,12 @@ async fn build_manager(
     intents: Intents,
     http: &Client,
     event_types: EventTypeFlags,
-    fixed_shards: Option<(std::ops::Range<u32>, u32)>,
+    fixed_shards: Option<BotShards>,
     presence: Option<cordex_model::gateway::presence::UpdatePresence>,
+    presence_fn: Option<ShardPresenceFn>,
+    identify_queue: Option<Arc<dyn cordex_gateway::IdentifyQueue>>,
+    session_store: Option<Arc<dyn cordex_gateway::SessionStore>>,
+    spawner: Option<Arc<dyn cordex_gateway::Spawner>>,
 ) -> Result<ShardManager> {
     let mut builder = ShardManager::builder(token, intents)
         .http(http.clone())
@@ -1349,8 +1422,21 @@ async fn build_manager(
     if let Some(presence) = presence {
         builder = builder.presence(presence);
     }
+    if let Some(f) = presence_fn {
+        builder = builder.presence_for_shard(move |id, total| f(id, total));
+    }
+    if let Some(queue) = identify_queue {
+        builder = builder.identify_queue(queue);
+    }
+    if let Some(store) = session_store {
+        builder = builder.session_store(store);
+    }
+    if let Some(spawner) = spawner {
+        builder = builder.spawn_with(spawner);
+    }
     let builder = match fixed_shards {
-        Some((range, total)) => builder.shards(range, total),
+        Some(BotShards::Range(range, total)) => builder.shards(range, total),
+        Some(BotShards::List(ids, total)) => builder.shard_ids(ids, total),
         None => builder.automatic(),
     };
     Ok(builder.build().await?)
@@ -1423,7 +1509,19 @@ async fn prepare_reshard(
     event_types: EventTypeFlags,
     presence: Option<cordex_model::gateway::presence::UpdatePresence>,
 ) -> Result<Reshard> {
-    let mut manager = build_manager(token, intents, http, event_types, None, presence).await?;
+    let mut manager = build_manager(
+        token,
+        intents,
+        http,
+        event_types,
+        None,
+        presence,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await?;
     let mut events = manager.events();
     manager.start().await?;
     let total = manager.total_shards();

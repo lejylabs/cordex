@@ -23,6 +23,7 @@ use crate::connection::{Connector, WsConnector};
 use crate::error::GatewayError;
 use crate::event_flags::EventTypeFlags;
 use crate::identify::{IdentifyQueue, LocalIdentifyQueue};
+use crate::session_store::SessionStore;
 use crate::shard::{GatewayBotSource, Shard, ShardBuilder};
 use crate::spawn::{CurrentRuntime, Spawner};
 use crate::types::{
@@ -30,9 +31,38 @@ use crate::types::{
     DEFAULT_MAX_MESSAGE_BYTES, DEFAULT_MEMBER_TIMEOUT, ManagerEvent, ShardId, ShardStatus,
 };
 
+type PresenceFn = Arc<dyn Fn(u32, u32) -> UpdatePresence + Send + Sync>;
+
+/// Compute the shard range for one process in a multi-process cluster
+/// (e.g. a Kubernetes `StatefulSet`).
+///
+/// Distributes remainders fairly: when `total_shards` is not evenly divisible
+/// by `cluster_count`, the first `total_shards % cluster_count` clusters each
+/// receive one extra shard. Returns `None` if `cluster_count == 0`,
+/// `cluster_id >= cluster_count`, or this cluster would receive zero shards.
+#[must_use]
+pub fn cluster_shard_range(
+    cluster_id: u32,
+    cluster_count: u32,
+    total_shards: u32,
+) -> Option<Range<u32>> {
+    if cluster_count == 0 || cluster_id >= cluster_count || total_shards == 0 {
+        return None;
+    }
+    let base = total_shards / cluster_count;
+    let rem = total_shards % cluster_count;
+    let start = cluster_id * base + cluster_id.min(rem);
+    let len = base + u32::from(cluster_id < rem);
+    if len == 0 {
+        return None;
+    }
+    Some(start..start + len)
+}
+
 enum ShardSpec {
     Automatic,
     Range { range: Range<u32>, total: u32 },
+    List { ids: Vec<u32>, total: u32 },
 }
 
 /// Builder for [`ShardManager`].
@@ -44,12 +74,14 @@ pub struct ShardManagerBuilder<C: Connector = WsConnector> {
     http: Option<cordex_http::Client>,
     bot: Option<GatewayBot>,
     identify_queue: Option<Arc<dyn IdentifyQueue>>,
+    session_store: Option<Arc<dyn SessionStore>>,
     event_types: EventTypeFlags,
     backpressure: Backpressure,
     event_capacity: usize,
     large_threshold: u8,
     max_message_bytes: usize,
     presence: Option<UpdatePresence>,
+    presence_fn: Option<PresenceFn>,
     member_timeout: Duration,
     cancel: CancellationToken,
     spawner: Arc<dyn Spawner>,
@@ -83,12 +115,14 @@ struct ShardFactory<C: Connector> {
     gateway_url: Box<str>,
     connector: C,
     identify_queue: Arc<dyn IdentifyQueue>,
+    session_store: Option<Arc<dyn SessionStore>>,
     event_types: EventTypeFlags,
     backpressure: Backpressure,
     event_capacity: usize,
     large_threshold: u8,
     max_message_bytes: usize,
     presence: Option<UpdatePresence>,
+    presence_fn: Option<PresenceFn>,
     member_timeout: Duration,
     cancel: CancellationToken,
     events: mpsc::Sender<ManagerEvent>,
@@ -108,12 +142,14 @@ impl ShardManagerBuilder<WsConnector> {
             http: None,
             bot: None,
             identify_queue: None,
+            session_store: None,
             event_types: EventTypeFlags::all(),
             backpressure: Backpressure::Disconnect,
             event_capacity: DEFAULT_EVENT_CAPACITY,
             large_threshold: DEFAULT_LARGE_THRESHOLD,
             max_message_bytes: DEFAULT_MAX_MESSAGE_BYTES,
             presence: None,
+            presence_fn: None,
             member_timeout: DEFAULT_MEMBER_TIMEOUT,
             cancel: CancellationToken::new(),
             spawner: Arc::new(CurrentRuntime),
@@ -136,6 +172,26 @@ impl<C: Connector> ShardManagerBuilder<C> {
         self
     }
 
+    /// Run an arbitrary list of shard IDs out of `total` shards (e.g. strided
+    /// sharding `[0, 2, 4, 6]` or taking over specific shards on a node).
+    #[must_use]
+    pub fn shard_ids(mut self, ids: impl IntoIterator<Item = u32>, total: u32) -> Self {
+        self.spec = ShardSpec::List {
+            ids: ids.into_iter().collect(),
+            total,
+        };
+        self
+    }
+
+    /// Run the shard slice assigned to `cluster_id` out of `cluster_count`
+    /// processes for `total` shards (computed via [`cluster_shard_range`]).
+    #[must_use]
+    pub fn cluster(mut self, cluster_id: u32, cluster_count: u32, total: u32) -> Self {
+        let range = cluster_shard_range(cluster_id, cluster_count, total).unwrap_or(0..0);
+        self.spec = ShardSpec::Range { range, total };
+        self
+    }
+
     /// Inject a connector (tests use [`crate::mock::MockConnector`]).
     #[must_use]
     pub fn connector<N: Connector>(self, connector: N) -> ShardManagerBuilder<N> {
@@ -147,12 +203,14 @@ impl<C: Connector> ShardManagerBuilder<C> {
             http: self.http,
             bot: self.bot,
             identify_queue: self.identify_queue,
+            session_store: self.session_store,
             event_types: self.event_types,
             backpressure: self.backpressure,
             event_capacity: self.event_capacity,
             large_threshold: self.large_threshold,
             max_message_bytes: self.max_message_bytes,
             presence: self.presence,
+            presence_fn: self.presence_fn,
             member_timeout: self.member_timeout,
             cancel: self.cancel,
             spawner: self.spawner,
@@ -178,6 +236,17 @@ impl<C: Connector> ShardManagerBuilder<C> {
     #[must_use]
     pub fn identify_queue(mut self, queue: Arc<dyn IdentifyQueue>) -> Self {
         self.identify_queue = Some(queue);
+        self
+    }
+
+    /// Persistent session store for zero-downtime `RESUME` across restarts.
+    ///
+    /// When set, each shard loads its saved [`crate::ResumeInfo`] on spawn and
+    /// [`ShardManager::shutdown`] persists active resume state on
+    /// [`CloseMode::Resumable`].
+    #[must_use]
+    pub fn session_store(mut self, store: Arc<dyn SessionStore>) -> Self {
+        self.session_store = Some(store);
         self
     }
 
@@ -226,6 +295,18 @@ impl<C: Connector> ShardManagerBuilder<C> {
         self
     }
 
+    /// Per-shard initial presence builder `(shard_id, total_shards) -> UpdatePresence`.
+    ///
+    /// Overrides [`presence`](Self::presence) when set.
+    #[must_use]
+    pub fn presence_for_shard<F>(mut self, f: F) -> Self
+    where
+        F: Fn(u32, u32) -> UpdatePresence + Send + Sync + 'static,
+    {
+        self.presence_fn = Some(Arc::new(f));
+        self
+    }
+
     /// Timeout for collecting `GUILD_MEMBERS_CHUNK` (default 30 s).
     #[must_use]
     pub fn member_timeout(mut self, timeout: Duration) -> Self {
@@ -270,6 +351,26 @@ impl<C: Connector> ShardManagerBuilder<C> {
                 }
                 ((range.start..range.end).collect::<Vec<_>>(), *total)
             }
+            ShardSpec::List { ids, total } => {
+                if *total == 0 || ids.is_empty() {
+                    return Err(GatewayError::InvalidShardId {
+                        id: 0,
+                        total: *total,
+                    });
+                }
+                let mut seen = std::collections::HashSet::with_capacity(ids.len());
+                for &id in ids {
+                    if id >= *total {
+                        return Err(GatewayError::InvalidShardId { id, total: *total });
+                    }
+                    if !seen.insert(id) {
+                        return Err(GatewayError::validation(format!(
+                            "duplicate shard id {id} in shard_ids"
+                        )));
+                    }
+                }
+                (ids.clone(), *total)
+            }
         };
         if ids.is_empty() {
             return Err(GatewayError::validation("shard manager range is empty"));
@@ -291,12 +392,14 @@ impl<C: Connector> ShardManagerBuilder<C> {
                 gateway_url: bot.url.clone(),
                 connector: self.connector,
                 identify_queue: queue,
+                session_store: self.session_store,
                 event_types: self.event_types,
                 backpressure: self.backpressure,
                 event_capacity: self.event_capacity,
                 large_threshold: self.large_threshold,
                 max_message_bytes: self.max_message_bytes,
                 presence: self.presence,
+                presence_fn: self.presence_fn,
                 member_timeout: self.member_timeout,
                 cancel: self.cancel.clone(),
                 events: tx,
@@ -347,8 +450,22 @@ impl<C: Connector> ShardFactory<C> {
             .cancellation_token(self.cancel.child_token())
             .manager_events(self.events.clone())
             .spawn_with(Arc::clone(&self.spawner));
-        let shard = if let Some(presence) = self.presence.clone() {
+        let presence = self
+            .presence_fn
+            .as_ref()
+            .map(|f| f(number, self.total))
+            .or_else(|| self.presence.clone());
+        let shard = if let Some(presence) = presence {
             shard.presence(presence)
+        } else {
+            shard
+        };
+        let shard = if let Some(info) = self
+            .session_store
+            .as_ref()
+            .and_then(|store| store.load(number))
+        {
+            shard.resume(info)
         } else {
             shard
         }
@@ -534,7 +651,22 @@ impl<C: Connector> ShardManager<C> {
             .collect();
         let mut infos = Vec::with_capacity(shards.len());
         for shard in shards {
-            infos.push(shard.close(mode).await.ok().flatten());
+            let number = shard.id().number();
+            let info = shard.close(mode).await.ok().flatten();
+            if let Some(store) = &self.inner.factory.session_store {
+                match (&info, mode) {
+                    (Some(resume), CloseMode::Resumable) => {
+                        if let Err(err) = store.save(number, resume) {
+                            tracing::warn!(shard = number, error = %err, "failed to save shard session");
+                        }
+                    }
+                    (_, CloseMode::Terminate) => {
+                        let _ = store.clear(number);
+                    }
+                    _ => {}
+                }
+            }
+            infos.push(info);
         }
         self.inner.started.store(false, Ordering::SeqCst);
         infos
@@ -563,5 +695,25 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 impl<C: Connector> Drop for ShardManager<C> {
     fn drop(&mut self) {
         self.inner.cancel.cancel();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cluster_shard_range_distributes_remainders_fairly() {
+        // 10 shards across 3 clusters -> [0..4, 4..7, 7..10]
+        assert_eq!(cluster_shard_range(0, 3, 10), Some(0..4));
+        assert_eq!(cluster_shard_range(1, 3, 10), Some(4..7));
+        assert_eq!(cluster_shard_range(2, 3, 10), Some(7..10));
+        assert_eq!(cluster_shard_range(3, 3, 10), None);
+        assert_eq!(cluster_shard_range(0, 0, 10), None);
+        assert_eq!(cluster_shard_range(0, 3, 0), None);
+        // More clusters than shards: extra clusters get None
+        assert_eq!(cluster_shard_range(0, 4, 2), Some(0..1));
+        assert_eq!(cluster_shard_range(1, 4, 2), Some(1..2));
+        assert_eq!(cluster_shard_range(2, 4, 2), None);
     }
 }
