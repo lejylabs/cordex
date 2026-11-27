@@ -91,4 +91,5 @@ When editing messages, interaction responses, or webhook messages via `cordex-ht
 - **`.before_command(|ctx| ...)`** runs before every command handler (chainable; module-scoped when added on a `BotModule`). Return `Ok(false)` to block execution.
 - **`.command_with_cooldown(cmd, duration, CooldownScope::User, handler)`** enforces per-command cooldowns (`User`, `Channel`, `Guild`, or `Global`) with automatic ephemeral notices (customizable via `.cooldown_message(...)`). For custom keys, `cordex::bot::Cooldowns<K>` is also available.
 - **`ctx.require_user_perm(perm)?` / `ctx.require_bot_perm(perm)?`** return `Error::MissingPermission` when a required permission is absent.
+- **Additional interaction guards:** `ctx.require_guild()?` (returns `GuildId`), `ctx.require_nsfw()?`, `ctx.require_role(role_id)?`, `ctx.require_entitlement(sku_id)?`, and `ctx.require_owner(&owners)?` short-circuit with typed `cordex::Error` variants (`GuildOnly`, `NsfwOnly`, `MissingRole`, `MissingEntitlement`, `OwnerOnly`).
 - **`.on_error(|ctx, err| ...)`** catches every `Err` returned by any handler in one central place.

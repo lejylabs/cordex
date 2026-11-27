@@ -39,10 +39,10 @@ cargo generate lejylabs/cordex-template
 | `interactions-server` | no | Standalone Hyper HTTP interaction endpoint |
 | `oauth2` | no | Discord `OAuth2` client in `cordex::http::oauth2` (PKCE, token exchange/refresh/revoke, Bearer endpoints) |
 | `macros` | no | Optional derive macros (`#[derive(CommandArgs)]`, `#[derive(CommandChoice)]`) |
-| `postgres-types` | no | Direct PostgreSQL `ToSql` / `FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
-| `rusqlite` | no | Direct SQLite `ToSql` / `FromSql` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
-| `redis` | no | Direct Redis `ToRedisArgs` / `FromRedisValue` for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
-| `mysql` | no | Direct MySQL/MariaDB (`mysql_common`) value conversions for `Id<T>`, `Permissions`, `Timestamp`, `ImageHash` |
+| `postgres-types` | no | Direct PostgreSQL `ToSql` / `FromSql` for `Id<T>`, `Timestamp`, `ImageHash`, `Locale`, `u64` bitflags, `u8` enums, and `JSONB`/`JSON` (`Embed`, `Component`, `AllowedMentions`) |
+| `rusqlite` | no | Direct SQLite `ToSql` / `FromSql` for `Id<T>`, `Timestamp`, `ImageHash`, `Locale`, `u64` bitflags, and `u8` enums |
+| `redis` | no | Direct Redis `ToRedisArgs` / `FromRedisValue` for `Id<T>`, `Timestamp`, `ImageHash`, `Locale`, `u64` bitflags, `u8` enums, plus `RedisSessionStore` in `cordex-gateway` |
+| `mysql` | no | Direct MySQL/MariaDB (`mysql_common`) value conversions for `Id<T>`, `Timestamp`, `ImageHash`, `Locale`, `u64` bitflags, and `u8` enums |
 | `simd-json` | no | Opt-in SIMD-accelerated JSON deserialization (`cordex_model::simd_json::from_slice`) |
 | `metrics` | no | Export HTTP and gateway counters through the `metrics` crate |
 | `zstd-stream` | no | Use `zstd-stream` gateway compression instead of pure-Rust `zlib-stream` (requires a C compiler) |

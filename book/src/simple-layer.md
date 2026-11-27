@@ -65,7 +65,7 @@ async fn confirm(ctx: CommandContext) -> cordex::Result<()> {
 }
 ```
 
-For polls or custom flows, use `ctx.button_clicks(msg.id, timeout)` to iterate over all clicks until the timeout expires. For standard multi-page responses, use the built-in paginator:
+For polls or custom flows, use `ctx.button_clicks(msg.id, timeout)` (supporting `.idle_timeout(...)`, `.max(limit)`, `.filter(...)`, `.collected()`, and `.end_reason()`) to iterate over matching clicks. For standard multi-page responses, use the built-in paginator:
 
 ```rust,no_run
 use std::time::Duration;
@@ -130,6 +130,7 @@ For common gateway events you do not need a manual `on_event` match:
 
 - `ctx.bot_can(Permissions::KICK_MEMBERS)` and `ctx.user_can(Permissions::KICK_MEMBERS)` check precomputed interaction permissions without cache or REST calls (`app_permissions()` / `member_permissions()`).
 - `ctx.require_user_perm(Permissions::KICK_MEMBERS)?` and `ctx.require_bot_perm(...)` return `Err(cordex::Error::MissingPermission { .. })` directly so handlers can short-circuit with `?`.
+- Additional guards on `CommandContext`, `ComponentContext`, and `ModalContext`: `ctx.require_guild()?`, `ctx.require_nsfw()?`, `ctx.require_role(role_id)?`, `ctx.require_entitlement(sku_id)?`, and `ctx.require_owner(&owners)?`.
 - Every required option helper on `CommandContext` has an optional counterpart: `string_option_opt`, `integer_option_opt`, `number_option_opt`, `boolean_option_opt`, `user_option_opt`, `member_option_opt`, `role_option_opt`, `channel_option_opt`, and `attachment_option_opt`.
 - Subcommand helpers: `ctx.subcommand_group()`, `ctx.subcommand_name()`, and `ctx.subcommand_path()`.
 - See `crates/facade/examples/moderation.rs` for a complete example combining permission checks, role hierarchy (`cache.can_moderate`), optional options, and audit-log reasons.

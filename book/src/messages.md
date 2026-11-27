@@ -59,7 +59,7 @@ Additional built-in inline flows on `CommandContext`:
 - `ctx.prompt("Reply in chat…", Duration::from_secs(60)).await? -> Option<Message>`
 - `ctx.ask_modal(modal, Duration::from_secs(60)).await? -> Option<ModalContext>` (also on `ComponentContext`)
 
-For custom interactive flows, `ctx.button_clicks(message_id, timeout)` streams clicks with `.idle_timeout(...)` and `.stop()`.
+For custom interactive flows, `ctx.button_clicks(message_id, timeout)` streams clicks with `.idle_timeout(...)`, `.max(limit)`, `.filter(|click| ...)`, `.collected()`, `.end_reason()` (`CollectorEndReason`: `Timeout`, `Idle`, `Limit`, `Stopped`, `Closed`), and `.stop()`.
 
 ## Quick Shortcuts, Forwarding & Message Links
 

@@ -4,12 +4,23 @@
 
 ## Zero-Downtime `RESUME` Persistence (`SessionStore`)
 
-Persist active shard sessions across restarts with `FileSessionStore` (atomic temp-file + rename per shard):
+Persist active shard sessions across restarts with `FileSessionStore` (atomic temp-file + rename per shard) or `RedisSessionStore` (opt-in `redis` feature, ideal for Docker/Kubernetes deployments):
 
 ```rust
 use cordex::gateway::{FileSessionStore, SessionStore};
 
 let store = FileSessionStore::new("./state/sessions");
+```
+
+With `features = ["redis"]`:
+
+```rust,ignore
+use std::time::Duration;
+use cordex::gateway::RedisSessionStore;
+
+let store = RedisSessionStore::open("redis://127.0.0.1/")?
+    .with_prefix("mybot:session")
+    .with_ttl(Some(Duration::from_secs(86_400)));
 ```
 
 On graceful shutdown, shards close with a non-`1000` close code (`4000`) so Discord keeps the session resumable.
