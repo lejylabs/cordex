@@ -191,6 +191,11 @@ impl From<cordex_lavalink::LavalinkError> for Error {
 /// The types most bots need: `use cordex::prelude::*;`.
 pub mod prelude {
     pub use crate::{Error, Result};
+    pub use cordex_model::auto_moderation::{
+        AutoModerationAction, AutoModerationActionExecution, AutoModerationActionType,
+        AutoModerationEventType, AutoModerationRule, AutoModerationTriggerType, KeywordPresetType,
+        TriggerMetadata,
+    };
     pub use cordex_model::cdn::{CdnUrl, ImageFormat};
     pub use cordex_model::component::{
         ActionRow, Button, Component, Label, SelectOption, StringSelect, TextInput,
