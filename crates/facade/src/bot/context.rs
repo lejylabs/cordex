@@ -657,6 +657,66 @@ macro_rules! interaction_methods {
                 }
             }
 
+            /// Return the guild ID, or `Err(Error::GuildOnly)` if invoked in DMs.
+            pub fn require_guild(&self) -> Result<Id<GuildMarker>> {
+                self.guild_id().ok_or(crate::Error::GuildOnly)
+            }
+
+            /// Return `Err(Error::NsfwOnly)` unless the interaction's channel
+            /// is marked as age-restricted (`nsfw == true`).
+            pub fn require_nsfw(&self) -> Result<()> {
+                let is_nsfw = self.interaction.channel.as_ref().is_some_and(|c| c.nsfw);
+                if is_nsfw {
+                    Ok(())
+                } else {
+                    Err(crate::Error::NsfwOnly)
+                }
+            }
+
+            /// Return `Err(Error::MissingRole)` unless the invoking member
+            /// holds `role_id`.
+            pub fn require_role(&self, role_id: cordex_model::RoleId) -> Result<()> {
+                let has_role = self
+                    .interaction
+                    .member
+                    .as_ref()
+                    .is_some_and(|m| m.roles.contains(&role_id));
+                if has_role {
+                    Ok(())
+                } else {
+                    Err(crate::Error::MissingRole(role_id))
+                }
+            }
+
+            /// Return `Err(Error::MissingEntitlement)` unless the invoking user
+            /// holds a non-deleted entitlement for `sku_id`.
+            pub fn require_entitlement(
+                &self,
+                sku_id: cordex_model::id::Id<cordex_model::id::marker::SkuMarker>,
+            ) -> Result<()> {
+                let entitled = self
+                    .interaction
+                    .entitlements
+                    .iter()
+                    .any(|e| e.sku_id == sku_id && !e.deleted);
+                if entitled {
+                    Ok(())
+                } else {
+                    Err(crate::Error::MissingEntitlement(sku_id))
+                }
+            }
+
+            /// Return `Err(Error::OwnerOnly)` unless the invoking user's ID is
+            /// contained in `owners`.
+            pub fn require_owner(&self, owners: &[cordex_model::UserId]) -> Result<()> {
+                let is_owner = self.user().is_some_and(|u| owners.contains(&u.id));
+                if is_owner {
+                    Ok(())
+                } else {
+                    Err(crate::Error::OwnerOnly)
+                }
+            }
+
             /// Answer with a message. After a defer (also the automatic
             /// one) this edits the deferred response instead.
             pub async fn reply(&self, reply: impl Into<Reply>) -> Result<()> {

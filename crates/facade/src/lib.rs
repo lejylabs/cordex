@@ -62,6 +62,16 @@ pub enum Error {
         /// Who is missing the permission (`"user"` or `"bot"`).
         actor: &'static str,
     },
+    /// The command or interaction can only be used inside a guild (not in DMs).
+    GuildOnly,
+    /// The command or interaction can only be used in an age-restricted (NSFW) channel.
+    NsfwOnly,
+    /// The invoking member is missing a required role.
+    MissingRole(cordex_model::RoleId),
+    /// The invoking user does not hold an active entitlement for the required SKU.
+    MissingEntitlement(cordex_model::id::Id<cordex_model::id::marker::SkuMarker>),
+    /// The command or interaction is restricted to bot owners.
+    OwnerOnly,
 }
 
 /// `Result` with the facade [`Error`].
@@ -92,6 +102,15 @@ impl fmt::Display for Error {
                     "missing required permission `{permission:?}` for {actor}"
                 )
             }
+            Self::GuildOnly => f.write_str("this action can only be used in a server"),
+            Self::NsfwOnly => {
+                f.write_str("this action can only be used in an age-restricted (NSFW) channel")
+            }
+            Self::MissingRole(role_id) => write!(f, "missing required role `{role_id}`"),
+            Self::MissingEntitlement(sku_id) => {
+                write!(f, "missing required entitlement for SKU `{sku_id}`")
+            }
+            Self::OwnerOnly => f.write_str("this action is restricted to bot owners"),
         }
     }
 }
@@ -111,7 +130,13 @@ impl StdError for Error {
             #[cfg(feature = "lavalink")]
             Self::Lavalink(err) => Some(err),
             Self::Embed(err) => Some(err),
-            Self::MissingEnv(_) | Self::MissingPermission { .. } => None,
+            Self::MissingEnv(_)
+            | Self::MissingPermission { .. }
+            | Self::GuildOnly
+            | Self::NsfwOnly
+            | Self::MissingRole(_)
+            | Self::MissingEntitlement(_)
+            | Self::OwnerOnly => None,
         }
     }
 }
