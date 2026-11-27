@@ -40,6 +40,7 @@
 - [Contributing](contributing.md)
 - [Changelog](changelog.md)
   - [Unreleased](changelog/unreleased.md)
+  - [0.2.5](changelog/0.2.5.md)
   - [0.2.4](changelog/0.2.4.md)
   - [0.2.3](changelog/0.2.3.md)
   - [0.2.2](changelog/0.2.2.md)
